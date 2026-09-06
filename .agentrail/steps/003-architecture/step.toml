@@ -1,0 +1,8 @@
+number = 3
+slug = "architecture"
+status = "pending"
+description = "Write docs/architecture.md: kernel concepts, model fault, parameter-major sch..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:21:56"
+commits = []

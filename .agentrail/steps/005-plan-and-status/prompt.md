@@ -1,0 +1,1 @@
+Write docs/plan.md (milestones + follow-on implementation sagas) and docs/status.md (current state).

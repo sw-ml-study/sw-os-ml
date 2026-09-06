@@ -1,0 +1,8 @@
+number = 2
+slug = "prd"
+status = "pending"
+description = "Write docs/PRD.md: what MLOS is for, users, success criteria for the bootable..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:21:56"
+commits = []

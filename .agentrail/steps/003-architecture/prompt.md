@@ -1,0 +1,1 @@
+Write docs/architecture.md: kernel concepts, model fault, parameter-major scheduler, platform/hypervisor/GPU survey, FPGA ML-MMU roadmap.

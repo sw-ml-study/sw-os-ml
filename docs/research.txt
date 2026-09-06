@@ -1,0 +1,2779 @@
+Wednesday 10:13 AM
+given my work in: 
+sw-embed/sw-tos and in 
+https://github.com/orgs/sw-ml-study/repositories what would make sense for me to pursue along the lines of a purpose-built O/S for AI and ML?   For budget reasons I'd have to focus on existing small/old hardware.  FPGAs, MCUs, and SBCs, etc are interesting areas to bootstrap a simple, educational PoC O/S.   Thinking about historical advances in CPUs and O/Ses, like disks, MMUs, co-procoessors, vector units, etc. what would an ML-oriented O/S do?  I'm thinking that paging-like hardware/software could apply to model weights, activations, kv caches, context, RAG, etc.   Looking for something innovative to experiment with.  Constraint: current economics make CPUs cheap but RAM very expensive. 
+
+You are looking for a purpose-built educational/research OS for ML on constrained hardware, with the central assumption that CPU cycles, old storage, FPGAs, MCUs, and SBCs are cheap or already owned, while RAM/VRAM is the scarce resource. Given the state of sw-tos, demo-memory, and especially emufpga, I think there is a coherent research direction here that is more interesting than merely “Linux, but with ML syscalls.”
+
+The central idea I would pursue is:
+
+Treat model state as the OS's primary virtualized resource, the way conventional operating systems treat address space and pages.
+
+I would tentatively call the research concept Model Virtual Memory (MVM), implemented first as an extension/research branch of SWTOS and later perhaps as a separate sw-mtos, sw-aios, or sw-mlos repository.
+
+sw-tos is already unusually well positioned for this. It is a microkernel aimed at small CPUs/FPGA soft cores, needs no MMU, has provider abstractions for resident/flash/SD-backed images, block caching, reclaimable allocations, and emulator-first validation. demo-memory, meanwhile, is explicitly investigating bounded memory, eviction policies, sparse retrieval, hard budgets, adaptive scheduling, and the problem of finding “the small part of memory that matters.” And emufpga has already taken the most radical step: treating parameters as a stream rather than as randomly accessed RAM, keeping only activations, accumulators, scales, and state resident.
+
+Those projects can converge.
+
+1. The historical analogy
+
+The interesting question isn't:
+
+“What syscalls does an ML operating system need?”
+
+It is:
+
+“What assumptions made conventional OS architecture necessary, and what corresponding assumptions are changing for ML?”
+
+A rough analogy looks like this:
+
+Historical computing problem	OS/hardware response	ML equivalent
+RAM smaller than programs	virtual memory	model-state virtualization
+disk much larger than RAM	paging	weight/KV/context paging
+locality of reference	page cache	tensor/block residency
+expensive CPU	scheduling/time sharing	accelerator scheduling
+slow I/O	DMA, buffering	tensor prefetch/stream pipelines
+vector workloads	SIMD/vector units	tensor engines
+FP workloads	FP coprocessor	ML coprocessor/NPU
+independent processes	virtual address spaces	independent inference sessions
+file working set	page working set	inference working set
+disk prefetch	read-ahead	layer/expert prediction
+swap thrashing	working-set control	KV/weight thrashing
+NUMA	topology-aware allocation	RAM/VRAM/NPU/storage topology
+filesystem cache	unified page cache	unified model-state cache
+
+And there is an important distinction.
+
+Classical VM assumes:
+
+program accesses arbitrary virtual address
+        ↓
+MMU translates
+        ↓
+page happens to reside somewhere
+
+ML gives the OS vastly more information:
+
+token t
+ ↓
+layer 0
+ ↓
+layer 1
+ ↓
+...
+ ↓
+layer N
+
+or, for MoE:
+
+layer
+ ↓
+router
+ ↓
+experts {3, 17}
+
+So an ML OS often knows the future access sequence.
+
+That is enormously useful.
+
+Traditional paging is reactive.
+
+ML paging can be predictive.
+
+2. The major architectural idea: objects, not pages
+
+I would not start with 4 KiB VM pages.
+
+Have the OS manage typed ML objects:
+
+MODEL
+ ├── LAYER
+ │    ├── WEIGHT_TILE
+ │    ├── SCALE
+ │    └── EXPERT
+ ├── KV_BLOCK
+ ├── ACTIVATION
+ ├── EMBEDDING_BLOCK
+ ├── RAG_INDEX_BLOCK
+ └── ADAPTER
+
+Each gets metadata such as:
+
+size
+precision
+location
+next-use
+reuse-frequency
+recompute-cost
+reload-cost
+priority
+mutability
+owner/session
+
+Then residency becomes an OS policy problem.
+
+For example:
+
+                 ┌──────────────┐
+                 │ FPGA BRAM    │
+                 └──────▲───────┘
+                        │
+                 ┌──────┴───────┐
+                 │ MCU SRAM     │
+                 └──────▲───────┘
+                        │
+                 ┌──────┴───────┐
+                 │ DRAM         │
+                 └──────▲───────┘
+                        │
+                 ┌──────┴───────┐
+                 │ NVMe / SSD   │
+                 └──────▲───────┘
+                        │
+                 ┌──────┴───────┐
+                 │ HDD / SD     │
+                 └──────────────┘
+
+The OS decides where every ML object should live.
+
+That becomes a semantic memory hierarchy.
+
+3. Weight paging is different from VM paging
+
+Your emufpga work points at the most important distinction.
+
+Weights are usually:
+
+immutable,
+huge,
+sequentially consumed,
+predictable,
+often reused across multiple requests.
+
+That makes them terrible candidates for ordinary VM-style demand paging and excellent candidates for streams. Your SPM work explicitly takes this approach: weights live in cheap sequential storage and compute moves to the stream rather than requiring full parameter residency.
+
+So MVM should probably expose at least three access classes:
+
+STREAM
+CACHE
+RESIDENT
+
+Example:
+
+Object	Likely policy
+dense layer weights	STREAM
+MoE expert weights	CACHE/PREFETCH
+activations	RESIDENT
+recent KV	RESIDENT
+old KV	CACHE
+embeddings index	CACHE
+RAG documents	STORAGE
+LoRA adapter	CACHE
+tokenizer tables	RESIDENT
+
+That immediately produces a more useful abstraction than ordinary pages.
+
+4. Make residency the equivalent of process priority
+
+The kernel scheduler today asks:
+
+Which process gets CPU time?
+
+An ML scheduler might ask two simultaneous questions:
+
+Which inference stream gets compute?
+
+and
+
+Which model state gets scarce RAM?
+
+So scheduling becomes two-dimensional:
+
+          COMPUTE
+             ↑
+             |
+session A ───┼──── memory residency
+session B ───┼────
+session C ───┼────
+             |
+
+A request might hold:
+
+weights: streamed
+KV:      12 MiB resident
+context: compressed
+RAG:     evictable
+
+Another might hold:
+
+weights: shared
+KV:      1 MiB
+expert:  pinned
+
+The scheduler then optimizes working sets, not just timeslices.
+
+This is where your existing bounded-memory work becomes directly relevant. demo-memory already experiments with FIFO versus LRU, hard runtime budgets, adaptive scheduling, and retrieval-budget selection.
+
+You can turn those from MLPL demonstrations into candidate OS policies.
+
+5. Introduce an ML equivalent of a page fault
+
+This could be particularly educational.
+
+Suppose execution reaches:
+
+matmul(layer_17.weights, activation)
+
+but the relevant weight tile isn't resident.
+
+Instead of a conventional page fault:
+
+PAGE_FAULT virtual_address
+
+you get:
+
+MODEL_FAULT {
+    object: WEIGHT_TILE,
+    model: 7,
+    layer: 17,
+    tile: 3
+}
+
+The kernel/provider layer can then choose:
+
+RAM
+SPI flash
+SD
+SSD
+remote node
+recompute
+stream
+
+SWTOS already has an embryo of exactly this provider concept. Its catalog/loading machinery abstracts resident, block, SPI-flash, and SD image sources behind provider operations and block reads.
+
+Generalize:
+
+IMAGE_PROVIDER
+
+into:
+
+OBJECT_PROVIDER
+
+Then:
+
+provider.find()
+provider.read()
+
+becomes something like:
+
+resolve(object_id)
+read(object_id, offset, count)
+prefetch(object_id)
+release(object_id)
+
+That would be a very natural evolution of SWTOS rather than an unrelated rewrite.
+
+6. Predictive paging becomes much more powerful
+
+Conventional operating systems try to infer future references.
+
+A transformer tells you quite a lot of them directly.
+
+If currently executing:
+
+layer 10
+
+then fetch:
+
+layer 11
+
+while layer 10 computes.
+
+So:
+
+storage       CPU/FPGA
+
+fetch L10 ───────►
+                 compute L10
+fetch L11 ───────►
+                 compute L11
+fetch L12 ───────►
+
+This is basically OS-managed double buffering.
+
+For MoE it gets more interesting:
+
+router output
+     ↓
+expert 7 = 0.63
+expert 19 = 0.21
+expert 3 = 0.09
+
+The OS could interpret this as a prefetch probability distribution.
+
+That is genuinely unlike traditional paging.
+
+An experimental algorithm:
+
+prefetch expert 7 immediately
+prefetch expert 19 if bandwidth idle
+leave expert 3 on storage
+
+Now the routing network is effectively supplying paging hints.
+
+7. KV cache should absolutely be an OS resource
+
+This is probably the easiest bridge to modern practical inference.
+
+KV cache is:
+
+dynamic,
+per-session,
+increasingly large with context,
+partly disposable,
+partly compressible,
+partly shareable,
+temporally structured.
+
+vLLM now supports KV offloading from GPU to CPU and multi-tier secondary storage, promoting blocks back upward on demand.
+
+That's useful precedent, but you can push the abstraction down into the OS.
+
+Imagine:
+
+kv_alloc(session, tokens)
+kv_pin(recent_window)
+kv_demote(old_range)
+kv_compress(range)
+kv_drop(range)
+
+with tiers:
+
+HOT       SRAM/VRAM
+WARM      DRAM
+COLD      SSD
+ARCHIVE   regenerate/summarize/drop
+
+Then you can experiment with:
+
+Recency
+
+Keep latest 2K tokens hot.
+
+Importance
+
+Keep tokens with high attention scores.
+
+Summary
+
+Replace old KV with summarized state.
+
+Recompute
+
+Drop cheap-to-reconstruct state.
+
+Quantize
+FP16 → Q8 → Q4
+
+as KV gets colder.
+
+This gives you the equivalent of:
+
+clean page
+dirty page
+compressed page
+swapped page
+
+but adapted to inference.
+
+8. Recompute should be a first-class alternative to paging
+
+This is an area where ML differs dramatically from ordinary programs.
+
+For a normal OS:
+
+Lost memory must generally be restored.
+
+For ML:
+
+Some state can simply be recomputed.
+
+So every object could carry:
+
+reload_cost
+recompute_cost
+storage_cost
+
+Then eviction can choose:
+
+STORE
+DISCARD + RECOMPUTE
+COMPRESS
+DEMOTE
+
+For example:
+
+activation A:
+  size          2 MB
+  recompute     200 µs
+  SSD reload    700 µs
+
+→ discard
+
+versus:
+
+expert weights:
+  size          40 MB
+  recompute     impossible
+  SSD reload    3 ms
+
+→ store/cache
+
+This is closer to ML checkpointing than traditional paging.
+
+DeepSpeed already makes this tradeoff at framework level through parameter/optimizer offload and activation checkpointing/offload.
+
+The OS research question is:
+
+What happens if these policies belong to a common resource manager?
+
+9. RAG should look like virtual memory too
+
+RAG is essentially another memory tier:
+
+CPU registers
+cache
+RAM
+disk
+database
+vector database
+document archive
+
+Increasingly slow and increasingly semantically rich.
+
+You could unify:
+
+KV lookup
+embedding lookup
+RAG lookup
+expert lookup
+
+under a general concept of:
+
+semantic demand paging
+
+Instead of:
+
+address → page
+
+you have:
+
+query → candidate memory objects
+
+Your demo-memory progression from hashing through binary retrieval, learned projections, sparse aggregation, and retrieval-budget scheduling is almost a laboratory for exactly these policies.
+
+So the ML OS could have two addressing modes:
+
+physical/logical:
+    object_id + offset
+
+semantic:
+    key/query → objects
+
+That second mode is unusual enough to be worth researching.
+
+10. Treat multiple inference requests like timesharing
+
+Your SPM result gives you another compelling OS-level idea.
+
+You already demonstrate that one parameter stream can serve multiple clients, increasing scan productivity Ps without proportionally increasing storage traffic.
+
+That suggests a scheduler that doesn't primarily ask:
+
+Which request is oldest?
+
+It asks:
+
+Which requests can share the next model-state stream?
+
+Suppose requests A, B, C all need layer 13.
+
+Instead of:
+
+A: read L13
+B: read L13
+C: read L13
+
+schedule:
+
+read L13 once
+     ↓
+A activation
+B activation
+C activation
+
+This is roughly the storage equivalent of SIMD.
+
+I would call the policy:
+
+parameter-stream scheduling
+
+That may actually be one of your strongest research ideas.
+
+The unit of scheduling becomes:
+
+(model state, set of sessions)
+
+rather than:
+
+process
+11. In other words, invert the conventional scheduler
+
+Traditional scheduler:
+
+for process:
+    load its state
+    run its instructions
+
+Your streaming ML scheduler:
+
+for model-state chunk:
+    find every session needing it
+    process all of them
+
+That inversion matters.
+
+It's effectively:
+
+process-major execution
+
+versus:
+
+parameter-major execution
+
+Your SPM already demonstrates the latter at the tensor-stream level.
+
+The OS could orchestrate it globally.
+
+12. This also fits small FPGA hardware exceptionally well
+
+An FPGA doesn't need to hold the model.
+
+It could become an ML memory-management coprocessor.
+
+Not necessarily a giant matrix accelerator.
+
+For example:
+
+                 ┌─────────────┐
+SSD / SD / SPI ─►│ FPGA        │
+                 │             │
+                 │ unpack      │
+                 │ dequantize  │
+                 │ route       │
+                 │ accumulate  │
+                 │ checksum    │
+                 │ prefetch    │
+                 └──────┬──────┘
+                        │
+                      CPU
+
+Or:
+
+storage stream
+     ↓
+FPGA filter
+     ↓
+only useful tensor blocks
+     ↓
+RAM
+
+That is analogous to historical intelligent I/O controllers.
+
+This is attractive because your inexpensive FPGA doesn't need enough gates to be a GPU.
+
+It can instead become a:
+
+Tensor DMA / model-state MMU
+
+Potential FPGA functions:
+
+low-bit unpacking,
+quantization/dequantization,
+CRC/checksum,
+tensor transpose,
+sparse filtering,
+expert selection,
+address generation,
+double-buffer control,
+gather/scatter,
+block decompression.
+
+That's much more achievable on small Gowin/Intel/Xilinx boards.
+
+13. An ML-MMU could eventually be real hardware
+
+Instead of:
+
+VA → PA
+
+consider:
+
+Model Object Address:
+
+| model | layer | tensor | tile |
+
+The MMU-like unit maps this to:
+
+BRAM
+SRAM
+DRAM
+SPI
+SD
+NVMe
+remote
+
+A lookup table might contain:
+
+object         tier     address
+------------------------------------
+L0.WQ.3        SSD      0x183000
+L0.WK.3        RAM      0x020000
+L1.WQ.0        FLASH    0x810000
+KV.S3.B72      RAM      0x040000
+
+Then the software API stays independent of physical storage.
+
+You could emulate this long before implementing hardware.
+
+14. A very small PoC architecture
+
+I would resist building an entire OS initially.
+
+Extend SWTOS with one new subsystem:
+
++--------------------------------------+
+| Tiny ML Application                  |
++--------------------------------------+
+| Tensor/Model Runtime                 |
++--------------------------------------+
+| Model Memory Manager                 |
+|                                      |
+| object table                         |
+| residency manager                    |
+| eviction policy                      |
+| prefetcher                           |
+| stream scheduler                     |
++--------------------------------------+
+| SWTOS IPC / scheduler                |
++--------------------------------------+
+| Object Providers                     |
+| RAM | SPI | SD | host file           |
++--------------------------------------+
+| HAL                                  |
++--------------------------------------+
+
+On COR24 you wouldn't initially run a meaningful transformer.
+
+That's fine.
+
+Run a synthetic transformer working set.
+
+Example:
+
+model:
+  8 layers
+  16 tiles/layer
+  1 KiB/tile
+
+RAM:
+  4 tiles
+
+storage:
+  128 tiles
+
+Then compare policies.
+
+15. Build OS experiments before ML performance experiments
+
+The first experiments should measure:
+
+Experiment A — demand paging
+load on first use
+Experiment B — sequential prefetch
+L[n+1] while computing L[n]
+Experiment C — LRU tile cache
+Experiment D — parameter streaming
+
+Never retain weights.
+
+Experiment E — multiple sessions
+
+One weight stream feeds:
+
+session A
+session B
+session C
+Experiment F — MoE
+
+Only selected experts load.
+
+Experiment G — KV hierarchy
+recent KV → RAM
+old KV → flash
+
+These can all work with tiny integer vectors.
+
+No floating point required.
+
+That makes COR24 an excellent educational target.
+
+16. Your current SPM project supplies the second implementation
+
+Then reproduce the same OS abstraction in emufpga.
+
+The split would be something like:
+
+SWTOS
+    correctness / OS semantics
+           │
+           ▼
+shared model-memory specification
+           ▲
+           │
+emufpga
+    hardware/dataflow experiment
+
+That would be quite powerful.
+
+COR24 demonstrates:
+
+Here is what an ML-aware operating system does.
+
+FPGA demonstrates:
+
+Here is how specialized hardware can accelerate its mechanisms.
+
+And an SBC demonstrates:
+
+Here is whether this matters with a real tiny model.
+
+17. SBC should be the third target
+
+Something like an old Raspberry Pi or one of your small RISC-V boards could run:
+
+TinyLlama / SmolLM / custom tiny transformer
+
+under Linux initially.
+
+But don't immediately write another kernel.
+
+Implement the MVM service as a userspace daemon/runtime:
+
+mlmemd
+
+with:
+
+Unix socket / shared memory
+
+Then compare:
+
+ordinary mmap
+vs
+MVM streaming
+vs
+MVM cached
+
+Once the abstractions prove useful, port them into a lightweight OS.
+
+That avoids building years of irrelevant POSIX machinery.
+
+18. The OS should probably be a microkernel
+
+Your SWTOS architecture is appropriate.
+
+Don't put model implementations into the kernel.
+
+Kernel responsibilities:
+
+scheduling
+IPC
+timers
+resource accounting
+object mapping
+provider dispatch
+
+Services:
+
+model manager
+KV manager
+RAG manager
+storage manager
+tensor accelerator manager
+
+Applications:
+
+inference session
+embedding worker
+agent
+sensor ML pipeline
+
+This preserves the clean separation SWTOS already uses.
+
+19. ML IPC could be extremely interesting
+
+Normal IPC:
+
+send process B 32 bytes
+
+ML IPC might transfer ownership, not data:
+
+SEND_TENSOR_HANDLE
+
+Example:
+
+camera
+   ↓
+vision encoder
+   ↓ tensor handle
+classifier
+   ↓
+agent
+
+No copies.
+
+A message contains:
+
+tensor-id
+shape
+dtype
+provider
+offset
+lifetime
+
+This is analogous to capability systems.
+
+And it fits your no-MMU SWTOS nicely because isolation can be logical/capability-based rather than relying on virtual memory.
+
+20. Make tensors the fundamental I/O object
+
+Unix famously says:
+
+everything is a file.
+
+Your experimental ML OS could explore:
+
+everything is a tensor/stream/object.
+
+Examples:
+
+camera → tensor stream
+microphone → tensor stream
+model weights → tensor stream
+network → tensor stream
+sensor → tensor
+embedding DB → tensor collection
+
+Then operators become pipeline stages.
+
+This also meshes unusually well with sw-MLPL's array orientation.
+
+A future integration could look like:
+
+camera()
+|> normalize
+|> vision_model
+|> classify
+
+where the OS/runtime manages the backing storage automatically.
+
+That could become the meeting point between SWTOS and sw-MLPL.
+
+21. sw-MLPL could become the experiment language
+
+I would not try running sw-MLPL on COR24 tomorrow.
+
+But conceptually:
+
+sw-MLPL
+   ↓
+ML runtime API
+   ↓
+MVM
+   ↓
+providers
+
+The MLPL demos can prototype policies.
+
+For example demo-memory already contains candidate experiments involving eviction and bounded retrieval.
+
+You might eventually have:
+
+policy = lru
+policy = fifo
+policy = next_use
+policy = attention_weight
+policy = recompute_cost
+
+written in MLPL and simulated against traces.
+
+That makes sw-MLPL the policy laboratory for your OS.
+
+22. One particularly promising policy: Belady is almost practical
+
+There is a fun historical connection here.
+
+Belady's optimal cache algorithm evicts the item whose next use lies furthest in the future.
+
+It's normally impossible because the OS doesn't know the future.
+
+But transformers often give you a highly deterministic future access sequence.
+
+Therefore you can approximate—or sometimes literally implement—optimal replacement.
+
+Dense transformer:
+
+L3 → L4 → L5 → L6
+
+You know exactly when L3 is next used.
+
+Thus:
+
+next-use-distance(object)
+
+can be metadata.
+
+That's an unusually clean research result to demonstrate.
+
+Compare:
+
+FIFO
+LRU
+Belady/known-next-use
+
+on model traces.
+
+This would fit beautifully into demo-memory first and SWTOS afterward.
+
+23. Another interesting idea: admission control based on RAM
+
+Conventional OSes happily start processes and then may thrash.
+
+An ML OS could calculate:
+
+minimum inference working set
+
+before accepting a session.
+
+Example:
+
+model weights              streamable
+activation working set     12 MB
+minimum KV                  16 MB
+runtime                     4 MB
+-----------------------------------
+minimum session             32 MB
+
+Then:
+
+AVAILABLE = 100 MB
+
+accept A 32 MB
+accept B 32 MB
+accept C 32 MB
+reject/defer D
+
+or reduce quality:
+
+KV Q8 → Q4
+context 8K → 4K
+
+This introduces quality-aware admission control.
+
+An ordinary OS generally can't make a process mathematically cheaper.
+
+An ML OS often can.
+
+24. Which leads to graceful degradation
+
+This could be another major differentiator.
+
+Memory pressure policy:
+
+Level 0:
+    FP16 KV
+
+Level 1:
+    Q8 KV
+
+Level 2:
+    Q4 old KV
+
+Level 3:
+    summarize old context
+
+Level 4:
+    reduce RAG candidates
+
+Level 5:
+    reduce context
+
+Level 6:
+    terminate request
+
+This is much better than:
+
+OOM killer
+
+An AI OS could expose a resource contract:
+
+quality >= 0.95
+latency <= 5s
+RAM <= 128MB
+
+Then dynamically adjust implementation.
+
+That's an area where ML runtimes and OS policy genuinely blur.
+
+25. Your expensive-RAM premise changes the optimization objective
+
+Most contemporary frameworks optimize roughly:
+
+maximize tokens/sec
+
+Your research OS should optimize:
+
+maximize useful work
+--------------------
+resident bytes
+
+or perhaps:
+
+tokens / second / resident-byte
+
+and:
+
+energy / token
+
+You already defined a very useful metric in SPM:
+
+Rp = resident parameter bytes / total parameter bytes
+
+and scan productivity:
+
+Ps = useful parameter applications / parameter values read
+
+I would elevate these to system-level metrics.
+
+Maybe add:
+
+Rm = total ML resident bytes / model bytes
+
+Bt = backing-store bytes / generated token
+
+Rc = recomputed bytes-equivalent / token
+
+Pf = model faults / token
+
+Ph = prefetch hit rate
+
+Ks = KV bytes / active session
+
+Ss = sessions / GB RAM
+
+That gives your OS a very different benchmark culture.
+
+26. Existing systems show this isn't fantasy—but your abstraction is different
+
+There is precedent for several individual mechanisms.
+
+DeepSpeed ZeRO-Infinity can offload model state to CPU and NVMe and includes explicit residency/prefetch controls.
+
+FlexGen explicitly aggregates GPU, CPU, and disk resources and searches for tensor placement/access strategies under constrained memory.
+
+vLLM now supports tiered KV-cache offloading.
+
+So the novelty shouldn't be claimed as:
+
+“I invented putting model data on SSD.”
+
+The potentially distinctive contribution is:
+
+Treat all of these as one OS-level semantic memory system designed around predictable ML execution, rather than as independent framework optimizations.
+
+And then make it understandable on tiny hardware.
+
+That is a much stronger project.
+
+27. I would define five kernel concepts
+
+A clean initial abstraction could be just these:
+
+ML_OBJECT
+PROVIDER
+TIER
+LEASE
+STREAM
+ML_OBJECT
+
+A named model-state region.
+
+weights
+KV
+activation
+embedding
+adapter
+PROVIDER
+
+Where it can come from.
+
+RAM
+SPI
+SD
+SSD
+network
+recompute
+TIER
+
+Residency class.
+
+HOT
+WARM
+COLD
+STREAM
+LEASE
+
+How long a consumer needs it.
+
+pin until operation complete
+STREAM
+
+Predictable sequence.
+
+layer weights
+
+That's enough for many experiments.
+
+28. Then add a tiny syscall/API surface
+
+Something conceptually like:
+
+ml_open(model)
+ml_resolve(object)
+ml_acquire(object, policy)
+ml_release(object)
+ml_prefetch(object)
+ml_stream_begin(sequence)
+ml_stream_next()
+
+And for sessions:
+
+ml_session_create()
+ml_session_budget(bytes)
+ml_session_priority()
+
+You don't need 100 APIs.
+
+29. Hardware roadmap
+
+I would make the hardware progression deliberately historical.
+
+Stage 0 — emulator
+
+SWTOS emulator.
+
+Artificial storage latency.
+
+Artificial RAM limits.
+
+This lets you run thousands of deterministic experiments.
+
+Stage 1 — COR24 FPGA
+
+Use:
+
+1MB SRAM
+SPI flash
+SD
+
+The absurd imbalance is a feature.
+
+It makes memory management visible.
+
+Stage 2 — MCU
+
+ESP32-S3/P4 or similar:
+
+SRAM
+PSRAM
+SPI flash
+SD
+
+Now you have a real multi-tier hierarchy.
+
+Stage 3 — small RISC-V SBC
+
+Use:
+
+RAM
+SD
+USB SSD
+NPU
+
+and a genuine tiny model.
+
+Stage 4 — old PC
+
+Use:
+
+DDR
+SATA SSD
+SAS SSD
+HDD
+GPU
+
+Now evaluate economic scaling.
+
+30. And FPGAs become progressively smarter
+
+FPGA generation 1:
+
+DMA / stream controller
+
+Generation 2:
+
+dequantizer
+
+Generation 3:
+
+low-bit dot product
+
+Generation 4:
+
+expert router
+
+Generation 5:
+
+model-memory coprocessor
+
+This keeps every experiment achievable.
+
+31. I would not initially optimize for training
+
+Training greatly complicates the system because weights become mutable and you acquire:
+
+gradients
+optimizer state
+checkpoints
+
+DeepSpeed demonstrates just how much extra state this introduces.
+
+So:
+
+Phase 1
+
+Inference only.
+
+Phase 2
+
+LoRA/adapters.
+
+Only small mutable state.
+
+Phase 3
+
+Tiny-model training.
+
+Then introduce:
+
+gradient objects
+optimizer objects
+checkpoint policies
+
+That provides a natural progression.
+
+32. Repository architecture I would use
+
+I would not put all of this into sw-tos.
+
+Keep SWTOS pedagogically clean.
+
+Create something like:
+
+sw-mlos
+
+or:
+
+sw-tos-ml
+
+But share mechanisms.
+
+My preference would be:
+
+sw-tos
+    generic microkernel
+
+sw-ml-study/demo-memory
+    policy research
+
+sw-ml-study/emufpga
+    stream/tensor hardware research
+
+new: sw-ml-study/ml-os
+    ML OS architecture + host simulator
+
+eventually:
+sw-embed/sw-tos-ml
+    embedded implementation
+
+But there's another appealing possibility:
+
+sw-embed/sw-mtos
+
+Machine-learning Tiny Operating System.
+
+That makes the relationship to SWTOS obvious.
+
+33. I would make the first milestone extremely specific
+
+Not:
+
+Run an LLM on COR24.
+
+Instead:
+
+Milestone 1 — Model Working Set OS
+
+Build a synthetic transformer:
+
+8 layers
+16 tiles/layer
+8-byte integer vectors
+4 resident buffers
+128 backing-store blocks
+
+Run four policies:
+
+demand
+LRU
+known-next-use
+stream
+
+Measure:
+
+provider reads
+cache hits
+resident bytes
+stall cycles
+prefetch usefulness
+
+Then display something like:
+
+policy          reads    peak-RAM   stalls
+------------------------------------------
+demand            128      4 KiB      128
+LRU               128      4 KiB      128
+prefetch          128      4 KiB       17
+stream            128      1 KiB        4
+
+Obviously those numbers would be measured, not invented.
+
+That is a compelling OS demonstration even with no neural network at all.
+
+34. Milestone 2 should demonstrate multiplexing
+
+Run:
+
+4 inference sessions
+
+Naive scheduler:
+
+A model pass
+B model pass
+C model pass
+D model pass
+
+Parameter-major scheduler:
+
+L0 → A,B,C,D
+L1 → A,B,C,D
+...
+
+Measure:
+
+storage reads
+resident weight bytes
+latency
+aggregate throughput
+
+This directly connects SWTOS scheduling to your SPM result.
+
+And unlike many ML demos, it explains why the OS matters.
+
+35. Milestone 3: tiny MoE
+
+Something like:
+
+8 experts
+2 selected per token
+
+Now compare:
+
+load-on-demand
+LRU
+router-prefetch
+frequency-aware
+
+Suddenly the project has a genuine ML-specific replacement policy.
+
+36. Milestone 4: KV paging
+
+Then add:
+
+4 sessions
+64 token context
+8-token KV blocks
+
+Policies:
+
+LRU
+recent-window
+attention-score
+Q8 cold cache
+
+This will likely be much more interesting than weight paging because KV is truly dynamic.
+
+37. Eventually: a unified “memory pressure” demo
+
+I can imagine your educational UI showing:
+
+RAM
+████████████████████ 100%
+
+Weights      ███
+KV           █████████
+Activations  ███
+RAG          █████
+
+Then memory pressure arrives.
+
+The OS makes visible decisions:
+
+evict expert 7
+compress KV block 12
+drop recomputable activation
+delay request 4
+prefetch layer 17
+
+That would fit extremely well with your current demo-ml-microscope/visual-learning direction.
+
+The OS itself becomes something you can watch think about memory.
+
+38. The research thesis I would use
+
+I think the strongest formulation is approximately:
+
+Traditional operating systems virtualize scarce compute and memory under workloads with unpredictable memory references. ML workloads invert several of those assumptions: computation is increasingly cheap relative to memory, much model state is immutable, access patterns are highly predictable, some state can be recomputed or compressed, and multiple clients can share parameter streams. An ML-oriented OS can exploit those properties by virtualizing semantic model state rather than merely virtual addresses.
+
+That gives you a real research agenda.
+
+Not:
+
+“Let's write another small OS.”
+
+39. The most promising experiments, ranked
+
+I would prioritize them this way:
+
+Priority	Experiment	Why
+1	Parameter-stream scheduler	Direct continuation of SPM; very distinctive
+2	Semantic model-object paging	Core OS abstraction
+3	Known-next-use replacement	Elegant ML/OS difference
+4	Tiered KV management	Directly practical
+5	MoE expert prefetch	Strong predictive-paging example
+6	recompute-vs-store eviction	ML-specific
+7	tensor-handle IPC	Strong microkernel fit
+8	RAG semantic paging	Interesting but broader
+9	FPGA model-MMU	Hardware culmination
+10	training-state paging	Much later
+40. The connection among your projects becomes unusually clean
+
+You could end up with a research stack like:
+
+                 learn-ML-visually
+                         │
+                  demo-ml-microscope
+                         │
+                       MLPL
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+ demo-memory          ML-OS           emufpga
+ policies          mechanisms          hardware
+        │                │                │
+        └────────────────┼────────────────┘
+                         │
+                       SWTOS
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+          COR24         MCU          SBC
+
+And there is an intellectually satisfying progression here:
+
+demo-memory asks which small part of memory matters.
+emufpga asks how to avoid storing parameters in RAM at all.
+SWTOS provides the scheduling/provider/resource machinery.
+
+The new project asks:
+
+Who should decide what stays resident, where it lives, when it moves, and which computations get to share it?
+
+That's fundamentally an operating-system question.
+
+If I were choosing one concrete next project, I'd build the Model Working Set Manager first—synthetic transformer traces on the SWTOS emulator, using SWTOS's existing provider abstraction for RAM/SPI/SD-like tiers, with demand, LRU, known-next-use, and stream policies. Then the second milestone would add your SPM-style parameter-major multi-session scheduler. Those two experiments would tell you very quickly whether “ML OS” is a productive architecture or merely a collection of runtime tricks.
+
+lets refine this and consider more aspects.  Consider the history of VM and MVS operating systems (and Linux and VirtualBox, VMWare, QEMU, etc..  The reason I bring this up is that AI and ML are two different areas/use-cases.  One is about running/using AI with tools, loops, RLM, etc; the other is about learning, building, modifying, improving ML, models, weights, quants, encoding, workflows, etc. So I think that there are two future O/S directions focused on each, not one-size-fits-all.
+
+Yes. I think splitting this into two related but distinct OS directions makes the idea considerably stronger.
+
+The distinction I would make is not “training OS versus inference OS.” It is deeper:
+
+AI-oriented OS: manages agents, tools, models, context, memory, workflows, goals, loops, permissions, and long-running tasks.
+ML-oriented OS: manages models as computational artifacts: tensors, weights, quants, datasets, experiments, accelerators, storage hierarchies, transformations, and reproducibility.
+
+They can share a substrate, just as VM/CMS, MVS, Unix, hypervisors, and modern container systems share concepts without trying to solve the same problem.
+
+The historical analogy is useful
+
+IBM's history is particularly illuminating because several distinct abstractions evolved around different workloads.
+
+MVS-style systems were fundamentally about efficiently operating a large shared computing installation: jobs, address spaces, datasets, devices, resource allocation, accounting, scheduling, and throughput.
+
+VM/CMS-style systems took a different approach: give each user what appears to be an entire machine, virtualize the hardware, and let radically different environments coexist.
+
+Then Unix/Linux emphasized processes, files, pipes, users, permissions, and composability.
+
+Later VMware, VirtualBox, Xen, KVM, and QEMU generalized the idea that:
+
+The operating environment itself can be a managed object.
+
+That last observation is particularly relevant to AI.
+
+I think your two OS families might ultimately look something like:
+
+                  shared low-level substrate
+             ┌─────────────────────────────┐
+             │ scheduling                  │
+             │ IPC                         │
+             │ storage providers           │
+             │ capability/security model   │
+             │ device/accelerator model    │
+             │ resource accounting         │
+             └──────────────┬──────────────┘
+                            │
+               ┌────────────┴────────────┐
+               │                         │
+          AI Operating OS          ML Research OS
+               │                         │
+       agents / tools / loops      tensors / models / data
+       context / RLM / memory      quant / train / evaluate
+       sandbox / delegation        experiment / provenance
+       model multiplexing          accelerator / storage
+
+I would resist combining those upper halves.
+
+1. The AI OS: virtualize the agent environment
+
+The VM analogy is strongest here.
+
+VMware asks:
+
+What constitutes a machine?
+
+An AI OS asks:
+
+What constitutes an agent's world?
+
+Today an AI application typically assembles this ad hoc:
+
+LLM
++ system prompt
++ conversation
++ tools
++ filesystem
++ shell
++ browser
++ RAG
++ memory
++ planner
++ retry loop
++ permissions
++ budget
+
+An AI OS could make that whole thing a first-class object.
+
+Call it an agent machine.
+
+Agent Machine
+├── model
+├── context address space
+├── tools
+├── persistent memory
+├── scratch storage
+├── credentials/capabilities
+├── event sources
+├── scheduler policy
+├── token budget
+├── compute budget
+└── descendants
+
+That's much closer to a VM than to a Unix process.
+
+AI virtualization
+
+A traditional VM virtualizes:
+
+CPU
+memory
+disk
+network
+devices
+
+An agent VM would virtualize:
+
+reasoning model
+context
+memory
+tools
+identity
+knowledge sources
+external side effects
+
+That could be a very interesting OS research direction.
+
+2. Context becomes the AI equivalent of virtual address space
+
+This may be one of the strongest analogies.
+
+Traditional process:
+
+virtual address space
+
+Agent:
+
+virtual context space
+
+An agent may conceptually have gigabytes of available information:
+
+conversation history
+documents
+code
+logs
+email
+web results
+other agents' reports
+RAG corpus
+persistent memories
+
+but only perhaps 64K or 128K tokens can actually be resident in the model context.
+
+That's almost exactly the reason virtual memory exists.
+
+So:
+
+virtual context
+        ↓
+context manager
+        ↓
+resident working set
+        ↓
+LLM context window
+
+Instead of a page table, you might have a:
+
+context map
+
+segment                       state
+------------------------------------------------
+system identity               pinned
+task definition               pinned
+last 20 messages              resident
+project architecture          summarized
+old discussion                external
+repository excerpts           demand-loaded
+tool results                  transient
+
+A context fault would mean:
+
+The agent needs some information that isn't currently resident.
+
+Then the OS retrieves it from RAG, summaries, logs, another agent, storage, etc.
+
+That is arguably a much better analogy to VM than weight paging is.
+
+3. RLM makes the OS analogy stronger
+
+Recursive Language Models make this especially interesting.
+
+Instead of stuffing everything into context, the model can operate against an external environment and recursively inspect portions of a larger information space.
+
+That begins to resemble:
+
+CPU registers
+    ↓
+cache
+    ↓
+RAM
+    ↓
+virtual memory
+    ↓
+disk
+
+but for cognition:
+
+attention focus
+    ↓
+current context
+    ↓
+summaries
+    ↓
+retrieval memory
+    ↓
+documents
+    ↓
+external world
+
+The AI OS manages those transitions.
+
+So an AI-oriented kernel/service might expose operations like:
+
+ctx_map()
+ctx_pin()
+ctx_evict()
+ctx_summarize()
+ctx_retrieve()
+ctx_fork()
+ctx_merge()
+
+That is a genuinely OS-like abstraction rather than simply another agent framework.
+
+4. Agent fork is another fascinating Unix analogy
+
+Consider:
+
+fork()
+
+for an AI agent.
+
+Parent:
+
+goal
+context
+memory
+tools
+
+Fork:
+
+child = fork_agent()
+
+Initially they could share most context using copy-on-write semantics.
+
+Then:
+
+child A investigates architecture
+child B checks implementation
+child C searches literature
+
+Their context diverges.
+
+Eventually:
+
+join(children)
+
+or:
+
+merge_context(children)
+
+That's much cleaner conceptually than today's arbitrary multi-agent frameworks.
+
+And copy-on-write context seems particularly natural.
+
+You do not need three copies of a 60K-token task history just because three agents branched.
+
+5. AI scheduling is about goals, not CPU time
+
+Unix scheduler:
+
+which process gets CPU next?
+
+AI scheduler:
+
+which cognitive action has the highest expected value?
+
+Potential runnable entities include:
+
+LLM call
+tool invocation
+sub-agent
+retrieval
+reflection
+verification
+code execution
+waiting for event
+
+Scheduling metadata might include:
+
+cost
+deadline
+confidence
+importance
+expected information gain
+dependency
+model required
+side-effect risk
+
+For example:
+
+                 priority   cost   dependence
+lint repository      high     low     none
+ask 70B model        med      high    lint
+search docs           med      low     none
+rewrite code          low      med     review
+
+That's closer to a workflow/job-control OS like MVS than to a desktop OS.
+
+6. MVS analogies are surprisingly strong for AI agents
+
+Think in terms of jobs.
+
+An AI "job" might be:
+
+JOB: fix repository bug
+
+Steps:
+
+discover
+plan
+modify
+build
+test
+review
+commit
+
+Each stage could have:
+
+inputs
+outputs
+resource requirements
+failure policy
+checkpoint
+restart point
+
+That's very MVS-like.
+
+Today's agent loops often restart awkwardly after failures because execution state exists only implicitly in prompts.
+
+An AI OS could maintain a durable job control block.
+
+Something like:
+
+AI_JOB {
+    goal
+    state
+    dependencies
+    artifacts
+    children
+    checkpoints
+    cost_spent
+    token_spent
+    permissions
+}
+
+Then an interrupted AI task can resume from structured state rather than reconstructing its life from the chat transcript.
+
+That is a major difference.
+
+7. AI OS should probably virtualize models too
+
+One agent shouldn't need to know:
+
+Qwen 7B local
+Claude remote
+GPT cloud
+SmolLM CPU
+vision model on NPU
+
+It might request:
+
+MODEL_CAPABILITY {
+    coding
+    context >= 32k
+    latency < 5 sec
+    privacy = local
+}
+
+The OS chooses the provider.
+
+Like a virtual device.
+
+Applications depend upon:
+
+reasoning-service
+
+not:
+
+CUDA device 0 running model X
+
+This is analogous to device independence in mature operating systems.
+
+8. AI tools should look like devices/capabilities
+
+A tool isn't really a Unix executable.
+
+It's more like a privileged device.
+
+Examples:
+
+email.send
+browser.navigate
+shell.execute
+git.commit
+calendar.create
+camera.read
+robot.move
+
+An AI OS ought to manage capabilities:
+
+agent A:
+    git.read
+    git.write
+
+agent B:
+    git.read
+
+agent C:
+    network.none
+
+This is where a capability-oriented microkernel model becomes very attractive.
+
+Rather than:
+
+model has access to the shell
+
+give it:
+
+capability: repository-read
+capability: cargo-test
+
+but not arbitrary execution.
+
+That could be important enough to make the AI OS worth building even independent of memory research.
+
+9. AI processes may need hierarchical supervision
+
+The Erlang/OTP analogy becomes relevant too.
+
+Agent tree:
+
+supervisor
+├── researcher
+├── coder
+│   ├── compiler-check
+│   └── test-runner
+└── reviewer
+
+Failure policy:
+
+restart
+retry-with-larger-model
+fallback
+kill-child
+escalate-to-parent
+
+This resembles process supervision much more than ordinary prompting.
+
+A sophisticated AI OS might combine:
+
+Unix process semantics,
+MVS job management,
+VM-style environment virtualization,
+capability security,
+Erlang supervision.
+
+That's a very different project from an ML OS.
+
+10. Meanwhile, the ML OS virtualizes the machine learning experiment
+
+The ML OS is much closer to your original memory hierarchy work.
+
+Its first-class concepts are:
+
+tensor
+model
+dataset
+optimizer
+checkpoint
+quantization
+execution graph
+accelerator
+experiment
+
+An ML researcher doesn't primarily need:
+
+agent fork()
+
+They need:
+
+model fork()
+
+That's an important distinction.
+
+Suppose:
+
+Llama-1B-Q8
+
+becomes:
+
+├── Q6 experiment
+├── Q4 experiment
+├── ternary experiment
+├── LoRA A
+└── modified attention
+
+You don't want five complete copies.
+
+This is where VM-style copy-on-write becomes useful on the ML side.
+
+11. Model snapshots should behave like VM snapshots
+
+This is perhaps the strongest VMware analogy for the ML OS.
+
+VMware gives you:
+
+base disk
++ delta
++ snapshot
++ rollback
+
+An ML OS could give you:
+
+base model
++ weight delta
++ adapter
++ quantization metadata
++ architecture delta
+
+So:
+
+model snapshot base
+model fork experimental-attention
+model fork quant-q4
+model fork lora-domain-X
+
+Storage might be:
+
+base weights              2 GB
+experiment A delta        18 MB
+experiment B delta        300 MB
+LoRA                       40 MB
+
+rather than four duplicated 2 GB models.
+
+That's not merely storage optimization.
+
+It changes experimentation.
+
+12. A model becomes a versioned object graph
+
+Instead of a giant .gguf file:
+
+MODEL
+├── architecture
+├── tokenizer
+├── tensor A
+│   ├── encoding
+│   └── backing object
+├── tensor B
+├── tensor C
+├── metadata
+└── provenance
+
+Each tensor can independently be:
+
+FP16
+Q8
+Q4
+ternary
+sparse
+compressed
+remote
+streamed
+
+The ML OS can present a consistent model namespace despite heterogeneous physical representations.
+
+That's analogous to virtual storage.
+
+13. Model page tables become plausible
+
+This returns to your original MVM idea, but now in the correct OS.
+
+For example:
+
+model virtual object             physical representation
+-------------------------------------------------------------
+L17.attn.q_proj                  NVMe Q4 block
+L17.attn.k_proj                  RAM Q8
+L17.attn.v_proj                  FPGA stream
+L18.mlp.expert7                  SD Q2
+adapter.finance                  RAM FP16
+
+The application sees:
+
+tensor L17.attn.q_proj
+
+The OS decides how it is represented.
+
+This is exactly the kind of virtualization mature OSes provide for hardware resources.
+
+14. The ML OS should support reproducible "machine snapshots"
+
+An experiment includes far more than weights:
+
+model version
+dataset version
+random seed
+optimizer
+hyperparameters
+runtime
+compiler
+quantizer
+hardware target
+code revision
+
+Today this information is frequently scattered across:
+
+notebook
+shell history
+wandb
+git
+checkpoint directory
+requirements.txt
+
+The ML OS could make an experiment machine snapshot.
+
+Think:
+
+mlvm snapshot experiment-42
+
+containing everything required to reproduce it.
+
+This fits beautifully with your interest in reproducible research and literate programming.
+
+The org-mode document could be a view of the experiment object, rather than being the only place that knows what happened.
+
+15. ML equivalent of a filesystem
+
+The filesystem abstraction itself might need reconsideration.
+
+Instead of:
+
+/home/mike/models/foo.gguf
+
+perhaps:
+
+/models/foo
+/models/foo@base
+/models/foo@q4
+/models/foo@experiment17
+
+and:
+
+/experiments/42/input
+/experiments/42/model
+/experiments/42/results
+/experiments/42/provenance
+
+The kernel doesn't necessarily have to implement a POSIX filesystem.
+
+These may just be object namespaces.
+
+SWTOS's existing resident catalog/provider model is actually conceptually closer to that than a Unix filesystem is.
+
+16. AI OS and ML OS have very different notions of memory
+
+This distinction is important.
+
+AI OS memory
+
+"Memory" means:
+
+conversation
+facts
+episodes
+plans
+tool results
+working context
+RAG
+
+It's semantic.
+
+The central issue is:
+
+Which information should the model currently know?
+
+ML OS memory
+
+"Memory" means:
+
+weights
+activations
+KV
+gradients
+optimizer state
+datasets
+embedding indexes
+
+It's computational.
+
+The central issue is:
+
+Which numerical state must physically reside where for this computation?
+
+They need very different policies.
+
+17. But there should be a common virtualization layer
+
+This is where VM history helps.
+
+IBM didn't need every guest OS to know the underlying hardware topology.
+
+Similarly, both AI OS and ML OS could run atop a small resource hypervisor.
+
+Something like:
+
+            AI OS                    ML OS
+              │                        │
+              └───────────┬────────────┘
+                          │
+                 SW Resource Monitor
+                          │
+       ┌──────────────────┼──────────────────┐
+       │                  │                  │
+      CPU                RAM            accelerators
+       │                  │                  │
+    FPGA core          PSRAM             NPU/GPU
+       │
+      storage providers
+
+That bottom layer might grow out of SWTOS ideas.
+
+Its job would be boring but important:
+
+resource discovery
+IPC
+capabilities
+scheduling primitive
+storage provider abstraction
+device abstraction
+accounting
+
+Then the two operating environments implement their own semantics.
+
+18. This gives you an elegant "hypervisor" experiment
+
+Imagine the same cheap machine running:
+
++---------------------------------------------------+
+| AI VM                                             |
+| coding agent                                      |
+| context manager                                   |
++---------------------------------------------------+
+| ML VM                                             |
+| quantization experiment                           |
+| model tensor manager                              |
++---------------------------------------------------+
+| SW Hypervisor / resource monitor                  |
++---------------------------------------------------+
+| CPU | RAM | SSD | FPGA | NPU                      |
++---------------------------------------------------+
+
+The AI environment might actually invoke the ML environment as a service:
+
+Quantize this model and evaluate error.
+
+The ML OS performs reproducible model manipulation.
+
+Then the AI OS consumes the resulting artifact.
+
+That's much cleaner than giving an agent a shell and hoping it orchestrates eight Python programs correctly.
+
+19. VirtualBox/QEMU suggests another useful direction: simulated hardware
+
+QEMU is especially relevant because your emphasis is educational experimentation on old/small hardware.
+
+The ML OS shouldn't require real exotic hardware.
+
+Give it virtual devices:
+
+virtual Tensor Processing Unit
+virtual sequential parameter store
+virtual tiny SRAM
+virtual slow flash
+virtual NPU
+virtual vector unit
+
+Then emulate:
+
+RAM       64 KiB
+flash      4 MiB
+stream    10 MB/s
+tensor ALU 8 lanes
+
+and ask:
+
+What OS policy performs well?
+
+That makes experimentation independent of your exact FPGA board.
+
+Your existing emulator-first SWTOS philosophy and emufpga already point strongly in this direction.
+
+20. You could create an "ML machine architecture"
+
+QEMU doesn't merely emulate OSes; it emulates machines.
+
+Likewise, define an abstract ML Machine.
+
+For example:
+
+ML Machine v0
+────────────────────
+scalar CPU
+tensor engine
+fast tensor RAM
+normal RAM
+parameter stream
+block store
+event queue
+
+Then your ML OS runs on:
+
+ml-machine-emulator
+
+and later:
+
+COR24 + FPGA
+ESP32-P4
+RISC-V SBC
+old x86 machine
+
+This might become more useful than attempting to directly run your full OS on each device.
+
+21. The AI equivalent is an "Agent Machine"
+
+So you eventually get two virtual architectures:
+
+ML Machine
+AI Machine
+ML Machine virtualizes:
+tensor compute
+model state
+accelerators
+storage hierarchy
+datasets
+experiments
+AI Machine virtualizes:
+models
+tools
+context
+memory
+identity
+permissions
+events
+jobs
+
+This separation is conceptually very clean.
+
+22. The VM analogy extends to migration
+
+VMware live migration says:
+
+Move a running machine to another physical host.
+
+AI equivalent:
+
+Move a running agent between models/machines.
+
+For example:
+
+SmolLM on laptop
+        ↓
+task gets difficult
+        ↓
+Qwen on GPU server
+        ↓
+same agent environment
+
+The agent retains:
+
+identity
+context
+tool handles
+job state
+memory
+
+Only its inference provider changes.
+
+That's a compelling AI-OS capability.
+
+23. ML migration looks completely different
+
+For ML:
+
+experiment running CPU
+      ↓
+FPGA available
+      ↓
+move selected tensor operation
+
+or:
+
+GPU memory pressure
+      ↓
+demote model weights to SSD stream
+
+That's placement/migration of numerical objects.
+
+Same low-level substrate.
+
+Very different semantic policy.
+
+24. Checkpointing also splits cleanly
+AI checkpoint
+
+Save:
+
+task graph
+context
+agent state
+tool state
+children
+pending events
+budgets
+
+Resume later.
+
+ML checkpoint
+
+Save:
+
+weights
+optimizer
+gradient
+RNG
+dataset cursor
+experiment metadata
+
+Again: superficially similar mechanism, very different object models.
+
+25. AI OS may need something resembling transactions
+
+AI tools can have side effects:
+
+modify git
+send mail
+delete file
+purchase item
+change calendar
+
+An interesting OS feature could be:
+
+begin_agent_transaction()
+
+Agent performs speculative actions in an overlay.
+
+For filesystem:
+
+base repo
++ agent overlay
+
+Review.
+
+Then:
+
+commit
+
+or:
+
+rollback
+
+This is essentially VM snapshot semantics applied to agent actions.
+
+That could be extremely useful for autonomous coding agents.
+
+26. The same copy-on-write machinery helps both OSes
+
+This is where shared infrastructure pays off.
+
+AI OS
+repository base
++ agent changes
+ML OS
+model base
++ weight changes
+VM
+disk base
++ block changes
+
+The generic primitive is:
+
+immutable object
++
+copy-on-write overlay
+
+That belongs in the shared substrate.
+
+27. A three-layer project structure may therefore be better
+
+Rather than two completely separate OSes:
+
+              AI OS
+                │
+        ┌───────┴────────┐
+        │ shared monitor │
+        └───────┬────────┘
+                │
+              ML OS
+
+I'd structure it as:
+
+                    SW Virtual Machine Monitor
+                              |
+             +----------------+----------------+
+             |                                 |
+       Agent Operating                    ML Operating
+        Environment                       Environment
+             |                                 |
+       AI Machine ABI                      ML Machine ABI
+
+Not necessarily a hypervisor in the hardware-VT sense.
+
+More like a microkernel/resource monitor.
+
+This gives the project a nice historical lineage:
+
+CP-67 / VM
+       ↓
+virtual machine monitor
+       ↓
+guest environments
+28. SWTOS can remain the tiny systems laboratory
+
+I would not turn SWTOS itself into either OS.
+
+SWTOS is valuable precisely because it is small and understandable. Its current architecture—a small microkernel, synchronous IPC, provider-backed external images, reclaimable allocations, emulator-first validation—is a good experimental substrate.
+
+I would let ideas flow like:
+
+SWTOS
+  ↓
+prove generic mechanism
+  ↓
+AI/ML virtual-machine monitor
+  ↓
+specialized environment
+
+For example:
+
+provider abstraction
+
+is generic.
+
+But:
+
+KV-cache eviction
+
+belongs to ML OS.
+
+And:
+
+conversation-context eviction
+
+belongs to AI OS.
+
+29. sw-MLPL fits primarily on the ML side
+
+This distinction also clarifies sw-MLPL's role.
+
+sw-MLPL naturally belongs here:
+
+ML operating environment
+    ↑
+sw-MLPL
+
+because it's a language for manipulating arrays, numerical workflows, models, data, experiments, etc.
+
+It could eventually be an ML OS shell equivalent:
+
+Unix → shell
+ML OS → MLPL REPL
+
+That is a rather compelling analogy.
+
+You might type:
+
+model
+|> quantize
+|> evaluate
+|> compare
+|> visualize
+
+and the OS manages object versions and backing storage.
+
+30. An AI OS might have a completely different "shell"
+
+Its shell might be goal-oriented:
+
+> investigate failing CI and prepare a fix
+
+which becomes a durable job.
+
+Commands might conceptually be:
+
+jobs
+agents
+contexts
+tools
+budgets
+wait
+fork
+join
+checkpoint
+
+Rather than arrays and tensors.
+
+Potentially:
+
+ai> jobs
+17 RUNNING fix parser bug
+18 WAITING  review PR
+19 DONE     research compiler ABI
+
+Again, that feels like an operating environment, not merely an LLM UI.
+
+31. The two systems can dogfood each other
+
+This is where your broader work becomes interesting.
+
+The AI OS could employ an agent to:
+
+design quantization experiment
+
+It submits a structured job to the ML OS:
+
+base model: X
+quantizations: [Q8,Q6,Q4,Q3]
+dataset: Y
+metrics: [...]
+
+ML OS performs reproducible experiments.
+
+Returns structured artifact.
+
+AI OS reasons about results.
+
+So:
+
+AI OS
+  cognition/orchestration
+       ↓
+ML OS
+  computation/experimentation
+       ↓
+hardware
+
+That is a much better decomposition than pretending the LLM itself is the entire computing system.
+
+32. I would rename the two research theses
+
+The ML thesis could be:
+
+Model Virtualization: models and ML experiments should be virtualized, versioned, placed, streamed, transformed, and checkpointed by an operating environment rather than treated as opaque files owned entirely by frameworks.
+
+The AI thesis:
+
+Agent Virtualization: agents should execute inside durable, isolated virtual cognitive environments whose context, tools, memory, models, permissions, jobs, and side effects are explicitly managed.
+
+Those are both strong enough to stand independently.
+
+33. The shared primitive set becomes clearer
+
+I would look for generic mechanisms such as:
+
+Generic mechanism	AI interpretation	ML interpretation
+object	context/tool/artifact	tensor/model/dataset
+namespace	agent environment	experiment/model tree
+COW overlay	speculative agent changes	model delta
+provider	model/tool/RAG source	RAM/SSD/FPGA
+scheduler	goals/tasks	tensor operations
+checkpoint	agent state	training state
+capability	tool permission	device/data permission
+accounting	tokens/cost	RAM/FLOPs/I/O
+migration	switch model/host	move tensor/device
+snapshot	agent environment	experiment
+cache	semantic context	tensor/KV
+fault	missing knowledge	missing tensor
+prefetch	likely-needed knowledge	next tensor/expert
+
+That's probably the conceptual center of the whole project.
+
+34. And the key insight from VM history is this
+
+Virtual memory was not valuable merely because disks could impersonate RAM.
+
+Virtualization's deeper value was:
+
+It separated the abstraction presented to software from the physical resources used to implement it.
+
+That's exactly what both of these domains need.
+
+An AI application shouldn't need to know:
+
+which model
+which context chunks
+which machine
+which RAG store
+which particular tools implementation
+
+And an ML program shouldn't necessarily need to know:
+
+where tensor lives
+what physical quant encoding is resident
+which accelerator executes it
+whether weights stream from SSD
+
+Those are implementation decisions.
+
+That is where the word operating system becomes justified.
+
+A revised roadmap
+
+I would now treat this as three related projects, rather than one giant AI/ML OS:
+
+Tiny resource monitor / virtual machine substrate, derived experimentally from SWTOS: IPC, providers, capabilities, scheduling, COW objects, snapshots, resource accounting, and emulated devices.
+ML Operating Environment / ML Machine, focusing first on model objects, tensor residency, streaming, COW model snapshots, quantization variants, reproducible experiments, accelerator placement, KV management, and your SPM work.
+AI Operating Environment / Agent Machine, initially on much more capable hardware, focusing on durable agent jobs, virtual context, tools as capabilities, fork/join, checkpoints, context paging, model-provider virtualization, supervision, and transactional side effects.
+
+The nice thing is that the cheap old hardware is not an embarrassment here—it is an experimental advantage. COR24, small FPGAs, ESP32-class MCUs, old SBCs, SD/SPI flash, and old SSDs force you to make resource management visible in ways that a 256-GB workstation hides. Then the exact same abstractions can later scale upward.
+
+The conceptual split I would carry forward is therefore:
+
+ML OS: virtualize the model and the experiment.
+AI OS: virtualize the agent and its world.
+
+And beneath both:
+
+A small virtual-resource monitor that virtualizes scarce state rather than assuming RAM is infinite.
+
+That feels much more historically grounded—and much more likely to lead to genuinely novel experiments—than a single "AI/ML operating system."
+

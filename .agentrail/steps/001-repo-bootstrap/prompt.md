@@ -1,0 +1,1 @@
+Bootstrap the sw-os-ml repo: AGENTS.md agent briefing (agentrail block + repo policy), CLAUDE.md symlink, .gitignore, README, docs skeleton. Establish Rust 2024 + sw-checklist as the conformance gates before any code exists.

@@ -1,0 +1,8 @@
+number = 5
+slug = "plan-and-status"
+status = "pending"
+description = "Write docs/plan.md (milestones + follow-on implementation sagas) and docs/sta..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:21:56"
+commits = []

@@ -1,0 +1,1 @@
+Write docs/design.md: crate layout, no_std kernel, syscall surface, object table, host device contract, FPGA register interface, test strategy.

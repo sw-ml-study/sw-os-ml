@@ -1,0 +1,36 @@
+# Build products (one shared target/ for every component workspace,
+# see .cargo/config.toml).
+target/
+
+# macOS and editor noise
+.DS_Store
+*~
+*.swp
+*.swo
+
+# Local configuration and scratch output
+.env
+.env.*
+out/
+
+# VM disk images, firmware blobs and boot artifacts. Large, rebuildable,
+# and often licence-encumbered (EDK2 builds, IPSWs, GSP firmware).
+*.img
+*.qcow2
+*.iso
+*.raw
+*.fd
+firmware/
+vm/
+
+# AgentRail session transcripts are local and can grow without bound.
+# Durable saga records -- saga.toml, step.toml, trajectories/ -- stay
+# tracked; losing them would break the handoff between sessions.
+# See ../emufpga/.gitignore and ../sw-mlpl/docs/git-history-rewrite-notice.md:
+# committing these repeatedly took sw-mlpl's .git to 2.2 GB.
+.agentrail/sessions/
+.agentrail-archive/*/sessions/
+
+# Belt and braces: no .jsonl under any agentrail path is worth tracking.
+.agentrail/**/*.jsonl
+.agentrail-archive/**/*.jsonl

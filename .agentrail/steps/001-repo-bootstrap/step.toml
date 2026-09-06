@@ -1,0 +1,8 @@
+number = 1
+slug = "repo-bootstrap"
+status = "in-progress"
+description = "Bootstrap the sw-os-ml repo: AGENTS.md agent briefing (agentrail block + repo..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:21:56"
+commits = []
