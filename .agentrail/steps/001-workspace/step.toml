@@ -1,8 +1,9 @@
 number = 1
 slug = "workspace"
-status = "in-progress"
+status = "completed"
 description = "Cargo workspace on Rust 2024, both bare targets building an empty kernel, sw-..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:47:32"
-commits = []
+completed_at = "2026-09-06T09:53:33"
+commits = ["a9d4e4d1afeae13cb6d48af1b6c10649b38f0011"]
