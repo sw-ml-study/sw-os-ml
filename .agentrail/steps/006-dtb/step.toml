@@ -1,8 +1,9 @@
 number = 6
 slug = "dtb"
-status = "in-progress"
+status = "completed"
 description = "Parse the flattened device tree into BootInfo: memory regions, CPU count, and..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T10:09:15"
-commits = []
+completed_at = "2026-09-06T11:38:56"
+commits = ["6bdf476bd49a5dab0a82f609457374684af1ef3e"]
