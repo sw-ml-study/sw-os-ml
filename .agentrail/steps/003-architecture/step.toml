@@ -1,6 +1,6 @@
 number = 3
 slug = "architecture"
-status = "pending"
+status = "in-progress"
 description = "Write docs/architecture.md: kernel concepts, model fault, parameter-major sch..."
 role = "production"
 context_files = []
