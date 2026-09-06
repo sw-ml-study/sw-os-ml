@@ -1,0 +1,8 @@
+number = 4
+slug = "aarch64-entry"
+status = "pending"
+description = "_start at EL1, DTB parse, page tables, MMU on, stack switch."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:47:32"
+commits = []

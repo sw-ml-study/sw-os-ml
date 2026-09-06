@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/mlos-kernel"]
+
+# NOTE: no `default-members` yet, because every crate in the tree is
+# currently a bare-target one. `mlos-kernel` is `no_std`/`no_main` and
+# cannot link for the host triple, so a bare `cargo build` at the root
+# fails by design -- use `cargo kbuild-arm` / `cargo kbuild-x86`
+# (aliases in .cargo/config.toml). From step 002 onward, when the first
+# host-testable crate (`mlos-abi`) lands, `default-members` lists the
+# host-side crates and the plain cargo commands work again.
+
+[workspace.package]
+edition      = "2024"
+rust-version = "1.85"
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/sw-ml-study/sw-os-ml"
+authors      = ["Software Wrighter LLC"]
+
+[workspace.lints.rust]
+missing_docs            = "warn"
+unsafe_op_in_unsafe_fn  = "deny"
+unused_must_use         = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
+[profile.release]
+lto           = true
+opt-level     = "s"
+codegen-units = 1
+debug         = true      # symbols for the gdb stub; stripped from the image

@@ -1,0 +1,1 @@
+Cargo workspace on Rust 2024, both bare targets building an empty kernel, sw-checklist green. Turns the pre-commit gate on for the first time.

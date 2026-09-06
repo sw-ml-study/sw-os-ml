@@ -1,51 +1,45 @@
-# MLOS Foundations
+# MLOS Boot
 
-Vision: a new operating system, written from scratch in Rust 2024, that
-treats machine-learning state -- weights, KV cache, MoE expert streams,
-query context, activations, embeddings, adapters -- as its primary
-virtualized resource, the way conventional operating systems treat
-address spaces and pages.
+Vision: one kernel binary that reaches a console and a timer tick as an
+aarch64 guest, under two different hypervisors, from one source tree.
 
-Not a modified BSD or Linux. Not a framework. A kernel whose central
-abstraction is the ML object, not the page.
+Nothing ML-shaped exists yet. This saga earns the right to write the
+interesting parts: until MLOS boots, every claim in docs/architecture.md
+is untested prose. M1 turns the document set into a running program that
+prints one honest line.
 
-The constraint that shapes everything: today's CPUs virtualize pages,
-not tensors. x86-64 and Apple Silicon MMUs know nothing about a KV
-block or an expert. So the first implementation is a SOFTWARE
-model-object manager riding on page hardware, structured so that when
-an ML-MMU exists (first as an FPGA add-in card, later perhaps in
-silicon) the kernel changes its provider, not its abstraction.
+Gate G1 from docs/PRD.md: MLOS starts from firmware, initializes memory,
+brings up a timer and a console, and reaches a shell prompt -- under
+QEMU/HVF and under Virtualization.framework, from the same source.
 
-Development happens in a VM, never on bare metal. Apple Silicon first
-(the machine on the desk), Linux/NVIDIA second (where the GPUs are).
+Deliberately NOT in this saga: x86-64 (that is M6), userspace, scheduling
+beyond a single kernel thread, and any ML concept whatsoever. The object
+table is M2. Resisting that is the point.
 
-This saga is the PRELIMINARY one: it produces the written architecture,
-not the kernel. Implementation sagas follow, and are proposed in
-docs/plan.md.
+1. **workspace** -- Cargo workspace on Rust 2024, both bare targets
+   building an empty kernel, sw-checklist green. Turns the pre-commit
+   gate on for the first time.
+2. **abi-skeleton** -- mlos-abi: error codes, ObjectId bit layout and
+   its layout test. Written now, not at M2, because the ML-MMU register
+   contract in docs/design.md depends on these exact bit positions and
+   changing them later is expensive.
+3. **hal-trait** -- mlos-hal: the four-method Hal trait, BootInfo,
+   Console/Timer/IrqController traits. No implementation.
+4. **aarch64-entry** -- _start at EL1, DTB parse, page tables, MMU on,
+   stack switch. The first code that must run on real silicon.
+5. **console-timer** -- PL011 console, GICv3, ARM generic timer. The
+   first printed line and the first interrupt.
+6. **cli-run** -- mlos build / mlos run --host hvf|tcg / mlos doctor.
+   doctor earns its place: host prerequisites differ sharply between
+   the Mac and the Linux box.
+7. **uefi-and-vz** -- UEFI image path; boot under
+   Virtualization.framework. Requirement N2 (two hypervisors per arch)
+   satisfied, or it never will be -- direct -kernel boot works too
+   easily to leave this for later.
+8. **ci-tcg** -- deterministic TCG boot test in CI. A boot failure that
+   reproduces identically every run is what makes kernel debugging
+   tractable.
 
-1. **repo-bootstrap** -- AGENTS.md briefing, .gitignore, docs skeleton,
-   Software Wrighter conformance gates (Rust 2024, sw-checklist).
-2. **prd** -- docs/PRD.md. What MLOS is for, who it serves, what
-   "done" means for the proof of concept, what is explicitly out of
-   scope.
-3. **architecture** -- docs/architecture.md. The five kernel concepts
-   (ML_OBJECT, PROVIDER, TIER, LEASE, STREAM), the model fault, the
-   parameter-major scheduler, and the platform survey: Apple Silicon
-   vs x86-64, hypervisor choice, GPU passthrough reality, the FPGA
-   ML-MMU roadmap.
-4. **design** -- docs/design.md. Crate layout, no_std kernel, the
-   syscall surface, the ML object table, the virtio/host-device
-   contract, the FPGA register interface, and how each piece is tested
-   without hardware.
-5. **plan-and-status** -- docs/plan.md (milestones, the follow-on
-   implementation sagas) and docs/status.md (where we actually are).
-
-Parked, deliberately, until the kernel boots and holds an object table:
-- Training state (gradients, optimizer state, checkpoints). Inference
-  and LoRA-scale mutable state first.
-- The AI/agent operating environment (durable agent jobs, virtual
-  context, tools as capabilities). That is a sibling project sharing
-  the substrate, not part of this one -- see docs/research.txt s.1-34.
-- Real FPGA gateware. The ML-MMU is specified and emulated here;
-  emufpga is where it gets built.
-- Bare-metal boot on real hardware.
+Parked until this saga lands:
+- x86-64 HAL. One architecture working beats two half-working.
+- Anything from docs/plan.md M2 onward.

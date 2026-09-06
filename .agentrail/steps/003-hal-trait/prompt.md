@@ -1,0 +1,1 @@
+mlos-hal: the four-method Hal trait, BootInfo, Console/Timer/IrqController traits. No implementation.

@@ -1,0 +1,12 @@
+# One shared target/ for the whole tree.
+[build]
+target-dir = "target"
+
+# Bare targets default to `rust-lld`, so no linker needs naming here.
+# The linker script is supplied by crates/mlos-kernel/build.rs, which
+# resolves it to an absolute path -- a relative -T is resolved against the
+# working directory, which is not stable across cargo invocations.
+
+[alias]
+kbuild-arm = "build -p mlos-kernel --target aarch64-unknown-none-softfloat"
+kbuild-x86 = "build -p mlos-kernel --target x86_64-unknown-none"

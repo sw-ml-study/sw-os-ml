@@ -1,6 +1,6 @@
-name = "ml-os-foundations"
-status = "completed"
-current_step = 7
-created_at = "2026-09-06T09:21:48"
+name = "mlos-boot"
+status = "active"
+current_step = 1
+created_at = "2026-09-06T09:47:32"
 plan_file = ".agentrail/plan.md"
 retroactive = false

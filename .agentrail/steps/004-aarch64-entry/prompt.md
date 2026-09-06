@@ -1,0 +1,1 @@
+_start at EL1, DTB parse, page tables, MMU on, stack switch.

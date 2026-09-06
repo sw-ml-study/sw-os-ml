@@ -1,0 +1,8 @@
+number = 5
+slug = "console-timer"
+status = "pending"
+description = "PL011 console, GICv3, ARM generic timer. First printed line, first interrupt."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:47:32"
+commits = []

@@ -1,0 +1,1 @@
+UEFI image path; boot under Virtualization.framework. Satisfies requirement N2.

@@ -1,0 +1,8 @@
+number = 2
+slug = "abi-skeleton"
+status = "pending"
+description = "mlos-abi: error codes, ObjectId bit layout and its layout test. The ML-MMU re..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:47:32"
+commits = []

@@ -1,0 +1,1 @@
+Deterministic TCG boot test in CI.

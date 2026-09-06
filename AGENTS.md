@@ -306,14 +306,22 @@ what to say afterwards.
 ### 1. Pre-commit gate -- run it, read the output
 
 ```bash
-cargo fmt --all                                     # write, do not just check
-cargo fmt --all -- --check                          # now it must be clean
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo build --target aarch64-unknown-none-softfloat -p mlos-kernel
-cargo build --target x86_64-unknown-none            -p mlos-kernel
+cargo fmt --all                          # write, do not just check
+cargo fmt --all -- --check               # now it must be clean
+cargo test                               # host-side crates
+cargo clippy --all-targets -- -D warnings
+cargo clippy -p mlos-kernel --target aarch64-unknown-none-softfloat --all-targets -- -D warnings
+cargo clippy -p mlos-kernel --target x86_64-unknown-none            --all-targets -- -D warnings
+cargo kbuild-arm                         # = build -p mlos-kernel --target aarch64-unknown-none-softfloat
+cargo kbuild-x86                         # = build -p mlos-kernel --target x86_64-unknown-none
 sw-checklist
 ```
+
+**Why the kernel gets its own lines.** `--workspace` does not work for it:
+`mlos-kernel` is `no_std`/`no_main` and cannot link for the host triple, so
+any command that sweeps it in on the host fails. It is always named with
+`-p` and a bare `--target`. Host-side crates are reached by the plain
+commands, via `default-members` in the root `Cargo.toml`.
 
 Rules:
 

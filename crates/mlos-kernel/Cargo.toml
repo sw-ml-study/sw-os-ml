@@ -1,0 +1,18 @@
+[package]
+name        = "mlos-kernel"
+version     = "0.0.1"
+description = "The MLOS microkernel."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[[bin]]
+name = "mlos-kernel"
+path = "src/main.rs"
+test = false          # no test harness exists on a bare target
+bench = false
+
+[lints]
+workspace = true

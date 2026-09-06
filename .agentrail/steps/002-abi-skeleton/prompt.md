@@ -1,0 +1,1 @@
+mlos-abi: error codes, ObjectId bit layout and its layout test. The ML-MMU register contract depends on these exact bit positions.

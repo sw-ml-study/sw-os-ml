@@ -1,0 +1,1 @@
+PL011 console, GICv3, ARM generic timer. First printed line, first interrupt.

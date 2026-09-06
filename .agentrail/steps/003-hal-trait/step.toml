@@ -1,0 +1,8 @@
+number = 3
+slug = "hal-trait"
+status = "pending"
+description = "mlos-hal: the four-method Hal trait, BootInfo, Console/Timer/IrqController tr..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:47:32"
+commits = []
