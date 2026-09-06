@@ -294,6 +294,124 @@ on its own line with a justification.
 - `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, and
   `sw-checklist` all pass before `agentrail complete`.
 
+## Step completion protocol (sw-os-ml)
+
+Every agentrail step ends the same way. Do not skip stages, do not
+reorder, do not report a step complete before stage 6.
+
+The agentrail briefing above says "commit before `agentrail complete`."
+This is the sw-os-ml expansion of that: what to run, in what order, and
+what to say afterwards.
+
+### 1. Pre-commit gate -- run it, read the output
+
+```bash
+cargo fmt --all                                     # write, do not just check
+cargo fmt --all -- --check                          # now it must be clean
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --target aarch64-unknown-none-softfloat -p mlos-kernel
+cargo build --target x86_64-unknown-none            -p mlos-kernel
+sw-checklist
+```
+
+Rules:
+
+- **Every command must pass before you commit.** Not "mostly passes",
+  not "fails on an unrelated crate". A red gate means the step is not
+  done.
+- **`sw-checklist` must not regress.** Zero failures and zero warnings
+  is the standing position. If the count grew, retire the growth in
+  this step -- do not defer it. A commit that holds or grows the count
+  needs `sw-checklist: exception` on its own line in the message, with
+  a justification stating what was tried.
+- **Skipped stages get stated, not silently dropped.** Before any Rust
+  code exists, the cargo stages have nothing to run; say
+  `sw-checklist: no Cargo.toml yet; nothing to check` in the message
+  rather than pretending the gate ran.
+- If a gate fails for a reason genuinely outside the step, say so
+  explicitly in the summary. Do not paper over it.
+
+### 2. Commit with detail
+
+Source changes and `.agentrail/` metadata are both first-class. The
+commit recorded into the step's `commits` field comes from `HEAD` at
+the moment of `agentrail complete`, so **the commit must land first.**
+
+A commit message here is a design record, not a changelog line:
+
+```
+<slug>: <what changed, one line, imperative>
+
+Why this change was made -- the problem, the constraint, or the
+mistake being corrected. Prefer the reasoning over the enumeration;
+`git diff` already lists the files.
+
+Decisions taken and what they rule out. If a previous decision was
+wrong, say so plainly and say what replaced it.
+
+sw-checklist: <count and what was retired, or the exception line>
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+```
+
+### 3. `agentrail complete`
+
+```bash
+agentrail complete --summary "..." --reward 1 --actions "..."
+```
+
+`--reward -1 --failure-mode "..."` if the step failed. `--done` on the
+final step of a saga. The summary is read by a future session with no
+memory of this one -- write it for that reader.
+
+### 4. Commit the saga metadata
+
+`agentrail complete` writes into `.agentrail/` *after* your commit, so
+it always leaves files uncommitted. Commit them:
+
+```bash
+git add .agentrail/
+git commit -m "step <NNN>-<slug>: saga metadata"
+```
+
+Skipping this is the single most common agentrail failure mode, and
+`agentrail audit` will report it as an orphan step.
+
+### 5. Push
+
+```bash
+git push
+```
+
+`origin` is SSH and `gh` is authenticated, so this should just work.
+If it does not:
+
+- Do **not** retry in a loop. A permission failure will not fix itself.
+- Do **not** leave commits stranded silently. State the unpushed branch
+  in your summary so the next session does not look at the remote and
+  conclude the work was lost.
+- Non-fast-forward on a personal branch: `git pull --rebase`, never
+  `--force` without being told.
+
+### 6. Report
+
+Close every step with these four things, in this order:
+
+1. **What the step delivered** -- the result, not the activity. "The
+   kernel prints a boot banner under HVF and TCG", not "wrote the
+   console driver".
+2. **Gate status** -- what passed, what was skipped and why, the
+   `sw-checklist` count, and whether the push landed.
+3. **Next step** -- the slug and what it does, so the next session can
+   run `agentrail next` and recognise it.
+4. **Blockers** -- anything that stops the next step, with the specific
+   action that clears it ("QEMU is not installed; `brew install qemu`"),
+   or an explicit "none".
+
+Say plainly if something did not work. A step reported green that is
+not green costs the next session more than the failure would have.
+
 ## Emulator discipline
 
 Boot artifacts (`*.img`, `*.qcow2`, `*.fd`, EDK2 builds, GSP firmware)

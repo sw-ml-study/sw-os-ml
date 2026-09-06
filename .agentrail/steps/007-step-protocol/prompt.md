@@ -1,0 +1,1 @@
+Codify the sw-os-ml step completion protocol in AGENTS.md: pre-commit gate (fmt/clippy/test/cross-build/sw-checklist), detailed commit, agentrail complete, saga metadata commit, push, then a four-part report (delivered / gate status / next step / blockers).

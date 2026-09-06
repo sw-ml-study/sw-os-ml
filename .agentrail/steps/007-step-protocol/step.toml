@@ -1,0 +1,8 @@
+number = 7
+slug = "step-protocol"
+status = "in-progress"
+description = "Codify the sw-os-ml step completion protocol in AGENTS.md: pre-commit gate (f..."
+role = "meta"
+context_files = []
+created_at = "2026-09-06T09:44:28"
+commits = []
