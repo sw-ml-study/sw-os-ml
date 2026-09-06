@@ -7,6 +7,7 @@
 mod doctor;
 mod image;
 mod run;
+mod vmm;
 
 use std::{io, process::ExitCode};
 

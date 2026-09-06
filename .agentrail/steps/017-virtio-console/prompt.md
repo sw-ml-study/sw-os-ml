@@ -1,0 +1,1 @@
+A virtio-console driver, so MLOS has a console under Virtualization.framework, which provides no PL011. Closes requirement N2 (two hypervisors per architecture) and is the first piece of mlos-provider-virtio, which M2 needs anyway.

@@ -1,0 +1,1 @@
+Make the kernel image dual-format: a valid arm64 Image AND a PE/COFF EFI application, as Linux CONFIG_EFI_STUB does (code0 = MZ, res5 = PE header offset). Needed for real UEFI firmware and for VZEFIBootLoader. EDK2 rejects the raw Image with "Image type X64 cannot be loaded".

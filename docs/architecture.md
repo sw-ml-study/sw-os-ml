@@ -505,13 +505,35 @@ everything:
 - **`Virtualization.framework`** -- the high-level, opinionated layer
   built on it. Handles devices, but constrains the boot path.
 
-Virtualization.framework will boot a custom OS via `VZEFIBootLoader`
-(macOS 13+), which gives the guest a UEFI environment and boots from an
-ISO or raw disk image. It is genuinely usable for a from-scratch OS,
-with two sharp edges: it wants an **uncompressed raw arm64 image** (a
-compressed EFI zboot kernel fails with an unhelpful internal error,
-because no firmware is present to decompress it), and its device set is
-whatever Apple provides -- you cannot add one. ([Apple Developer Forums](https://developer.apple.com/forums/thread/731074), [Code-Hex/vz](https://pkg.go.dev/github.com/Code-Hex/vz/v3))
+Virtualization.framework offers two boot paths, and the difference
+matters more than an earlier draft of this document assumed:
+
+- **`VZLinuxBootLoader`** takes an **uncompressed raw arm64 image**
+  directly -- no firmware, no disk, no EFI. Measured in step 015: it
+  accepts exactly the image `mlos build` already produces, and the VM
+  runs. This is the cheap path and the one MLOS uses.
+- **`VZEFIBootLoader`** (macOS 13+) gives the guest a UEFI environment
+  and boots from an ISO or raw disk. Needed only for a guest that wants
+  firmware services.
+
+Its device set is whatever Apple provides -- you cannot add one -- and
+that is the real constraint. **There is no PL011.** The console is a
+virtio console, so a kernel that drives only a PL011 boots, runs, and
+says nothing. Requirement N2 therefore costs a virtio-console driver,
+not a boot-path change.
+
+Two related measurements from the same step, both correcting assumptions:
+
+- **EDK2 rejects a raw arm64 `Image`.** Booting `-bios
+  edk2-aarch64-code.fd -kernel mlos.img` gives `Image type X64 can't be
+  loaded on AARCH64 UEFI system`: the firmware wants a PE/COFF EFI
+  application and misreads the Image header as a PE machine type. Linux
+  solves this by making the same file both -- `code0` is `MZ`, and the
+  Image header's `res5` holds the PE header offset. MLOS will need the
+  same dual-format trick to boot under real firmware.
+- A compressed EFI zboot kernel fails under `VZLinuxBootLoader` with a
+  generic internal error, because no firmware is present to decompress
+  it. `mlos build` emits uncompressed for that reason. ([Apple Developer Forums](https://developer.apple.com/forums/thread/731074), [Code-Hex/vz](https://pkg.go.dev/github.com/Code-Hex/vz/v3))
 
 Nested virtualization arrived in macOS 15 on M3 and later, surfaced as
 `nestedVirtualizationSupported` / `nestedVirtualizationEnabled` on

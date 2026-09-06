@@ -1,6 +1,6 @@
 number = 15
 slug = "uefi-and-vz"
-status = "pending"
+status = "in-progress"
 description = "UEFI image path; boot under Virtualization.framework. Satisfies requirement N2."
 role = "production"
 context_files = []

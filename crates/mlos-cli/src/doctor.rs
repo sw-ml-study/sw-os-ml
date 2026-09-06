@@ -19,7 +19,10 @@ const TOOLS: [(&str, &[(&str, &str)]); 3] = [
         "toolchain",
         &[("rustc", "--version"), ("cargo", "--version")],
     ),
-    ("emulator", &[("qemu-system-aarch64", "--version")]),
+    (
+        "emulator",
+        &[("qemu-system-aarch64", "--version"), ("vfkit", "--version")],
+    ),
     (
         "demo recording (optional)",
         &[

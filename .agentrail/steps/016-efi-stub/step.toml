@@ -1,0 +1,8 @@
+number = 16
+slug = "efi-stub"
+status = "pending"
+description = "Make the kernel image dual-format: a valid arm64 Image AND a PE/COFF EFI appl..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T15:49:46"
+commits = []

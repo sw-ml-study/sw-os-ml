@@ -1,0 +1,8 @@
+number = 17
+slug = "virtio-console"
+status = "pending"
+description = "A virtio-console driver, so MLOS has a console under Virtualization.framework..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T15:53:38"
+commits = []
