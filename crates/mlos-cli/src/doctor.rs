@@ -26,6 +26,7 @@ const TOOLS: [(&str, &[(&str, &str)]); 3] = [
             ("vhs", "--version"),
             ("ttyd", "--version"),
             ("ffmpeg", "-version"),
+            ("gifsicle", "--version"),
         ],
     ),
 ];
