@@ -1,6 +1,6 @@
 number = 8
 slug = "memory-map"
-status = "pending"
+status = "in-progress"
 description = "Close the BootInfo gap: mark the kernel image range MemoryKind::Kernel and th..."
 role = "production"
 context_files = []

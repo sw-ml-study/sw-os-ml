@@ -4,7 +4,9 @@
 //! and if it declines, stop.
 
 use mlos_hal::BootInfo;
-use mlos_hal_aarch64::{Machine, Pl011};
+use mlos_hal::MemoryKind;
+use mlos_hal_aarch64::Pl011;
+use mlos_machine::{Machine, reserve};
 
 use crate::banner;
 
@@ -23,20 +25,22 @@ use crate::banner;
 pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     // SAFETY: `probe` validates the header before trusting any field, so a
     // pointer to something else is rejected rather than followed.
-    let machine = unsafe { Machine::probe(dtb) }?;
+    let mut machine = unsafe { Machine::probe(dtb) }?;
     let uart = machine.uart_base?;
+
+    // The tree cannot know we are here; the linker script does.
+    let (base, len) = mlos_hal_aarch64::extent();
+    machine.regions = reserve(&machine.regions, base, len, MemoryKind::Kernel);
     let mut console = Pl011::at(uart);
 
     let info = BootInfo {
-        regions: &machine.regions[..machine.region_count],
+        regions: machine.regions.as_slice(),
         cpu_count: machine.cpu_count,
     };
     banner::report(&mut console, dtb as usize, &info, uart);
 
-    // SAFETY: boot core, MMU off, once. `info.regions` is the device
-    // tree's own memory map, so the kernel image and its stack lie inside
-    // it -- which is what makes the identity map cover the code that has
-    // to survive the switch.
+    // SAFETY: boot core, MMU off, once. The map covers the kernel image
+    // and its stack, so the code that must survive the switch is mapped.
     unsafe { mlos_mmu_aarch64::enable_identity_map(info.regions) };
 
     banner::mmu(&mut console);

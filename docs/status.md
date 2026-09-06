@@ -86,11 +86,10 @@ discovered by something trusting them.
 
 | Gap | Consequence | Closes in |
 | --- | --- | --- |
-| `BootInfo` marks the whole DRAM region `Usable`, including the range the kernel image occupies (`0x4020_0000` upward). `usable_bytes()` therefore overstates by the image size. | A future allocator that trusts it would hand out the kernel's own memory. Nothing consumes it yet. | 008-memory-map |
-| `MemoryKind::Kernel` and `Reclaimable` are defined but never produced. | The map has less structure than its type suggests. | 008-memory-map |
-| A device tree with more than 8 memory regions silently keeps the first 8. | Not reachable on QEMU `virt`, which reports one. | When a machine needs it |
-| The identity map is 1 GiB blocks and the whole of RAM is executable. | No W^X, no per-page permissions. Nothing runs but the kernel yet. | When the object manager needs finer granularity (M2) |
-| `mlos_hal::PageTable` is declared but not implemented. | The `Platform` associated type has no concrete impl. | Same -- a general mapper written before it has a caller is the wrong mapper |
+| The identity map is 1 GiB blocks, so all of RAM is executable and writable. | No W^X and no per-page permissions. Nothing runs but the kernel yet. | When the object manager needs finer granularity (M2) |
+| `mlos_hal::PageTable` is declared but not implemented. | `Platform`'s associated type has no concrete impl. | Same. A general mapper written before it has a caller is the wrong mapper |
+| A device tree with more than 16 memory regions silently keeps the first 16. | Not reachable on QEMU `virt`, which reports one that carving turns into five. | When a machine needs it |
+| The whole 1 MiB the device tree blob declares is reserved, though its content is ~8.5 KiB. | ~1 MiB unavailable until something reclaims it. It is marked `Reclaimable`, so it can be. | When there is an allocator to reclaim into |
 
 ## Decisions made, and what would reverse them
 

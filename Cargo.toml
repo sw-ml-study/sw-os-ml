@@ -6,6 +6,7 @@ members = [
     "crates/mlos-fdt",
     "crates/mlos-hal",
     "crates/mlos-hal-aarch64",
+    "crates/mlos-machine",
     "crates/mlos-mmu-aarch64",
     "crates/mlos-kernel",
 ]
@@ -20,6 +21,7 @@ default-members = [
     "crates/mlos-device",
     "crates/mlos-fdt",
     "crates/mlos-hal",
+    "crates/mlos-machine",
 ]
 
 [workspace.package]

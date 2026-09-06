@@ -10,8 +10,8 @@
 #![no_std]
 
 mod boot;
-mod devicetree;
+mod image;
 mod uart;
 
-pub use devicetree::{MAX_REGIONS, Machine};
+pub use image::extent;
 pub use uart::Pl011;
