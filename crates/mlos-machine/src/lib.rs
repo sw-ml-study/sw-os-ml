@@ -40,6 +40,11 @@ pub struct Machine {
 }
 
 impl Machine {
+    /// Marks `[base, base + len)` as holding the kernel image.
+    ///
+    /// The tree describes what the MACHINE has; it knows nothing about
+    /// what a loader put into it. Combining those two facts is this
+    /// type's job, not its caller's.
     /// Reads the device tree the loader left at `dtb`.
     ///
     /// The blob's own extent is recorded as it is parsed. Firmware
@@ -53,6 +58,19 @@ impl Machine {
     /// `dtb` must be what the boot protocol supplied: a device tree blob
     /// whose declared length is readable. Anything else is rejected by the
     /// header check rather than believed.
+    #[must_use]
+    pub fn reserving(self, base: u64, len: u64) -> Self {
+        Self {
+            regions: reserve(&self.regions, base, len, MemoryKind::Kernel),
+            ..self
+        }
+    }
+
+    /// Reads the device tree the loader left at `dtb`.
+    ///
+    /// # Safety
+    ///
+    /// `dtb` must be what the boot protocol supplied.
     pub unsafe fn probe(dtb: *const u8) -> Option<Self> {
         // SAFETY: forwarded from this function's contract.
         let fdt = unsafe { Fdt::from_ptr(dtb) }?;

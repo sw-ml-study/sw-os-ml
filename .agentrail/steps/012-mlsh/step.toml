@@ -1,6 +1,6 @@
 number = 12
 slug = "mlsh"
-status = "pending"
+status = "in-progress"
 description = "mlsh: a line reader and an inspector shell over the state that exists (memory..."
 role = "production"
 context_files = []

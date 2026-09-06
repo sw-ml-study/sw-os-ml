@@ -44,3 +44,13 @@ pub fn extent() -> (u64, u64) {
     let end = &raw const __kernel_end as u64;
     (start, end - start)
 }
+
+/// Waits for the next interrupt.
+///
+/// The architecture's answer to "nothing to do": `wfi` here, `hlt` on
+/// x86-64. It lives with the architecture rather than with the loop that
+/// calls it, so the loop does not have to know which one it is on.
+pub fn wait_for_interrupt() {
+    // SAFETY: waits for an interrupt. No memory effects, no stack use.
+    unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+}

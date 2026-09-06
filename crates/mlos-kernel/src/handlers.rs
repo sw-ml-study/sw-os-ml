@@ -1,15 +1,10 @@
-//! What the kernel does when the CPU hands it control.
-//!
-//! Two paths that differ in kind. A fault is a bug: it reports and stops.
-//! An interrupt is expected: it services and returns. They share only the
-//! console, which is why they share a module.
+//! What the kernel does when an interrupt arrives.
 //!
 //! Everything here runs at an arbitrary moment on an arbitrary stack, so
 //! nothing here allocates, takes a lock, or borrows anything.
 
 use core::{
     cell::UnsafeCell,
-    fmt::Write,
     sync::atomic::{AtomicU32, AtomicUsize, Ordering},
 };
 
@@ -17,7 +12,6 @@ use mlos_device::IrqController;
 use mlos_gic_aarch64::Gic;
 use mlos_hal_aarch64::GenericTimer;
 use mlos_pl011::Pl011;
-use mlos_trap_aarch64::Trap;
 
 /// A value published once at boot and read from interrupt context.
 ///
@@ -31,11 +25,11 @@ unsafe impl<T> Sync for Published<T> {}
 /// The interrupt controller, to acknowledge through.
 static GIC: Published<Gic> = Published(UnsafeCell::new(None));
 /// The console's base address; zero until boot has found one.
-static CONSOLE: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static CONSOLE: AtomicUsize = AtomicUsize::new(0);
 /// Timer ticks between rearming.
 static INTERVAL: AtomicU32 = AtomicU32::new(0);
-/// Ticks seen, so the console shows time actually passing.
-static TICKS: AtomicU32 = AtomicU32::new(0);
+/// Ticks seen. Read by the shell, which borrows it rather than asking.
+pub(crate) static TICKS: AtomicU32 = AtomicU32::new(0);
 /// Which interrupt the timer raises.
 static TIMER_IRQ: AtomicU32 = AtomicU32::new(0);
 /// Which interrupt the console raises.
@@ -61,10 +55,10 @@ pub unsafe fn publish(base: usize, gic: Gic, interval: u32, irqs: (u32, u32)) {
 /// controller delivers nothing more at this priority, so a path that
 /// returns early without it stops the system dead.
 ///
-/// Rearming the timer is equally load-bearing in the other direction: it
-/// asserts its output for as long as its countdown is negative, so a
-/// handler that acknowledges without rearming is re-entered the instant it
-/// returns, forever -- a livelock that reads as a hang.
+/// Rearming the timer is load-bearing in the other direction: it asserts
+/// its output for as long as its countdown is negative, so a handler that
+/// acknowledges without rearming is re-entered the instant it returns,
+/// forever -- a livelock that reads as a hang.
 pub fn on_irq() {
     // SAFETY: published before interrupts were unmasked, never written
     // again, so this is a shared read of an initialised value.
@@ -77,31 +71,22 @@ pub fn on_irq() {
 
     if irq.0 == TIMER_IRQ.load(Ordering::Relaxed) {
         GenericTimer.arm(INTERVAL.load(Ordering::Relaxed));
-        let tick = TICKS.fetch_add(1, Ordering::Relaxed) + 1;
-        if tick <= 2 {
-            let _ = writeln!(console(), "  tick     {tick}");
-        }
+        TICKS.fetch_add(1, Ordering::Relaxed);
     } else if irq.0 == UART_IRQ.load(Ordering::Relaxed) {
-        console().drain_echo();
+        queue_input();
     }
     gic.complete(irq);
 }
 
-/// Reports a fault, then stops.
+/// Moves everything waiting in the console into the shell's queue.
 ///
-/// Stops rather than returns: nothing that reaches the vectors today is
-/// recoverable, and resuming into the instruction that faulted would fault
-/// again, forever, with the console filling up.
-pub fn report(trap: &Trap) -> ! {
-    if CONSOLE.load(Ordering::Relaxed) != 0 {
-        mlos_trap_aarch64::describe(trap, &mut console());
+/// Queue and leave. Echoing and dispatching happen in the idle loop: a
+/// command run in here would hold the interrupt active, silencing the
+/// console for as long as it took and stopping the timer with it.
+fn queue_input() {
+    let console = Pl011::at(CONSOLE.load(Ordering::Relaxed));
+    console.clear_interrupt();
+    while let Some(byte) = console.read() {
+        mlsh::push(byte);
     }
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
-/// The published console.
-fn console() -> Pl011 {
-    Pl011::at(CONSOLE.load(Ordering::Relaxed))
 }

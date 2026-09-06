@@ -22,7 +22,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 
 | Gate | State | Milestone |
 | --- | --- | --- |
-| G1 -- it boots | not started | M1 |
+| G1 -- it boots, reaches a shell | **done** | M1 |
 | G2 -- it holds an object table | not started | M2 |
 | G3 -- it faults | not started | M2 |
 | G4 -- known-next-use beats LRU | not started | M3 |

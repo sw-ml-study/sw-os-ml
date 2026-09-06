@@ -1,0 +1,16 @@
+[package]
+name        = "mlsh"
+version     = "0.0.1"
+description = "The MLOS inspector shell: a line reader and a few verbs."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-hal   = { path = "../mlos-hal",   version = "0.0.1" }
+mlos-queue = { path = "../mlos-queue", version = "0.0.1" }
+
+[lints]
+workspace = true

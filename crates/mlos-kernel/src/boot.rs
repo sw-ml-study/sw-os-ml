@@ -6,10 +6,11 @@
 use mlos_device::{Irq, IrqController, Timer};
 use mlos_gic_aarch64::Gic;
 use mlos_hal::BootInfo;
-use mlos_hal::MemoryKind;
+
 use mlos_hal_aarch64::{GenericTimer, TIMER_PPI};
-use mlos_machine::{Machine, reserve};
+use mlos_machine::Machine;
 use mlos_pl011::Pl011;
+use mlsh::{Facts, Shell};
 
 use crate::{banner, handlers};
 
@@ -27,7 +28,8 @@ use crate::{banner, handlers};
 /// arm64 boot protocol left in `x0`.
 pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     // SAFETY: forwarded to `describe`, whose contract this is.
-    let machine = unsafe { describe(dtb) }?;
+    let machine = unsafe { Machine::probe(dtb) }?
+        .reserving(mlos_hal_aarch64::extent().0, mlos_hal_aarch64::extent().1);
     let uart = machine.uart_base?;
     let mut console = Pl011::at(uart);
 
@@ -42,29 +44,11 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     // SAFETY: boot core, once, with the console known.
     unsafe { arm_interrupts(&mut console, uart, &machine) }?;
 
-    // Nothing else to do yet; the timer interrupt is the only thing that
-    // happens from here. `wfi` rather than a spin so the host CPU is not
-    // burned waiting for it.
-    loop {
-        // SAFETY: waits for an interrupt. No memory effects.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
-    }
-}
-
-/// Reads the device tree, then carves out what the loader already put in
-/// the memory it describes.
-///
-/// # Safety
-///
-/// `dtb` must be what the boot protocol left in `x0`.
-unsafe fn describe(dtb: *const u8) -> Option<Machine> {
-    // SAFETY: `probe` validates the header before trusting any field, so a
-    // pointer to something else is rejected rather than followed.
-    let mut machine = unsafe { Machine::probe(dtb) }?;
-    // The tree cannot know we are here; the linker script does.
-    let (base, len) = mlos_hal_aarch64::extent();
-    machine.regions = reserve(&machine.regions, base, len, MemoryKind::Kernel);
-    Some(machine)
+    Shell::default().run(
+        &mut console,
+        &facts(&machine, uart),
+        mlos_hal_aarch64::wait_for_interrupt,
+    );
 }
 
 /// Installs the vector table, brings up the interrupt controller, and
@@ -83,7 +67,7 @@ unsafe fn describe(dtb: *const u8) -> Option<Machine> {
 /// already known.
 unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, machine: &Machine) -> Option<()> {
     // SAFETY: boot core, once. Neither handler allocates or takes a lock.
-    unsafe { mlos_trap_aarch64::install(handlers::report, handlers::on_irq) };
+    unsafe { mlos_trap_aarch64::install(banner::fault, handlers::on_irq) };
 
     // SAFETY: forwarded to `route`, whose contract this is.
     let (gic, uart_irq) = unsafe { route(console, machine) }?;
@@ -118,4 +102,18 @@ unsafe fn route(console: &Pl011, machine: &Machine) -> Option<(Gic, u32)> {
     gic.enable(Irq(uart_irq));
     console.enable_receive_interrupt();
     Some((gic, uart_irq))
+}
+
+/// Everything the shell can report on, gathered once.
+fn facts(machine: &Machine, uart: usize) -> Facts<'_> {
+    Facts {
+        info: BootInfo::new(machine.regions.as_slice(), machine.cpu_count),
+        total: machine.regions.as_slice().iter().map(|r| r.len).sum(),
+        image: mlos_hal_aarch64::extent(),
+        uart,
+        uart_irq: machine.uart_irq.unwrap_or_default(),
+        timer_irq: TIMER_PPI,
+        gic: machine.gic,
+        ticks: &handlers::TICKS,
+    }
 }

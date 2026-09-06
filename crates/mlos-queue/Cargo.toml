@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-queue"
+version     = "0.0.1"
+description = "A lock-free byte queue for handing input from an interrupt to a loop."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

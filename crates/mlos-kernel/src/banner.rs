@@ -3,9 +3,13 @@
 //! Its own module because the entry point should read as a sequence of
 //! decisions, not as a print statement with a probe attached.
 
-use core::fmt::Write;
+use core::{fmt::Write, sync::atomic::Ordering};
 
 use mlos_hal::BootInfo;
+use mlos_pl011::Pl011;
+use mlos_trap_aarch64::Trap;
+
+use crate::handlers::CONSOLE;
 
 /// Reports what the device tree said, so a boot that reaches here proves
 /// the whole chain: Image header, `x0`, the tree walk, and the console
@@ -43,5 +47,19 @@ pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32, uart: u32)
         console,
         "  timer    {frequency} Hz counter, ticking at 2 Hz"
     );
-    let _ = writeln!(console, "\ntype something -- it echoes:");
+}
+
+/// Reports a fault, then stops.
+///
+/// Stops rather than returns: nothing that reaches the vectors today is
+/// recoverable, and resuming into the instruction that faulted would fault
+/// again, forever, with the console filling up.
+pub fn fault(trap: &Trap) -> ! {
+    let base = CONSOLE.load(Ordering::Relaxed);
+    if base != 0 {
+        mlos_trap_aarch64::describe(trap, &mut Pl011::at(base));
+    }
+    loop {
+        core::hint::spin_loop();
+    }
 }
