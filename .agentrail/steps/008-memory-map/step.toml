@@ -1,8 +1,9 @@
 number = 8
 slug = "memory-map"
-status = "in-progress"
+status = "completed"
 description = "Close the BootInfo gap: mark the kernel image range MemoryKind::Kernel and th..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T13:33:14"
-commits = []
+completed_at = "2026-09-06T13:40:20"
+commits = ["081053890423491b90179cc3c4444caa2df1f7c5"]
