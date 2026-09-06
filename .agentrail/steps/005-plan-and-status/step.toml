@@ -1,8 +1,9 @@
 number = 5
 slug = "plan-and-status"
-status = "in-progress"
+status = "completed"
 description = "Write docs/plan.md (milestones + follow-on implementation sagas) and docs/sta..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:21:56"
-commits = []
+completed_at = "2026-09-06T09:31:52"
+commits = ["27f9e09ab76bc559f75dfdcee9ba3c4248c5cae0"]
