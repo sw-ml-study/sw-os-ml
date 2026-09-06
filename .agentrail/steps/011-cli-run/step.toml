@@ -1,4 +1,4 @@
-number = 10
+number = 11
 slug = "cli-run"
 status = "pending"
 description = "mlos build / mlos run --host hvf|tcg / mlos doctor."

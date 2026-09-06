@@ -32,3 +32,12 @@ pub fn mmu(console: &mut impl Write) {
         u8::from(mlos_mmu_aarch64::is_enabled())
     );
 }
+
+/// Announces the self-test that follows, so the trap output that comes
+/// next reads as deliberate rather than as a crash.
+pub fn selftest(console: &mut impl Write) {
+    let _ = writeln!(
+        console,
+        "  vectors  installed; faulting on purpose to prove it"
+    );
+}

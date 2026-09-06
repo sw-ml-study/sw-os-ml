@@ -11,6 +11,8 @@
 mod banner;
 #[cfg(target_arch = "aarch64")]
 mod boot;
+#[cfg(target_arch = "aarch64")]
+mod trap;
 
 use core::panic::PanicInfo;
 

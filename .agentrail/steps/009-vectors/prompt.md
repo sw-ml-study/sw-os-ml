@@ -1,0 +1,1 @@
+aarch64 exception vector table: install VBAR_EL1 and report synchronous faults (ESR/ELR/FAR/SPSR) instead of spinning silently at address 0x200. Prerequisite for interrupts, and the difference between a hang and a diagnosis.

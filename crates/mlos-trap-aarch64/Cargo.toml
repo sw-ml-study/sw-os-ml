@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-trap-aarch64"
+version     = "0.0.1"
+description = "aarch64 exception vectors: report a fault instead of hanging on it."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

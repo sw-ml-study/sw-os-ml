@@ -25,6 +25,11 @@ SECTIONS
          * would leave their order up to the linker. */
         KEEP(*(.text.boot))
         KEEP(*(.text.entry))
+        /* VBAR_EL1 has no bits below 11, so the vector table must start on
+         * a 2048-byte boundary. Aligning it here rather than inside the
+         * table means the assembly does not have to pad itself. */
+        . = ALIGN(2048);
+        KEEP(*(.text.vectors))
         *(.text .text.*)
     }
 
