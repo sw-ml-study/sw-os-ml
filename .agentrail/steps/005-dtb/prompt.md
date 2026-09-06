@@ -1,0 +1,1 @@
+Parse the flattened device tree into BootInfo: memory regions, CPU count, and the PL011 base address, replacing the hardcoded one from step 004.

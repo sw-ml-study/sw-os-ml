@@ -1,0 +1,1 @@
+aarch64 page tables and MMU enable: identity-map the kernel image, stack and device MMIO, then switch on translation.

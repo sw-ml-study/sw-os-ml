@@ -18,5 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-hal-aarch64"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+]
+
+[[package]]
 name = "mlos-kernel"
 version = "0.0.1"
+dependencies = [
+ "mlos-hal-aarch64",
+]

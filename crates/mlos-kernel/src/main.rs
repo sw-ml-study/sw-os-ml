@@ -1,52 +1,63 @@
 //! The MLOS microkernel.
 //!
-//! Currently the two things a bare-metal Rust binary cannot start without:
-//! an entry symbol for the loader to jump to, and a panic handler, because
-//! there is no runtime underneath to supply either.
-//!
-//! Milestone M1 fills this in (`docs/plan.md`). Nothing ML-shaped belongs
-//! here until the kernel boots; the object table is M2.
+//! Milestone M1 is bring-up (`docs/plan.md`); nothing ML-shaped belongs
+//! here until the kernel boots. The object table is M2, and resisting it
+//! until then is the point.
 
 #![no_std]
 #![no_main]
 
 use core::panic::PanicInfo;
 
-/// Kernel entry point.
+// Only the aarch64 entry formats anything; on x86-64 this would be an
+// unused import, which `-D warnings` correctly rejects.
+#[cfg(target_arch = "aarch64")]
+use core::fmt::Write;
+
+/// Kernel entry, reached from the architecture's `_start`.
 ///
-/// Placed in `.text.boot`, which the linker script pins to the image base,
-/// because a bare `-kernel` boot jumps to the load address rather than
-/// reading an entry symbol.
+/// `dtb` is whatever the loader left in the first argument register. On
+/// aarch64 that is the device tree pointer, which step 005 will parse; it
+/// is printed here so a boot that gets this far proves the register
+/// survived the entry path.
 ///
-/// Naked, and it has to be. A normal `extern "C"` function opens with a
-/// stack push, and the loader hands us an undefined `SP`: the first
-/// instruction faults into the (still zero) vector table at
-/// `VBAR_EL1 + 0x200` before anything of ours retires. That was observed
-/// under both TCG and HVF, so the entry point may not touch the stack
-/// until step 004 establishes one.
+/// # Safety
 ///
-/// Entered with the MMU off. Until step 004 does real bring-up, the safest
-/// thing a kernel can do is park the core.
+/// Called exactly once, by `_start`, on the boot core, with a valid stack
+/// and `.bss` already zeroed. Never called from Rust.
+#[cfg(target_arch = "aarch64")]
+#[unsafe(no_mangle)]
+pub extern "C" fn mlos_main(dtb: usize) -> ! {
+    let mut console = mlos_hal_aarch64::early_console();
+    let _ = writeln!(
+        console,
+        "\nMLOS aarch64 -- entry reached, stack up, bss zeroed"
+    );
+    let _ = writeln!(console, "  dtb {dtb:#018x}");
+    halt()
+}
+
+/// Placeholder entry for x86-64.
+///
+/// x86-64 is milestone M6 (`docs/plan.md`). The target is kept building so
+/// it cannot silently rot, but there is no HAL behind it yet, so this
+/// parks rather than pretending.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.boot")]
 pub extern "C" fn _start() -> ! {
-    #[cfg(target_arch = "aarch64")]
-    core::arch::naked_asm!("1:", "wfe", "b 1b");
-
-    #[cfg(target_arch = "x86_64")]
     core::arch::naked_asm!("1:", "hlt", "jmp 1b");
 }
 
-/// Last resort. There is no console to report on and no scheduler to
-/// yield to, so the machine stops here.
+/// Last resort. There is no scheduler to yield to, so the machine stops.
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     halt()
 }
 
-/// Park the CPU. `spin_loop` emits the architecture's yield hint (`wfe` on
-/// aarch64, `pause` on x86-64) so a parked core stops burning power.
+/// Park the CPU. `spin_loop` emits the architecture's yield hint, so a
+/// parked core stops burning power.
 fn halt() -> ! {
     loop {
         core::hint::spin_loop();

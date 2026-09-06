@@ -4,6 +4,7 @@ members = [
     "crates/mlos-abi",
     "crates/mlos-device",
     "crates/mlos-hal",
+    "crates/mlos-hal-aarch64",
     "crates/mlos-kernel",
 ]
 

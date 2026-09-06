@@ -1,0 +1,8 @@
+number = 6
+slug = "mmu"
+status = "pending"
+description = "aarch64 page tables and MMU enable: identity-map the kernel image, stack and ..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T10:09:15"
+commits = []

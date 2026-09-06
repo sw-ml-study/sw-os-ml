@@ -34,6 +34,16 @@ SECTIONS
         __bss_end = .;
     }
 
+    /* Boot stack. The entry point sets SP to __stack_top before it does
+     * anything else, because the loader leaves SP undefined -- see step
+     * 001, where a compiler-emitted prologue faulted on that. 64 KiB is
+     * generous for bring-up and shrinks once there is anything to measure.
+     * In .bss, so it costs image bytes but not file bytes. */
+    . = ALIGN(4096);
+    __stack_bottom = .;
+    . += 0x10000;
+    __stack_top = .;
+
     . = ALIGN(4096);
     __kernel_end = .;
 

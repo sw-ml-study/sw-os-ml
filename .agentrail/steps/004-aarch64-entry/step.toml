@@ -1,6 +1,6 @@
 number = 4
 slug = "aarch64-entry"
-status = "pending"
+status = "in-progress"
 description = "_start at EL1, DTB parse, page tables, MMU on, stack switch."
 role = "production"
 context_files = []

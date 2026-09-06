@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-hal-aarch64"
+version     = "0.0.1"
+description = "aarch64 platform support for MLOS: entry, early console."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-device = { path = "../mlos-device", version = "0.0.1" }
+
+[lints]
+workspace = true

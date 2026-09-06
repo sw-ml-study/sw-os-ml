@@ -16,3 +16,6 @@ bench = false
 
 [lints]
 workspace = true
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+mlos-hal-aarch64 = { path = "../mlos-hal-aarch64", version = "0.0.1" }
