@@ -89,6 +89,7 @@ sw-os-ml/
     mlos-sim/          host-side simulator: replay traces, run policies   [std]
     mlos-trace/        trace format, record/replay                        [std]
     mlos-cli/          `mlos` -- build images, run VMs, replay traces      [std]
+    mlsh/              in-guest object/session inspector shell        [no_std]
   scripts/             fetch/build firmware, launch VMs, no artifacts committed
   docs/
 ```
@@ -359,17 +360,56 @@ No command submission, no shader compilation, no GSP RPC. G7 is
 *placement*, and stopping there is what stops this from becoming a
 driver project (risk table, architecture s.12).
 
-### 7.2 Tier B -- paravirtual compute (Apple Silicon, and Linux)
+### 7.2 Tier B -- paravirtual compute, via `virtio-mlaccel`
 
-`mlos-provider-device` grows a virtio-gpu front end speaking the Venus
-protocol. The host side is libkrun's `virglrenderer` -> MoltenVK ->
-Metal (architecture s.7.1). This is the path by which MLOS actually
-runs a model on the Mac, and it is a bounded implementation against a
-documented protocol.
+Not Venus. See [architecture.md](architecture.md#option-a----virtio-gpu-with-the-venus-protocol)
+for why: the host side is solved (QEMU 9.2+, virglrenderer, KosmicKrisp
+or MoltenVK over Metal), but the *guest* side of Venus is tens of
+thousands of lines of generated Vulkan protocol encoding, and writing
+that in a `no_std` kernel is a larger project than the OS.
 
-Sequencing note: Tier B needs virtio working well anyway
-(`mlos-provider-virtio`), so the virtio work is shared with the block
-and console paths and is not GPU-specific cost.
+Instead, a purpose-built device. We control both ends, and nothing
+requires us to speak a graphics protocol to multiply matrices.
+
+**Guest side** (`mlos-provider-device`, a few hundred lines): one
+virtio-mmio device, one descriptor ring, the same shape as the ML-MMU
+ring in s.8.
+
+```
+  op       ALLOC | FREE | UPLOAD | DOWNLOAD | MATMUL | ATTN | DEQUANT | ELTWISE
+  object   ObjectId          the ML object this operates on
+  args     u64 x 4           shapes, strides, scale pointers
+  dest     u64               guest-physical, or a device handle
+  flags    u32               interrupt-on-completion, stream slot
+```
+
+`ALLOC` / `UPLOAD` / `DOWNLOAD` are what the object manager needs:
+device memory becomes tier `HOT`, and moving an object there is an
+ordinary placement decision that shows up in `Rm` and `Bt` like any
+other. The typed compute ops are what userspace needs. The kernel never
+looks inside them.
+
+**Host side** (a vhost-user process, outside the kernel's concern):
+
+| Host | Backend |
+| --- | --- |
+| macOS | Metal / MPSGraph |
+| Linux | CUDA / cuBLAS |
+
+Two backends, one guest driver. The device advertises a `CAPS` mask
+exactly as the ML-MMU does, so a backend that implements only `MATMUL`
+is a valid device and the provider falls back to CPU for the rest.
+
+**Why this does not weaken the result.** MLOS's claim is about who
+decides what stays resident, where it lives, when it moves and who
+shares it. Handing the arithmetic to a host backend changes nothing
+about the object table, the fault path, the eviction policy or the
+parameter-major scheduler -- and those are the things under test.
+libkrun's Venus path also has the host do the real work; we are picking
+a smaller protocol for the same trade.
+
+**Sequencing.** This is optional and post-M6. Milestones M1--M5 need no
+GPU whatsoever.
 
 ### 7.3 Tier C -- native
 
@@ -445,7 +485,95 @@ servicing descriptors. That is the whole point of hardware here: the
 eviction policy reads the numbers it needs without a fault and without
 the CPU touching the stream.
 
-## 9. Testing without hardware
+## 9. How you interact with MLOS
+
+A fair question to ask early, because "a new OS" can mean anything from
+a serial banner to a desktop. MLOS is a research kernel, so the answer
+is: **a serial console into a small object-inspector shell, plus a host
+CLI that drives the VM.** No graphics, ever -- there is no display in
+the design and none is planned.
+
+### 9.1 The guest console
+
+virtio-console, or the PL011 UART before virtio is up, wired to your
+terminal:
+
+```
+$ mlos run --host hvf
+[  0.000] mlos aarch64 boot, 2048 MiB, 4 cpus
+[  0.012] gicv3 ok, timer 24.0 MHz
+[  0.031] virtio-mmio: console, blk, fs
+[  0.044] objtab: 65536 entries, 12 MiB arena
+[  0.051] providers: dram block hostfile recompute
+mlsh>
+```
+
+`mlsh` is deliberately not a Unix shell -- there is no filesystem to
+navigate and no processes to list in the usual sense. It is an
+inspector for the things MLOS actually has:
+
+```
+mlsh> objs --class WEIGHT_TILE --tier WARM
+  L11.attn.q_proj.0   2 MiB  WARM  dram   next_use=17  leases=3
+  L11.attn.k_proj.0   2 MiB  WARM  dram   next_use=17  leases=3
+  ...
+
+mlsh> sessions
+  id  budget    resident  policy    contract              faults
+   1  512 MiB   498 MiB   nextuse   q>=0.95 lat<=5s        1,204
+   2  256 MiB   241 MiB   lru       q>=0.80 lat<=20s       8,911
+
+mlsh> faults --by class
+  WEIGHT_TILE   1,204   ( 11.8%)
+  KV_BLOCK      8,431   ( 82.5%)
+  EXPERT          580   (  5.7%)
+
+mlsh> policy set 2 nextuse
+mlsh> budget 2 128M          # squeeze it and watch the ladder run
+[  9.882] session 2: ladder L1 -- cold KV -> Q8
+[ 10.104] session 2: ladder L2 -- cold KV -> Q4
+mlsh> trace start /host/run-17.trace
+```
+
+Six or so verbs -- `objs`, `sessions`, `faults`, `policy`, `budget`,
+`trace` -- covering exactly the state the thesis is about. The
+temptation to grow this into a Unix shell is the same temptation as
+growing the syscall list, and gets the same answer.
+
+### 9.2 The host CLI
+
+`mlos` (s.11) runs outside the guest and drives the VM: build an image,
+launch it under a chosen hypervisor, record and replay traces, run the
+simulator. This is where you spend most of your time, because most
+policy work never boots a VM at all -- it runs in `mlos-sim` against a
+recorded trace.
+
+### 9.3 Debugging
+
+QEMU's gdb stub (`-s -S`), which is the single strongest reason QEMU is
+the development target rather than Virtualization.framework:
+
+```
+$ mlos run --host tcg --debug        # halts, opens :1234
+$ gdb target/aarch64-unknown-none-softfloat/debug/mlos-kernel
+(gdb) target remote :1234
+(gdb) break mlos_objtab::fault::dispatch
+```
+
+Under TCG this is fully deterministic -- the same bug reproduces the
+same way every run, which is what makes kernel debugging tractable.
+
+### 9.4 Watching it think
+
+Later, and worth building: the metrics stream (s.5.4 `metrics_snapshot`)
+piped over virtio to a host-side TUI showing residency by object class,
+faults as they happen, and the eviction decisions being made. The
+"watch the OS think about memory" view from
+`docs/research.txt` s.37. That is the artifact that makes the project
+explicable to someone who has not read these documents, and it is the
+natural meeting point with `demo-ml-microscope`.
+
+## 10. Testing without hardware
 
 The rule (PRD N3): **a policy that cannot be replayed cannot be
 committed.**
@@ -482,7 +610,7 @@ Trace fidelity is a stated risk (architecture s.12): traces come from
 real models through emufpga's importers, never hand-written, or the
 G4/G5 results are constructed and worthless.
 
-## 10. `mlos` CLI
+## 11. `mlos` CLI
 
 One binary, because `sw-checklist` validates `--help`/`--version` on
 CLI binaries and one well-formed CLI is cheaper than six.
@@ -501,7 +629,7 @@ libkrun, VFIO binding, IOMMU groups, hugepages), and "why does this not
 boot" should be answerable by a command rather than by rereading
 architecture s.8.
 
-## 11. Conformance
+## 12. Conformance
 
 Standing rules, restated here because they are design constraints
 rather than style preferences:

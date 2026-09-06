@@ -23,6 +23,14 @@ on the critical path needs it.
   M6  it crosses PCIe    x86-64 + VFIO GPU placement, ML-MMU Gen 0 (G7,G8)
 ```
 
+**M1 through M5 require no GPU at all.** Gates G1--G6 are OS semantics
+-- boot, object table, model fault, next-use versus LRU, one read
+serving N sessions, degradation under pressure -- and every one of them
+is demonstrated with synthetic tensors and recorded traces on the CPU.
+The GPU first appears at G7, on the Linux/NVIDIA host. That is what
+makes the whole plan viable on a Mac whose GPU we cannot reach
+([architecture.md s.7.1](architecture.md#option-c----no-gpu-on-the-mac)).
+
 The ordering is not arbitrary. M3 and M4 are the two results that
 decide whether "ML OS" is a real architecture or a repackaging of
 framework tricks (`docs/research.txt` closing paragraph). They come
@@ -75,6 +83,10 @@ Scope:
 - `mlos-metrics`: `Pf`, `Rm`, `Bt` counters.
 - Syscalls: the object and lease groups.
 - First userspace process, and the syscall boundary that implies.
+- `mlsh`: the in-guest object/session inspector over virtio-console
+  ([design.md s.9](design.md#9-how-you-interact-with-mlos)). This is
+  the interface you actually use MLOS through, so it arrives with the
+  first objects worth inspecting.
 
 `hostfile` over virtio-fs matters more than it looks: it means model
 files live on the host and the dev loop does not rebuild a disk image
@@ -195,7 +207,8 @@ the next session can `agentrail init` without redesigning:
 5. `userspace` -- first process, syscall entry, capability check.
 6. `model-fault` -- the fault path end to end, fast path IPC-free.
 7. `metrics-pf` -- per-class fault counters; `Rm`, `Bt`.
-8. `synthetic-model` -- 8 layers x 16 tiles registered and swept.
+8. `mlsh` -- the inspector shell: `objs`, `sessions`, `faults`.
+9. `synthetic-model` -- 8 layers x 16 tiles registered and swept.
    Gates G2 and G3.
 
 ### Saga `mlos-nextuse` (M3)
@@ -275,6 +288,9 @@ unpark them:
 
 | Parked | Unpark when |
 | --- | --- |
+| `virtio-mlaccel` on the Mac -- Apple GPU compute via a Metal host backend | Post-M6, and only if we want the Mac to run a real model. Nothing before M6 needs it |
+| A Venus guest encoder | Never. Tens of thousands of lines of Mesa protocol code; `virtio-mlaccel` gets the same result for a fraction of it |
+| Lifting Asahi's AGX driver | Never. Bare-metal only, Linux-DRM-bound, GPL. Useful as documentation, not as code |
 | Training state: gradients, optimizer, checkpoints | M5 lands and mutable state at LoRA scale is well understood |
 | The AI/agent operating environment (durable agent jobs, virtual context, tools as capabilities) | It is a *sibling project*; unpark as its own repo, never inside this one |
 | Real FPGA gateware | M6 lands and the Gen 0 emulated device has proven the contract |

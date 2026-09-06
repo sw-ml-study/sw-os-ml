@@ -1,0 +1,8 @@
+number = 6
+slug = "gpu-path-correction"
+status = "in-progress"
+description = "Correct the Apple Silicon GPU story: QEMU 9.2+ does support virtio-gpu Venus ..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:37:01"
+commits = []

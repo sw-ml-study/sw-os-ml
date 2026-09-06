@@ -1,0 +1,1 @@
+Correct the Apple Silicon GPU story: QEMU 9.2+ does support virtio-gpu Venus on macOS hosts (virglrenderer + KosmicKrisp/MoltenVK), so libkrun is not the only path. Add the custom paravirtual ML device option, an Asahi Linux assessment, and a "how you interact with MLOS" section. Make explicit that M1-M5 need no GPU at all.

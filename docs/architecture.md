@@ -303,41 +303,157 @@ Three tiers of GPU ambition, in increasing order of cost:
 **Tier A is PoC gate G7.** Tier B is the realistic route to actually
 running a model. Tier C is a research question, not a plan.
 
-### 7.1 Why Apple Silicon cannot pass through its GPU
+### 7.1 Apple Silicon: no passthrough, three paravirtual options
 
 The Apple GPU is on-die and unified with system memory. There is no
 discrete PCIe function to hand to a guest, and no IOMMU path that would
-let one. Apple's own answer is paravirtualization: the guest gets a
-virtual graphics device and submits Metal work that the host stack
-executes on the real GPU. Benchmarks put a macOS guest around 92% of
-host Metal performance, but the paravirtual device advertises a
-reduced feature set -- roughly an Apple-5-family device, 32 KB max
-threadgroup memory, no SIMD-group matrix support -- which is precisely
-the feature modern ML kernels want. ([eclecticlight.co](https://eclecticlight.co/2023/10/26/how-good-is-gpu-access-for-apple-silicon-virtual-machines/), [trycua/cua](https://github.com/trycua/cua/blob/main/blog/gpu-passthrough-macos-vms.md))
+let one. Worse for isolation: the GPU's own coprocessor (`gfx-asc`) has
+access to every physical page in the machine, so there is not even a
+boundary a hypervisor could draw. ([Asahi AGX docs](https://asahilinux.org/docs/hw/soc/agx/))
 
-That path is also macOS-guest-only. For a *custom* guest OS the
-relevant stack is the libkrun one:
+Apple's own answer for macOS guests is paravirtualization: the guest
+gets a virtual graphics device and submits Metal work the host executes.
+That reaches ~92% of host Metal on Geekbench, but the paravirtual device
+advertises a reduced feature set -- roughly Apple-5 family, 32 KB max
+threadgroup memory, **no SIMD-group matrix support** -- which is exactly
+what ML kernels want. It is also macOS-guest-only, so it is not
+available to us at all. ([eclecticlight.co](https://eclecticlight.co/2023/10/26/how-good-is-gpu-access-for-apple-silicon-virtual-machines/), [trycua/cua](https://github.com/trycua/cua/blob/main/blog/gpu-passthrough-macos-vms.md))
+
+For a *custom* guest there are three real options, and the choice is
+not close once the work is costed.
+
+#### Option A -- virtio-gpu with the Venus protocol
+
+The industry path. The guest speaks Venus (a serialized Vulkan command
+protocol); the host decodes it and replays onto a real Vulkan
+implementation, which on macOS is MoltenVK or KosmicKrisp over Metal.
+
+```
+   guest: Vulkan compute -> Venus encoder -> virtio-gpu
+        |
+   VMM: QEMU 9.2+  or  libkrun/krunkit
+        |
+   virglrenderer -> MoltenVK | KosmicKrisp -> Metal -> Apple GPU
+```
+
+**Correction to an earlier draft of this document:** libkrun is *not*
+the only VMM that can do this. QEMU has carried Venus since 9.2, and
+macOS builds with virglrenderer (via ANGLE/EGL for GLES, and the Vulkan
+SDK for Venus) exist and work on Apple Silicon. LunarG's **KosmicKrisp**
+is a Vulkan-on-Metal driver built inside Mesa, Vulkan 1.3 conformant as
+of September 2025 and upstreamed to Mesa, requiring Metal 4 and Apple
+Silicon. ([startergo/homebrew-qemu-virgl-kosmickrisp](https://github.com/startergo/homebrew-qemu-virgl-kosmickrisp), [LunarG](https://www.lunarg.com/lunarg-achieves-vulkan-1-3-conformance-with-kosmickrisp-on-apple-silicon/), [Khronos](https://www.khronos.org/news/permalink/lunarg-announces-a-vulkan-on-metal-mesa-3d-graphics-driver))
+
+That matters: QEMU can be both the development target *and* the GPU
+path. We do not need two VMMs on the Mac.
+
+**But the guest side is the problem.** Venus's guest encoder is Mesa's
+`vulkan/venus` -- tens of thousands of lines of generated protocol
+encoding tracking a moving Vulkan spec. Writing that in a `no_std`
+kernel is not a bounded side quest; it is a second project larger than
+the OS. Even restricted to the compute subset (buffers, memory,
+descriptor sets, compute pipelines, command buffers, submit, fences) it
+dwarfs everything in milestones M1--M5 combined.
+
+**Verdict: not attempted.** Venus is the right answer for a Linux guest
+that already has Mesa. It is the wrong answer for a kernel we are
+writing ourselves.
+
+#### Option B -- a purpose-built paravirtual ML device (recommended)
+
+We control both ends. Nothing requires us to speak a graphics protocol
+to do matrix multiplication.
 
 ```
    MLOS guest
-     virtio-gpu driver, Venus protocol   <-- what MLOS would implement
+     virtio-mlaccel driver  ~ a few hundred lines, one descriptor ring
         |
-   libkrun VMM (Hypervisor.framework)
+   host backend (vhost-user process, Rust or Swift)
         |
-   virglrenderer  ->  MoltenVK  ->  Metal  ->  Apple GPU
+   Metal / MPSGraph -> Apple GPU        [macOS]
+   CUDA / cuBLAS     -> NVIDIA GPU      [Linux]
 ```
 
-libkrun/krunkit is a Red Hat VMM that links Hypervisor.framework
-directly rather than Virtualization.framework, boots EFI guests, and
-exposes virtio-gpu with the Venus (Vulkan) protocol; the host decodes
-Venus and forwards to MoltenVK. It has been measured at ~40x the
-software path for container GPU compute, and is the production route
-for llama.cpp on Apple Silicon in containers. ([sinrega.org](https://sinrega.org/2024-03-06-enabling-containers-gpu-macos/), [Red Hat Developer](https://developers.redhat.com/articles/2025/09/18/reach-native-speed-macos-llamacpp-container-inference))
+The device exposes what an ML OS actually needs: allocate device
+memory, DMA an object in or out, submit a typed operation (matmul,
+attention, dequantize, elementwise), signal completion. That is a small
+descriptor ring, not an API.
 
-**Consequence for MLOS:** on Apple Silicon, "GPU" means implementing a
-virtio-gpu/Venus guest driver. That is a large but *bounded* piece of
-work against a documented protocol -- unlike an Apple GPU driver, which
-is not.
+Why this is the right call rather than a shortcut:
+
+- **It is the same shape as the ML-MMU contract** already specified in
+  [design.md](design.md#8-the-ml-mmu-register-contract) -- a register
+  block, a descriptor ring, a capability mask. One mental model covers
+  the accelerator and the memory-management card.
+- **It keeps the thesis intact.** MLOS's claim is about *who decides
+  what stays resident, where it lives, and who shares it* -- not about
+  who multiplies the matrices. Handing the arithmetic to a host backend
+  changes nothing about the object table, the fault path, the eviction
+  policy or the parameter-major scheduler. Those are what we are
+  proving.
+- **It is portable across both hosts.** The same guest driver, two host
+  backends. The Mac backend calls Metal; the Linux backend calls CUDA.
+- **It is honest about what paravirtualization is.** libkrun's Venus
+  path also has the host do the real work. We are choosing a smaller
+  protocol for the same trade, not a different trade.
+
+Cost: guest driver in the hundreds of lines, host backend in the low
+thousands. Compare with Venus's tens of thousands, and with an Apple
+GPU driver, which is not costable at all.
+
+#### Option C -- no GPU on the Mac
+
+Also viable, and it is what the plan actually depends on. **Milestones
+M1 through M5 require no GPU whatsoever.** Gates G1--G6 are OS
+semantics: boot, object table, model fault, known-next-use versus LRU,
+one read serving N sessions, degradation under pressure. Every one of
+them is demonstrated with synthetic tensors and recorded traces on the
+CPU. The GPU first appears at G7, on the Linux/NVIDIA host, where
+passthrough is real.
+
+**Consequence for MLOS:** Option C for the critical path, Option B when
+we want the Mac to run a real model, Option A never. The Apple GPU is
+therefore not a prerequisite for anything before M6, and the risk of it
+swallowing the project is retired by not putting it on the path.
+
+### 7.1b Asahi Linux: what it proves, and why we cannot use it
+
+Yes -- Linux runs natively on Apple Silicon, and its GPU support is
+genuinely excellent. Asahi ships the only conformant OpenGL 4.6,
+OpenCL 3.0 and Vulkan drivers for Apple hardware on any operating
+system; "Honeykrisp" reached Vulkan 1.3 conformance without portability
+waivers and has since gone to 1.4. The Mesa side is upstream. ([Asahi
+progress reports](https://asahilinux.org/blog/))
+
+Four reasons it does not help us, in descending order of how final they
+are:
+
+1. **It is bare metal only, and cannot be otherwise.** The GPU cannot
+   be passed to a VM -- there is no isolation boundary, because the GPU
+   coprocessor can reach all physical memory. Asahi's own position is
+   that the only hypervisor running both macOS and Asahi is m1n1's, and
+   it does that by passing through most of the machine. Booting MLOS on
+   bare metal is a stated non-goal ([PRD s.7.1](PRD.md#7-explicit-non-goals)),
+   and it is a non-goal for cost reasons that Asahi's own multi-year
+   effort illustrates rather than refutes.
+2. **The kernel driver is not portable.** It is Rust, which sounds
+   promising, but it is Rust *for Linux*: it sits on DRM/GEM, the DRM
+   scheduler, `dma-fence`, and `VM_BIND`, and depends on a large set of
+   Rust-for-Linux abstractions that are themselves still being
+   upstreamed. Lifting it into a microkernel with no DRM subsystem
+   would be a rewrite, not a port.
+3. **It is GPL-2.0.** A kernel driver lift would set the licence of
+   whatever it touched.
+4. **It targets M1/M2-era silicon most completely.** Newer parts lag.
+
+What *is* useful, and genuinely so: **the documentation.**
+`asahilinux.org/docs/hw/soc/agx/` and the m1n1 hypervisor-tracer
+methodology are the best public description of how an Apple GPU is
+actually driven -- firmware queues, the UAT page tables, the
+coprocessor handshake. If MLOS ever wants to understand what a
+paravirtual backend is really doing underneath, that is where to read.
+It informs Option B's device design. It is a reference, not a
+dependency.
 
 ### 7.2 What is actually possible on NVIDIA
 
@@ -359,7 +475,9 @@ hobby OS has publicly done it. The plan does not depend on it.
 | **NVIDIA vGPU** | A virtual GPU, full NVIDIA guest driver | Software time-slicing | No -- requires an NVIDIA guest driver we do not have |
 | **MIG** | A hardware partition | Silicon-level, dedicated memory/bandwidth | Interesting later for multi-tenant residency; needs A100/H100/RTX-PRO class |
 | **SR-IOV (AMD)** | A virtual function | Hardware | Alternative if the NVIDIA path stalls |
-| **virtio-gpu native ctx / Venus** | A paravirtual device | VMM-mediated | **Yes -- the compute path**, on both hosts |
+| **virtio-gpu native ctx / Venus** | A paravirtual device | VMM-mediated | No -- the *host* side is fine, the guest encoder is tens of thousands of lines of Mesa (s.7.1 Option A) |
+| **Custom `virtio-mlaccel`** | A typed ML operation ring | VMM-mediated | **Yes -- the compute path**, on both hosts (s.7.1 Option B) |
+| **Apple paravirtual graphics** | A virtual Metal device | VMM-mediated | No -- macOS guests only, and no SIMD-group matrix |
 
 VFIO requirements that shape the hardware we buy: VT-d/AMD-Vi enabled,
 the GPU alone in its IOMMU group (with only its audio function and
@@ -409,7 +527,7 @@ supported, and QEMU falls back to TCG. ([qemu issue 2981](https://gitlab.com/qem
 | Option | Boot path | Devices | Verdict |
 | --- | --- | --- | --- |
 | **QEMU + HVF, `virt` machine, EDK2 AAVMF** | UEFI, or `-kernel` direct | Anything QEMU emulates; add your own | **Primary dev target.** Maximum device flexibility, `gdb` stub, deterministic TCG fallback for CI |
-| **libkrun / krunkit** | EFI, Hypervisor.framework directly | virtio incl. GPU/Venus | **The GPU path.** Adopt once a virtio-gpu guest driver exists |
+| **libkrun / krunkit** | EFI, Hypervisor.framework directly | virtio incl. GPU/Venus | Not needed. QEMU 9.2+ carries Venus too (s.7.1 Option A), and we are not using Venus anyway |
 | **Virtualization.framework (VZEFIBootLoader)** | UEFI, raw image | Apple's fixed set | Useful as a *second* hypervisor for N2, not primary |
 | **UTM** | wraps both | -- | Convenience GUI; not a build target |
 
@@ -424,6 +542,30 @@ emulation is involved.
 We keep Virtualization.framework working as a secondary target because
 requirement N2 says no single hypervisor's quirks should become
 load-bearing, and because it is the path a non-developer can run MLOS on.
+
+**One VMM, not two.** An earlier draft of this document had QEMU as the
+development target and libkrun as a separate GPU path. That split was
+based on a mistake: QEMU has supported virtio-gpu with Venus since
+9.2, and macOS builds with virglrenderer (ANGLE/EGL for GLES, the
+Vulkan SDK for Venus, KosmicKrisp or MoltenVK underneath) exist and
+work on Apple Silicon. ([startergo/homebrew-qemu-virgl-kosmickrisp](https://github.com/startergo/homebrew-qemu-virgl-kosmickrisp))
+Since we are also not implementing Venus in the guest (s.7.1), the
+question is moot twice over: QEMU is the only VMM MLOS needs on the
+Mac, with Virtualization.framework kept for N2.
+
+**Is QEMU viable here at all?** Yes, and the reason is worth stating
+because Apple's opacity makes it a fair question. QEMU on Apple Silicon
+does not reverse-engineer anything. It uses `Hypervisor.framework`,
+which is a *public, documented* Apple API -- the same one
+Virtualization.framework, Docker Desktop, UTM, Parallels and libkrun
+all sit on. The guest is aarch64 running on aarch64, so HVF executes
+guest instructions natively with no translation. What MLOS sees is
+QEMU's own `virt` machine: a GICv3, an ARM generic timer, a PL011 UART
+and virtio-mmio devices -- all of them defined by QEMU and Arm, none of
+them Apple's. Nothing in MLOS ever touches an undocumented Apple
+interface. Apple's opacity only becomes a problem at the point where
+you want the *GPU*, which is precisely the point at which we stop
+(s.7.1 Option C).
 
 ### 8.2 Linux host: the GPU machine
 
@@ -578,7 +720,8 @@ to develop against on its own.
 | GPU work swallows the project | No OS gets written; we become a driver project | Gate G7 is *managed placement*, not compute. Tier C is explicitly a stretch goal |
 | Object granularity chosen wrong | Table too large, or residency control too coarse | Start tensor-granular with a tile sub-index; revisit after G4 (PRD Q1) |
 | Fault path too slow to be credible | The whole design reads as an academic toy | Table in kernel, policy in service, fast path never crosses IPC (s.4) |
-| Apple paravirtual GPU feature gaps | No SIMD-group matrix means slow kernels | Accept it. The Mac is for OS semantics; the Linux box is for GPU truth |
+| Apple GPU work swallows the Mac effort | Months spent on a Venus encoder instead of an OS | M1--M5 need no GPU at all (s.7.1 Option C). GPU on the Mac is Option B, optional, and after M6 |
+| Asahi's GPU driver looks reusable and is not | A port attempt that cannot succeed -- bare-metal only, Linux-DRM-bound, GPL | Recorded in s.7.1b as a *reference*, never a dependency |
 | Synthetic traces prove nothing | G4/G5 results dismissed as constructed | Take traces from real models via emufpga's importers, not hand-written |
 | Hypervisor lock-in | Apple or QEMU quirks become load-bearing | Requirement N2: two hypervisors per architecture, always |
 

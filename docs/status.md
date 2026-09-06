@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-06, end of saga `ml-os-foundations`.
+Last updated: 2026-09-06, saga `ml-os-foundations` + step 006 (GPU path correction).
 
 ---
 
@@ -72,7 +72,7 @@ Checked 2026-09-06 on the primary development Mac:
 | `sw-checklist` | installed |
 | **QEMU** | **not installed** -- M1 step 1 blocker |
 | **EDK2 / AAVMF firmware** | **not present** |
-| **libkrun / krunkit** | **not installed** -- needed for the GPU path, not for M1 |
+| **libkrun / krunkit** | not installed -- **and not needed**; QEMU 9.2+ covers it |
 | Bare targets | `aarch64-unknown-none-softfloat`, `x86_64-unknown-none` not yet added via rustup |
 | Linux/NVIDIA host | not yet provisioned -- not needed before M6 |
 
@@ -92,7 +92,10 @@ Recorded so a future session does not relitigate them by accident.
 | Virtualization.framework kept as second hypervisor | Requirement N2: no single hypervisor's quirks become load-bearing | -- |
 | QEMU/KVM + VFIO on Linux | Only stack combining passthrough, custom devices, and a debugger. Firecracker has no PCIe at all | Cloud Hypervisor grows a usable custom-device path |
 | GPU gate G7 is *placement*, not compute | Stops MLOS becoming a driver project | -- |
-| Apple Silicon GPU via virtio-gpu/Venus over libkrun | The GPU is on-die; there is no passthrough path to a guest | Apple ships a passthrough mechanism |
+| No GPU on the Mac; GPU work happens on the Linux box | M1--M5 need no GPU at all, so Apple's GPU is not on the critical path | -- |
+| If the Mac ever needs GPU compute: a custom `virtio-mlaccel` device with a Metal host backend, not Venus | Venus's guest encoder is tens of thousands of lines of Mesa; a typed op ring is hundreds | Someone ports a Venus encoder to `no_std` |
+| Asahi Linux's GPU driver is a reference, never a dependency | Bare-metal only (the GPU coprocessor can reach all physical memory, so there is no boundary to virtualize), Linux-DRM-bound, GPL | Apple ships GPU virtualization |
+| One VMM on the Mac (QEMU), not two | Corrected: QEMU has carried virtio-gpu Venus since 9.2, so libkrun was never needed | -- |
 | Object table in kernel, policy in a service | A fault that costs an IPC round trip before it knows where to look is too expensive | Measurement shows the service hop is free |
 | x86-64 and aarch64 first, RISC-V later | GPU support on RISC-V is not mature enough for G7 | RISC-V GPU support matures |
 
