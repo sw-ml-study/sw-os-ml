@@ -1,6 +1,6 @@
 number = 4
 slug = "design"
-status = "pending"
+status = "in-progress"
 description = "Write docs/design.md: crate layout, no_std kernel, syscall surface, object ta..."
 role = "production"
 context_files = []
