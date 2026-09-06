@@ -10,17 +10,8 @@
 #![no_std]
 
 mod boot;
+mod devicetree;
 mod uart;
 
+pub use devicetree::{MAX_REGIONS, Machine};
 pub use uart::Pl011;
-
-/// The PL011 on QEMU's `virt` machine.
-///
-/// **A bring-up crutch, and deliberately a short-lived one.** The address
-/// is correct for `-M virt` and for nothing else; a real platform learns
-/// it from the device tree. It exists because the alternative is debugging
-/// entry code with no way to print, and step 005 deletes it.
-#[must_use]
-pub const fn early_console() -> Pl011 {
-    Pl011::at(0x0900_0000)
-}

@@ -11,6 +11,10 @@ name = "mlos-device"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-fdt"
+version = "0.0.1"
+
+[[package]]
 name = "mlos-hal"
 version = "0.0.1"
 dependencies = [
@@ -22,11 +26,14 @@ name = "mlos-hal-aarch64"
 version = "0.0.1"
 dependencies = [
  "mlos-device",
+ "mlos-fdt",
+ "mlos-hal",
 ]
 
 [[package]]
 name = "mlos-kernel"
 version = "0.0.1"
 dependencies = [
+ "mlos-hal",
  "mlos-hal-aarch64",
 ]

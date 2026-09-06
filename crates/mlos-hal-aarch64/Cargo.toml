@@ -10,6 +10,8 @@ authors.workspace      = true
 
 [dependencies]
 mlos-device = { path = "../mlos-device", version = "0.0.1" }
+mlos-fdt    = { path = "../mlos-fdt",    version = "0.0.1" }
+mlos-hal    = { path = "../mlos-hal",    version = "0.0.1" }
 
 [lints]
 workspace = true

@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-fdt"
+version     = "0.0.1"
+description = "A minimal reader for the flattened device tree (DTB) format."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

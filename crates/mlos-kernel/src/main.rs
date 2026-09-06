@@ -7,19 +7,31 @@
 #![no_std]
 #![no_main]
 
+#[cfg(target_arch = "aarch64")]
+mod banner;
+
 use core::panic::PanicInfo;
 
 // Only the aarch64 entry formats anything; on x86-64 this would be an
 // unused import, which `-D warnings` correctly rejects.
 #[cfg(target_arch = "aarch64")]
-use core::fmt::Write;
+use mlos_hal::BootInfo;
+#[cfg(target_arch = "aarch64")]
+use mlos_hal_aarch64::{Machine, Pl011};
 
 /// Kernel entry, reached from the architecture's `_start`.
 ///
-/// `dtb` is whatever the loader left in the first argument register. On
-/// aarch64 that is the device tree pointer, which step 005 will parse; it
-/// is printed here so a boot that gets this far proves the register
-/// survived the entry path.
+/// `dtb` is the device tree pointer the arm64 boot protocol leaves in the
+/// first argument register (step 005 earned that; before the Image header
+/// it arrived as zero).
+///
+/// The console address is *discovered*, not assumed. Step 004 hardcoded
+/// the QEMU `virt` PL011 base as an explicit crutch; this deletes it. The
+/// consequence is deliberate: a machine whose device tree we cannot read
+/// is a machine we cannot run on, so a failed probe parks silently rather
+/// than limping on a guessed address. Diagnosing that is what the gdb stub
+/// is for, and is a reason QEMU is the development target
+/// (`docs/architecture.md` s.8.1).
 ///
 /// # Safety
 ///
@@ -27,13 +39,23 @@ use core::fmt::Write;
 /// and `.bss` already zeroed. Never called from Rust.
 #[cfg(target_arch = "aarch64")]
 #[unsafe(no_mangle)]
-pub extern "C" fn mlos_main(dtb: usize) -> ! {
-    let mut console = mlos_hal_aarch64::early_console();
-    let _ = writeln!(
-        console,
-        "\nMLOS aarch64 -- entry reached, stack up, bss zeroed"
-    );
-    let _ = writeln!(console, "  dtb {dtb:#018x}");
+pub unsafe extern "C" fn mlos_main(dtb: *const u8) -> ! {
+    // SAFETY: `dtb` is whatever the boot protocol put in x0. `probe`
+    // validates the header before trusting any field, so a bad pointer is
+    // rejected rather than followed.
+    let Some(machine) = (unsafe { Machine::probe(dtb) }) else {
+        halt();
+    };
+    let Some(uart) = machine.uart_base else {
+        halt();
+    };
+
+    let mut console = Pl011::at(uart);
+    let info = BootInfo {
+        regions: &machine.regions[..machine.region_count],
+        cpu_count: machine.cpu_count,
+    };
+    banner::report(&mut console, dtb as usize, &info, uart);
     halt()
 }
 

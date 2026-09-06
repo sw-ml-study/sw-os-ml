@@ -15,7 +15,7 @@ target-dir = "target"
 # target, so `--all-targets` tries to build the test binaries and fails.
 # Tests are a host-side concern and run under `cargo test`.
 [alias]
-kbuild-arm = "build -p mlos-abi -p mlos-device -p mlos-hal -p mlos-hal-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat"
-kbuild-x86 = "build -p mlos-abi -p mlos-device -p mlos-hal -p mlos-kernel --target x86_64-unknown-none"
-kclippy-arm = "clippy -p mlos-abi -p mlos-device -p mlos-hal -p mlos-hal-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat --lib --bins"
-kclippy-x86 = "clippy -p mlos-abi -p mlos-device -p mlos-hal -p mlos-kernel --target x86_64-unknown-none --lib --bins"
+kbuild-arm = "build -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-hal-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat"
+kbuild-x86 = "build -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-kernel --target x86_64-unknown-none"
+kclippy-arm = "clippy -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-hal-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat --lib --bins"
+kclippy-x86 = "clippy -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-kernel --target x86_64-unknown-none --lib --bins"

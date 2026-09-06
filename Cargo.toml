@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/mlos-abi",
     "crates/mlos-device",
+    "crates/mlos-fdt",
     "crates/mlos-hal",
     "crates/mlos-hal-aarch64",
     "crates/mlos-kernel",
@@ -16,6 +17,7 @@ members = [
 default-members = [
     "crates/mlos-abi",
     "crates/mlos-device",
+    "crates/mlos-fdt",
     "crates/mlos-hal",
 ]
 

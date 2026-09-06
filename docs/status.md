@@ -79,6 +79,17 @@ Checked 2026-09-06 on the primary development Mac:
 The first three rows are what `mlos doctor` will check once it exists.
 QEMU is the immediate prerequisite for M1.
 
+## Known gaps
+
+Things that are wrong or missing on purpose, recorded so they are not
+discovered by something trusting them.
+
+| Gap | Consequence | Closes in |
+| --- | --- | --- |
+| `BootInfo` marks the whole DRAM region `Usable`, including the range the kernel image occupies (`0x4020_0000` upward). `usable_bytes()` therefore overstates by the image size. | A future allocator that trusts it would hand out the kernel's own memory. Nothing consumes it yet. | 008-mmu, which has to know the image extent anyway |
+| `MemoryKind::Kernel` and `Reclaimable` are defined but never produced. | The map has less structure than its type suggests. | 008-mmu |
+| A device tree with more than 8 memory regions silently keeps the first 8. | Not reachable on QEMU `virt`, which reports one. | When a machine needs it |
+
 ## Decisions made, and what would reverse them
 
 Recorded so a future session does not relitigate them by accident.
