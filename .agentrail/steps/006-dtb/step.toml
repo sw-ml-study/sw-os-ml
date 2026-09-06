@@ -1,6 +1,6 @@
-number = 5
+number = 6
 slug = "dtb"
-status = "pending"
+status = "in-progress"
 description = "Parse the flattened device tree into BootInfo: memory regions, CPU count, and..."
 role = "production"
 context_files = []

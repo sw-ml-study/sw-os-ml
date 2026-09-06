@@ -1,0 +1,1 @@
+Emit a raw arm64 Linux Image (64-byte header + flat binary) so QEMU applies the arm64 boot protocol and passes the DTB in x0. Also the uncompressed raw image Virtualization.framework needs in step 010.

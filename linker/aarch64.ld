@@ -19,7 +19,12 @@ SECTIONS
     /* .text.boot first and KEEP: the entry point must be at the image
      * base, because a bare `-kernel` boot jumps to the load address. */
     .text : ALIGN(4096) {
+        /* Two KEEPs, in this order, because the arm64 Image header must be
+         * at image offset 0. `.text.boot` holds only the header; the code
+         * it branches to lives in `.text.entry`. One section for both
+         * would leave their order up to the linker. */
         KEEP(*(.text.boot))
+        KEEP(*(.text.entry))
         *(.text .text.*)
     }
 
@@ -46,6 +51,11 @@ SECTIONS
 
     . = ALIGN(4096);
     __kernel_end = .;
+
+    /* The Image header's image_size: the MEMORY footprint, not the file
+     * size. It includes .bss and the boot stack, neither of which occupies
+     * file bytes, so the loader knows how much RAM to leave alone. */
+    __image_size = __kernel_end - __kernel_start;
 
     /DISCARD/ : { *(.comment) *(.note*) *(.eh_frame*) }
 }

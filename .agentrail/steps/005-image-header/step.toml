@@ -1,0 +1,8 @@
+number = 5
+slug = "image-header"
+status = "in-progress"
+description = "Emit a raw arm64 Linux Image (64-byte header + flat binary) so QEMU applies t..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T10:54:43"
+commits = []

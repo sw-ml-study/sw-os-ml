@@ -15,7 +15,7 @@ out/
 
 # VM disk images, firmware blobs and boot artifacts. Large, rebuildable,
 # and often licence-encumbered (EDK2 builds, IPSWs, GSP firmware).
-*.img
+# The kernel Image itself is built into target/, which is ignored above.
 *.qcow2
 *.iso
 *.raw

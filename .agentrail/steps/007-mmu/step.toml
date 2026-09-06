@@ -1,4 +1,4 @@
-number = 6
+number = 7
 slug = "mmu"
 status = "pending"
 description = "aarch64 page tables and MMU enable: identity-map the kernel image, stack and ..."

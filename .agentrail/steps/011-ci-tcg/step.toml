@@ -1,4 +1,4 @@
-number = 10
+number = 11
 slug = "ci-tcg"
 status = "pending"
 description = "Deterministic TCG boot test in CI."
