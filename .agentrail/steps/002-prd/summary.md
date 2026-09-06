@@ -1,0 +1,1 @@
+Wrote docs/PRD.md: thesis, problem statement (5 concrete failures of page-based OS under ML), user table, 8 PoC success gates G1-G8, the Rm/Ps/Bt/Rc/Pf/Ph/Ks/Ss metric set, functional+non-functional requirements, 8 explicit non-goals, unchosen constraints, 4 open questions carried to architecture.
