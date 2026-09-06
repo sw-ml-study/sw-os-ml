@@ -1,8 +1,9 @@
 number = 9
 slug = "vectors"
-status = "in-progress"
+status = "completed"
 description = "aarch64 exception vector table: install VBAR_EL1 and report synchronous fault..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T13:43:48"
-commits = []
+completed_at = "2026-09-06T13:46:31"
+commits = ["70e25fd17f952ed46f3f8852124acca812c5b119"]
