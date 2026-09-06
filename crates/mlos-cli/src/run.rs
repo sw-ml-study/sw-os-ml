@@ -91,3 +91,12 @@ pub fn capture(host: &str, seconds: u64) -> io::Result<()> {
     print!("{}", fs::read_to_string(&log).unwrap_or_default());
     Ok(())
 }
+
+/// Boots, headless or interactive, according to the arguments.
+pub fn boot(args: &[String]) -> io::Result<()> {
+    let (host, seconds, debug) = crate::options(args, true)?;
+    match seconds {
+        Some(seconds) => capture(host, seconds),
+        None => run(host, debug),
+    }
+}

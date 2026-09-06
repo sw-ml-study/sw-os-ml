@@ -16,6 +16,11 @@ demos/*.txt
 demos/*.mp4
 demos/*.ascii
 
+# docs/tour.gif is the exception and is tracked: the README shows it, and
+# a README that shows the thing is worth the bytes. Re-record it
+# deliberately (`vhs demos/tour.tape`), not on every change.
+docs/tour.txt
+
 # Local configuration and scratch output
 .env
 .env.*

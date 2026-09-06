@@ -31,14 +31,21 @@ See [docs/status.md](docs/status.md) for what actually exists today.
 
 ## Try it
 
+![Booting MLOS and asking it what it is](docs/tour.gif)
+
 ```sh
-cargo run -p mlos-cli -- doctor   # what is installed, what is missing
-cargo run -p mlos-cli -- run      # boot it; `mlsh` is on the other end
+cargo run -p mlos-cli -- doctor
+cargo run -p mlos-cli -- run
 ```
 
-`mlos run` builds the kernel, turns it into a bootable arm64 image and
-boots it under QEMU with the console on your terminal. Quit with
-`Ctrl-A x`. Inside, `help` lists what the shell can tell you.
+`doctor` reports what is installed and what is missing. `run` builds the
+kernel, turns it into a bootable arm64 image and boots it under QEMU with
+the console on your terminal -- `mlsh` is on the other end. Quit with
+`Ctrl-A x`; type `help` inside for what it can tell you.
+
+(Do not paste a trailing `# comment` after these: interactive zsh does not
+treat `#` as a comment, so it arrives as an argument. `mlos` will now say
+so rather than passing it to QEMU.)
 
 ## Development
 

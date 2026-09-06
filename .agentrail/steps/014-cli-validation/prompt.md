@@ -1,0 +1,1 @@
+Validate mlos arguments: reject an unknown accelerator and unknown flags instead of passing them to QEMU. Fix the README, whose trailing # comments become arguments in interactive zsh.
