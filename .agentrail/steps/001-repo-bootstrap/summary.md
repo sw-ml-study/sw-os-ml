@@ -1,0 +1,1 @@
+Bootstrapped sw-os-ml: agentrail saga ml-os-foundations with 5 steps, AGENTS.md briefing (agentrail block + repo policy outside markers), CLAUDE.md symlink, .gitignore (agentrail transcripts + VM artifacts), README with document map. Conformance gates set before code: Rust 2024, no_std kernel, unsafe confined to HAL/drivers, sw-checklist zero-from-start.
