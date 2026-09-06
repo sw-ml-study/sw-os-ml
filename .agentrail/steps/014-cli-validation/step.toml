@@ -1,8 +1,9 @@
 number = 14
 slug = "cli-validation"
-status = "in-progress"
+status = "completed"
 description = "Validate mlos arguments: reject an unknown accelerator and unknown flags inst..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T15:33:18"
-commits = []
+completed_at = "2026-09-06T15:39:39"
+commits = ["8476e54972b61bb3f437e4c5502b928e91009ba1"]
