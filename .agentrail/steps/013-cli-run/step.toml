@@ -1,8 +1,9 @@
 number = 13
 slug = "cli-run"
-status = "in-progress"
+status = "completed"
 description = "mlos build / mlos run --host hvf|tcg / mlos doctor."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:47:32"
-commits = []
+completed_at = "2026-09-06T15:25:27"
+commits = ["d54e842fa1b8c8bd9f0fb9e4c46047670a1b761b"]
