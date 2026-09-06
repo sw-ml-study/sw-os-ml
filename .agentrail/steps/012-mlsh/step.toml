@@ -1,8 +1,9 @@
 number = 12
 slug = "mlsh"
-status = "in-progress"
+status = "completed"
 description = "mlsh: a line reader and an inspector shell over the state that exists (memory..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T14:40:49"
-commits = []
+completed_at = "2026-09-06T15:02:35"
+commits = ["d4ae365a33e5b4dddcb96a9d087e6df30fb4dbbe"]
