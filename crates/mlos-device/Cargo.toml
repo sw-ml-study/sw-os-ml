@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-device"
+version     = "0.0.1"
+description = "Device traits an MLOS platform implements: console, timer, interrupt controller."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

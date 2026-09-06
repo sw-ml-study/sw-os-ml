@@ -1,13 +1,22 @@
 [workspace]
 resolver = "3"
-members = ["crates/mlos-abi", "crates/mlos-kernel"]
+members = [
+    "crates/mlos-abi",
+    "crates/mlos-device",
+    "crates/mlos-hal",
+    "crates/mlos-kernel",
+]
 
 # Host-side commands (`cargo test`, `cargo clippy`) operate on these.
 # `mlos-kernel` is excluded: it is `no_std`/`no_main` and cannot link for
 # the host triple, so anything that sweeps it in on the host fails. It is
 # built explicitly, with `-p` and a bare `--target` -- see the
 # `kbuild-arm` / `kbuild-x86` aliases in .cargo/config.toml.
-default-members = ["crates/mlos-abi"]
+default-members = [
+    "crates/mlos-abi",
+    "crates/mlos-device",
+    "crates/mlos-hal",
+]
 
 [workspace.package]
 edition      = "2024"

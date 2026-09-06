@@ -7,5 +7,16 @@ name = "mlos-abi"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-device"
+version = "0.0.1"
+
+[[package]]
+name = "mlos-hal"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+]
+
+[[package]]
 name = "mlos-kernel"
 version = "0.0.1"

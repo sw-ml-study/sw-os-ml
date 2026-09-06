@@ -69,7 +69,8 @@ sw-os-ml/
   crates/
     mlos-abi/         syscall numbers, ML object ids, error codes, wire structs
                       no_std, no alloc, forbid(unsafe_code)   [shared kernel<->user]
-    mlos-hal/          trait Hal: mmu, timer, irq, cpu, console       [unsafe allowed]
+    mlos-device/       Console, Timer, IrqController traits             [no_std]
+    mlos-hal/          trait Platform: boot info, page tables, devices  [no_std]
     mlos-hal-aarch64/  aarch64 impl: EL1 boot, GICv3, generic timer, TTBR
     mlos-hal-x86-64/   x86-64 impl: long-mode boot, APIC, TSC, CR3
     mlos-kernel/       entry, scheduler, ipc, capabilities, fault dispatch
@@ -161,12 +162,12 @@ means one image-format story.
 ### 3.3 What the HAL trait must cover, and nothing more
 
 ```rust
-pub trait Hal {
+pub trait Platform {
     type PageTable: PageTable;
-    fn boot_info(&self) -> &BootInfo;         // memory map, device tree / ACPI
+    fn boot_info(&self) -> &BootInfo<'_>;     // memory map, device tree / ACPI
+    fn console(&self) -> &dyn Console;
     fn timer(&self) -> &dyn Timer;
     fn irq(&self) -> &dyn IrqController;
-    fn console(&self) -> &dyn Console;
 }
 ```
 
@@ -176,6 +177,23 @@ kernel. Nothing above `mlos-hal` may name a page size, a privilege
 level, an interrupt controller, or an atomics width -- that is the
 concession that keeps `mlos-hal-riscv64` an additive change
 (architecture s.9).
+
+`PageTable` is an associated type, not a `dyn` object, because mapping is
+on the model-fault path and a virtual call per mapping is a cost the
+fault budget (architecture s.4) will not stand. The device accessors are
+`dyn`, because printing and interrupt acknowledgement are not hot.
+
+Two things changed when this was implemented in step 003, both recorded
+here rather than left as drift:
+
+- **`Hal` became `Platform`.** `mlos_hal::Hal` stutters, and "platform"
+  is what the trait actually describes.
+- **The device traits moved to a sibling crate, `mlos-device`.** Console,
+  Timer and IrqController together are six or seven function
+  declarations, past the `sw-checklist` module gate. The metric forced
+  the question, but the split stands on its own: a console or an
+  interrupt controller is discoverable and pluggable, while the platform
+  is singular and fixed at boot.
 
 ## 4. The ML object table
 

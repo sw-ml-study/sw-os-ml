@@ -1,6 +1,6 @@
 number = 3
 slug = "hal-trait"
-status = "pending"
+status = "in-progress"
 description = "mlos-hal: the four-method Hal trait, BootInfo, Console/Timer/IrqController tr..."
 role = "production"
 context_files = []

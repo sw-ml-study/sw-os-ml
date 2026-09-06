@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-hal"
+version     = "0.0.1"
+description = "The MLOS hardware abstraction layer: the platform trait the kernel talks to."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mlos-device = { path = "../mlos-device", version = "0.0.1" }
