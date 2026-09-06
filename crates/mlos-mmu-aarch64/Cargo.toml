@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-mmu-aarch64"
+version     = "0.0.1"
+description = "aarch64 boot translation tables: identity map, then enable the MMU."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-hal = { path = "../mlos-hal", version = "0.0.1" }
+
+[lints]
+workspace = true

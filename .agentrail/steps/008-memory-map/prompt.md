@@ -1,0 +1,1 @@
+Close the BootInfo gap: mark the kernel image range MemoryKind::Kernel and the device-tree blob Reclaimable, splitting the DRAM region around them. Needs __kernel_start/__kernel_end and likely moves devicetree.rs out of mlos-hal-aarch64, which is at the 4-module gate.

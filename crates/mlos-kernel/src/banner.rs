@@ -21,3 +21,14 @@ pub fn report(console: &mut impl Write, dtb: usize, info: &BootInfo<'_>, uart: u
         let _ = writeln!(console, "    {base:#012x} + {len:#x}  {kind:?}");
     }
 }
+
+/// Reports that translation is on, reading `SCTLR_EL1.M` back rather than
+/// asserting it. Printed through a device block of the table just
+/// installed: if the mapping were wrong, this line would not appear.
+pub fn mmu(console: &mut impl Write) {
+    let _ = writeln!(
+        console,
+        "  mmu      identity, 1 GiB blocks, SCTLR_EL1.M={}",
+        u8::from(mlos_mmu_aarch64::is_enabled())
+    );
+}

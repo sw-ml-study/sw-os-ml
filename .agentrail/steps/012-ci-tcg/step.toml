@@ -1,0 +1,8 @@
+number = 12
+slug = "ci-tcg"
+status = "pending"
+description = "Deterministic TCG boot test in CI."
+role = "production"
+context_files = []
+created_at = "2026-09-06T09:47:32"
+commits = []

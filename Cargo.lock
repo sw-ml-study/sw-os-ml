@@ -36,4 +36,12 @@ version = "0.0.1"
 dependencies = [
  "mlos-hal",
  "mlos-hal-aarch64",
+ "mlos-mmu-aarch64",
+]
+
+[[package]]
+name = "mlos-mmu-aarch64"
+version = "0.0.1"
+dependencies = [
+ "mlos-hal",
 ]

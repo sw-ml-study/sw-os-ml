@@ -9,15 +9,10 @@
 
 #[cfg(target_arch = "aarch64")]
 mod banner;
+#[cfg(target_arch = "aarch64")]
+mod boot;
 
 use core::panic::PanicInfo;
-
-// Only the aarch64 entry formats anything; on x86-64 this would be an
-// unused import, which `-D warnings` correctly rejects.
-#[cfg(target_arch = "aarch64")]
-use mlos_hal::BootInfo;
-#[cfg(target_arch = "aarch64")]
-use mlos_hal_aarch64::{Machine, Pl011};
 
 /// Kernel entry, reached from the architecture's `_start`.
 ///
@@ -40,22 +35,8 @@ use mlos_hal_aarch64::{Machine, Pl011};
 #[cfg(target_arch = "aarch64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mlos_main(dtb: *const u8) -> ! {
-    // SAFETY: `dtb` is whatever the boot protocol put in x0. `probe`
-    // validates the header before trusting any field, so a bad pointer is
-    // rejected rather than followed.
-    let Some(machine) = (unsafe { Machine::probe(dtb) }) else {
-        halt();
-    };
-    let Some(uart) = machine.uart_base else {
-        halt();
-    };
-
-    let mut console = Pl011::at(uart);
-    let info = BootInfo {
-        regions: &machine.regions[..machine.region_count],
-        cpu_count: machine.cpu_count,
-    };
-    banner::report(&mut console, dtb as usize, &info, uart);
+    // SAFETY: forwarded to `bring_up`, whose contract this is.
+    let _ = unsafe { boot::bring_up(dtb) };
     halt()
 }
 

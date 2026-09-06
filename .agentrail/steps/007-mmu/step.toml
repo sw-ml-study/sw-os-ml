@@ -1,6 +1,6 @@
 number = 7
 slug = "mmu"
-status = "pending"
+status = "in-progress"
 description = "aarch64 page tables and MMU enable: identity-map the kernel image, stack and ..."
 role = "production"
 context_files = []
