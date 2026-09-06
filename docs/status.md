@@ -89,6 +89,7 @@ discovered by something trusting them.
 | The identity map is 1 GiB blocks, so all of RAM is executable and writable. | No W^X and no per-page permissions. Nothing runs but the kernel yet. | When the object manager needs finer granularity (M2) |
 | `mlos_hal::PageTable` is declared but not implemented. | `Platform`'s associated type has no concrete impl. | Same. A general mapper written before it has a caller is the wrong mapper |
 | A device tree with more than 16 memory regions silently keeps the first 16. | Not reachable on QEMU `virt`, which reports one that carving turns into five. | When a machine needs it |
+| The console is the first `pl011@` node, not the one `/chosen/stdout-path` names. | A machine whose console is not its first UART would print where nobody is reading. Correct for every tree QEMU emits; tested against a two-UART blob. | When a machine needs it -- `/chosen` comes after the UARTs, so it needs candidates resolved at the end of the walk rather than one field |
 | The whole 1 MiB the device tree blob declares is reserved, though its content is ~8.5 KiB. | ~1 MiB unavailable until something reclaims it. It is marked `Reclaimable`, so it can be. | When there is an allocator to reclaim into |
 
 ## Decisions made, and what would reverse them

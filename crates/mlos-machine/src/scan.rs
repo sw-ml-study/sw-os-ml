@@ -64,7 +64,7 @@ impl<'a> Scan<'a> {
             (1, "#address-cells") => self.address_cells = cell(0).unwrap_or(2),
             (1, "#size-cells") => self.size_cells = cell(0).unwrap_or(2),
             (2, "reg") => self.reg(value),
-            (2, "interrupts") if self.node.starts_with("pl011@") => {
+            (2, "interrupts") if self.node.starts_with("pl011@") && self.uart_irq.is_none() => {
                 // <kind, number, flags>. Kind 0 is a shared interrupt,
                 // whose numbering starts at 32 -- the device tree counts
                 // from the start of the SPI range, the GIC does not.
@@ -83,12 +83,21 @@ impl<'a> Scan<'a> {
     /// One function rather than three because `reg` means "where this
     /// device is" regardless of the device, and the cells that decode it
     /// come from the same parent either way.
+    ///
+    /// The console is the FIRST `pl011@` node, not the last. A machine can
+    /// have more than one -- two `-serial` backends make QEMU instantiate
+    /// a second at 0x9040000 -- and overwriting as the walk goes picks
+    /// whichever comes last, which is not the console. The exact answer is
+    /// `/chosen/stdout-path`, but that node comes *after* the UARTs in
+    /// QEMU's tree, so honouring it needs candidates resolved at the end
+    /// of the walk rather than a single field. Recorded as a gap in
+    /// `docs/status.md`; first-wins is right for every tree QEMU emits.
     fn reg(&mut self, value: &[u8]) {
         let (cells, sizes) = (self.address_cells, self.size_cells);
         let pair = |index| reg_pair(value, cells, sizes, index);
         if self.node.starts_with("memory@") {
             self.regions.extend_usable(&pair);
-        } else if self.node.starts_with("pl011@") {
+        } else if self.node.starts_with("pl011@") && self.uart_base.is_none() {
             self.uart_base = pair(0).map(|(base, _)| base as usize);
         } else if self.node.starts_with("intc@") {
             // Both ranges or neither: half an interrupt controller is

@@ -14,7 +14,7 @@ Set Height 800
 Set Padding 10
 
 Hide
-Type "./scripts/image.sh >/dev/null && clear && qemu-system-aarch64 -M virt,gic-version=3 -cpu host -accel hvf -m 512 -display none -serial mon:stdio -kernel target/aarch64-unknown-none-softfloat/debug/mlos.img"
+Type "cargo build -q -p mlos-cli && clear && ./target/debug/mlos run hvf"
 Enter
 Sleep 3s
 Show

@@ -1,6 +1,6 @@
 number = 13
 slug = "cli-run"
-status = "pending"
+status = "in-progress"
 description = "mlos build / mlos run --host hvf|tcg / mlos doctor."
 role = "production"
 context_files = []

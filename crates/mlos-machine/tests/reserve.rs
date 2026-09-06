@@ -130,3 +130,23 @@ fn the_console_interrupt_is_found_and_rebased() {
     let machine = unsafe { mlos_machine::Machine::probe(blob.as_ptr()) }.expect("valid blob");
     assert_eq!(machine.uart_irq, Some(33));
 }
+
+/// A machine with two UARTs must still pick the console.
+///
+/// This tree is what QEMU emits when given two `-serial` backends: a
+/// second PL011 appears at 0x9040000. Taking the last `pl011@` node picks
+/// that one, and MLOS then prints to a port nobody is reading -- which is
+/// exactly how this was found.
+#[test]
+fn a_second_uart_does_not_steal_the_console() {
+    let blob = include_bytes!("../../mlos-fdt/tests/qemu-virt-two-uarts.dtb");
+    // SAFETY: a slice we own, not a raw pointer from firmware.
+    let machine = unsafe { mlos_machine::Machine::probe(blob.as_ptr()) }.expect("valid blob");
+
+    assert_eq!(
+        machine.uart_base,
+        Some(0x0900_0000),
+        "the console, not the spare"
+    );
+    assert_eq!(machine.uart_irq, Some(33));
+}

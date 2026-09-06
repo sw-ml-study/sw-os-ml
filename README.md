@@ -29,6 +29,17 @@ See [docs/status.md](docs/status.md) for what actually exists today.
 | [docs/status.md](docs/status.md) | Ground truth |
 | docs/research.txt | Raw source material the architecture was distilled from |
 
+## Try it
+
+```sh
+cargo run -p mlos-cli -- doctor   # what is installed, what is missing
+cargo run -p mlos-cli -- run      # boot it; `mlsh` is on the other end
+```
+
+`mlos run` builds the kernel, turns it into a bootable arm64 image and
+boots it under QEMU with the console on your terminal. Quit with
+`Ctrl-A x`. Inside, `help` lists what the shell can tell you.
+
 ## Development
 
 MLOS boots in a virtual machine, never on bare metal. Apple Silicon is

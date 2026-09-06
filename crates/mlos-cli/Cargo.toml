@@ -1,0 +1,16 @@
+[package]
+name        = "mlos-cli"
+version     = "0.0.1"
+description = "Build, run and diagnose MLOS."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[[bin]]
+name = "mlos"
+path = "src/main.rs"
+
+[lints]
+workspace = true

@@ -7,6 +7,10 @@ name = "mlos-abi"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-cli"
+version = "0.0.1"
+
+[[package]]
 name = "mlos-device"
 version = "0.0.1"
 
