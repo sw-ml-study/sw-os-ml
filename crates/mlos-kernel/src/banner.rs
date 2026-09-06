@@ -33,11 +33,11 @@ pub fn mmu(console: &mut impl Write) {
     );
 }
 
-/// Announces the self-test that follows, so the trap output that comes
-/// next reads as deliberate rather than as a crash.
-pub fn selftest(console: &mut impl Write) {
+/// Reports the interrupt setup, so the ticks that follow are legible.
+pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32) {
+    let _ = writeln!(console, "  gicv3    up, timer on ppi {ppi}");
     let _ = writeln!(
         console,
-        "  vectors  installed; faulting on purpose to prove it"
+        "  timer    {frequency} Hz counter, ticking at 2 Hz"
     );
 }

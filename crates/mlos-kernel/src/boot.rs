@@ -3,9 +3,11 @@
 //! Its own module so the entry point stays a single decision -- run this,
 //! and if it declines, stop.
 
+use mlos_device::{Irq, IrqController, Timer};
+use mlos_gic_aarch64::Gic;
 use mlos_hal::BootInfo;
 use mlos_hal::MemoryKind;
-use mlos_hal_aarch64::Pl011;
+use mlos_hal_aarch64::{GenericTimer, Pl011, TIMER_PPI};
 use mlos_machine::{Machine, reserve};
 
 use crate::{banner, trap};
@@ -28,10 +30,7 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     let uart = machine.uart_base?;
     let mut console = Pl011::at(uart);
 
-    let info = BootInfo {
-        regions: machine.regions.as_slice(),
-        cpu_count: machine.cpu_count,
-    };
+    let info = BootInfo::new(machine.regions.as_slice(), machine.cpu_count);
     banner::report(&mut console, dtb as usize, &info, uart);
 
     // SAFETY: boot core, MMU off, once. The map covers the kernel image
@@ -40,8 +39,15 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     banner::mmu(&mut console);
 
     // SAFETY: boot core, once, with the console known.
-    unsafe { arm_traps(&mut console, uart) };
-    Some(())
+    unsafe { arm_interrupts(&mut console, uart, machine.gic?) };
+
+    // Nothing else to do yet; the timer interrupt is the only thing that
+    // happens from here. `wfi` rather than a spin so the host CPU is not
+    // burned waiting for it.
+    loop {
+        // SAFETY: waits for an interrupt. No memory effects.
+        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+    }
 }
 
 /// Reads the device tree, then carves out what the loader already put in
@@ -60,28 +66,37 @@ unsafe fn describe(dtb: *const u8) -> Option<Machine> {
     Some(machine)
 }
 
-/// Installs the vector table, then faults on purpose to prove it fires.
+/// Installs the vector table, brings up the interrupt controller, and
+/// starts the timer.
 ///
-/// The deliberate fault is the only way to test a fault handler without
-/// having a real bug, and a fault handler that has never fired is a fault
-/// handler nobody knows is broken. It reads an address no block maps,
-/// which produces a level-1 translation fault -- the syndrome the console
-/// then prints.
-///
-/// This goes away in the next step, when there is real work to do after
-/// boot. Until then, stopping in the handler is no worse than stopping in
-/// the park loop, and considerably more informative.
+/// Order is load-bearing throughout, and each step is quiet when wrong:
+/// vectors before anything can trap, the controller before an interrupt
+/// has anywhere to go, the timer before it is unmasked, and the unmask
+/// last. Unmasking early with a half-built controller behind it fires
+/// immediately and repeatedly, which is far harder to read than a machine
+/// that simply never ticks.
 ///
 /// # Safety
 ///
-/// Call once, on the boot core, after the console is known. Does not
-/// return: the reporter halts.
-unsafe fn arm_traps(console: &mut Pl011, uart: usize) {
-    trap::publish_console(uart);
-    // SAFETY: `trap::report` allocates nothing, takes no locks, and reads
-    // only a published address -- so it is safe from an exception context.
-    unsafe { mlos_trap_aarch64::install(trap::report) };
-    banner::selftest(console);
-    // SAFETY: none, and that is the point. This read is meant to fault.
-    unsafe { core::ptr::read_volatile(0x2_0000_0000 as *const u64) };
+/// Call once, on the boot core, with interrupts masked and the console
+/// already known.
+unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, gic: (u64, u64)) {
+    // SAFETY: boot core, once. Neither handler allocates or takes a lock.
+    unsafe { mlos_trap_aarch64::install(trap::report, trap::on_irq) };
+
+    // SAFETY: the windows came from the device tree's `arm,gic-v3` node.
+    let gic = unsafe { Gic::new(gic.0 as usize, gic.1 as usize) };
+    gic.enable(Irq(TIMER_PPI));
+
+    // Twice a second: slow enough to read on a console, fast enough that
+    // a boot capture of a few seconds shows time actually passing.
+    let interval = GenericTimer.frequency().0 / 2;
+    banner::interrupts(console, GenericTimer.frequency().0, TIMER_PPI);
+
+    // SAFETY: boot core, interrupts still masked, nothing has run yet.
+    unsafe { trap::publish(uart, gic, interval) };
+    GenericTimer.arm(interval);
+
+    // SAFETY: vectors installed, controller up, timer armed.
+    unsafe { mlos_trap_aarch64::unmask() };
 }

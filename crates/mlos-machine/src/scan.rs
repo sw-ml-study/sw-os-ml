@@ -1,9 +1,7 @@
 //! Folding a device tree walk into a machine description.
 
-use mlos_fdt::{Event, reg_pair};
-use mlos_hal::{MemoryKind, MemoryRegion};
-
 use crate::regions::Regions;
+use mlos_fdt::{Event, reg_pair};
 
 /// Walk state.
 ///
@@ -22,6 +20,20 @@ pub struct Scan<'a> {
     pub cpu_count: u32,
     /// Base address of the PL011, if the tree has one.
     pub uart_base: Option<usize>,
+    /// Whether the interrupt controller claimed `arm,gic-v3`.
+    ///
+    /// Kept apart from [`Self::gic_reg`] because a device tree does not
+    /// order a node's properties: in QEMU's own blob `reg` comes *before*
+    /// `compatible`, so deciding what the ranges mean while reading them
+    /// reads the wrong answer. They are combined once the walk is over.
+    pub gic_v3: bool,
+    /// The interrupt controller's two `reg` ranges, whatever they mean.
+    ///
+    /// For a GICv3 these are the distributor and the redistributor, in
+    /// that order: one system-wide, one per-CPU. A GICv2 puts a CPU
+    /// interface in the second range instead, which is a different device
+    /// at a different offset -- hence the `compatible` check.
+    pub gic_reg: Option<(u64, u64)>,
 }
 
 impl<'a> Scan<'a> {
@@ -46,28 +58,31 @@ impl<'a> Scan<'a> {
         match (self.depth, name) {
             (1, "#address-cells") => self.address_cells = cell().unwrap_or(2),
             (1, "#size-cells") => self.size_cells = cell().unwrap_or(2),
-            (2, "reg") if self.node.starts_with("memory@") => self.memory(value),
-            (2, "reg") if self.node.starts_with("pl011@") => {
-                let first = reg_pair(value, self.address_cells, self.size_cells, 0);
-                self.uart_base = first.map(|(base, _)| base as usize);
+            (2, "reg") => self.reg(value),
+            (2, "compatible") if self.node.starts_with("intc@") => {
+                self.gic_v3 = value.split(|&b| b == 0).any(|name| name == b"arm,gic-v3");
             }
             _ => {}
         }
     }
 
-    /// Records every `(base, len)` pair a `memory` node lists.
-    fn memory(&mut self, value: &[u8]) {
-        for index in 0.. {
-            let Some((base, len)) = reg_pair(value, self.address_cells, self.size_cells, index)
-            else {
-                return;
-            };
-            if !self.regions.push(MemoryRegion {
-                base,
-                len,
-                kind: MemoryKind::Usable,
-            }) {
-                return; // map full; keep the regions we already have
+    /// Handles a `reg` property, according to which node carries it.
+    ///
+    /// One function rather than three because `reg` means "where this
+    /// device is" regardless of the device, and the cells that decode it
+    /// come from the same parent either way.
+    fn reg(&mut self, value: &[u8]) {
+        let (cells, sizes) = (self.address_cells, self.size_cells);
+        let pair = |index| reg_pair(value, cells, sizes, index);
+        if self.node.starts_with("memory@") {
+            self.regions.extend_usable(&pair);
+        } else if self.node.starts_with("pl011@") {
+            self.uart_base = pair(0).map(|(base, _)| base as usize);
+        } else if self.node.starts_with("intc@") {
+            // Both ranges or neither: half an interrupt controller is
+            // worse than none, because it looks initialised.
+            if let (Some((first, _)), Some((second, _))) = (pair(0), pair(1)) {
+                self.gic_reg = Some((first, second));
             }
         }
     }
@@ -83,9 +98,11 @@ impl Default for Scan<'_> {
             node: "",
             address_cells: 2,
             size_cells: 1,
-            regions: Regions::new(),
+            regions: Regions::default(),
             cpu_count: 0,
             uart_base: None,
+            gic_v3: false,
+            gic_reg: None,
         }
     }
 }

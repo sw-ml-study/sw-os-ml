@@ -6,6 +6,11 @@
 # Superseded by `mlos run` in step 008; until then this is what steps
 # 005-007 use to see whether a change still boots.
 #
+# gic-version=3 is pinned, not left to QEMU. Its default differs by
+# accelerator -- TCG gives a GICv2 ("arm,cortex-a15-gic") while HVF gives a
+# v3 -- so without this the two hosts hand the guest different interrupt
+# controllers, and only one of them is the one MLOS drives.
+#
 # Serial goes to a file and the monitor to stdio, not the other way round:
 # with `-serial stdio` the "quit" lands on the guest's console instead of
 # the monitor, and QEMU never exits.
@@ -37,7 +42,7 @@ OBJCOPY="$(rustc --print sysroot)/lib/rustlib/$HOST/bin/llvm-objcopy"
 
 perl -e "select(undef,undef,undef,$SECONDS_TO_RUN); print \"quit\n\"" \
   | qemu-system-aarch64 \
-        -M virt -cpu "$CPU" -accel "$ACCEL" -m 512 \
+        -M virt,gic-version=3 -cpu "$CPU" -accel "$ACCEL" -m 512 \
         -kernel "$IMAGE" \
         -display none -serial "file:$OUT" -monitor stdio \
         >/dev/null 2>&1 || true

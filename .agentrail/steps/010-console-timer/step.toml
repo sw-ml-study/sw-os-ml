@@ -1,6 +1,6 @@
 number = 10
 slug = "console-timer"
-status = "pending"
+status = "in-progress"
 description = "PL011 console, GICv3, ARM generic timer. First printed line, first interrupt."
 role = "production"
 context_files = []

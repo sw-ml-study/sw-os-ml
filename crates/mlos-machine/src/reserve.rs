@@ -17,7 +17,7 @@ use crate::regions::Regions;
 #[must_use]
 pub fn reserve(map: &Regions, base: u64, len: u64, kind: MemoryKind) -> Regions {
     let end = base + len;
-    let mut out = Regions::new();
+    let mut out = Regions::default();
     for region in map.as_slice() {
         split(&mut out, *region, base, end, kind);
     }

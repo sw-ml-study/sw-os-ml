@@ -5,6 +5,7 @@ members = [
     "crates/mlos-device",
     "crates/mlos-fdt",
     "crates/mlos-hal",
+    "crates/mlos-gic-aarch64",
     "crates/mlos-hal-aarch64",
     "crates/mlos-machine",
     "crates/mlos-mmu-aarch64",

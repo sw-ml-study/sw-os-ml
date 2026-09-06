@@ -21,20 +21,6 @@ pub struct Regions {
 }
 
 impl Regions {
-    /// An empty map.
-    #[must_use]
-    pub const fn new() -> Self {
-        let empty = MemoryRegion {
-            base: 0,
-            len: 0,
-            kind: MemoryKind::Reserved,
-        };
-        Self {
-            items: [empty; MAX_REGIONS],
-            len: 0,
-        }
-    }
-
     /// Appends a region. Returns `false` if the map is full, which drops
     /// the region rather than growing silently or panicking at boot.
     pub fn push(&mut self, region: MemoryRegion) -> bool {
@@ -46,6 +32,28 @@ impl Regions {
         true
     }
 
+    /// Appends every `(base, len)` a `reg` decoder yields, as usable
+    /// memory, stopping at the first pair it cannot produce or the first
+    /// that does not fit.
+    ///
+    /// Takes a decoder rather than the raw bytes: how many cells a `reg`
+    /// uses is the parent node's business, and the map should not have to
+    /// know about device trees to be filled from one.
+    pub fn extend_usable(&mut self, pair: &impl Fn(usize) -> Option<(u64, u64)>) {
+        for index in 0.. {
+            let Some((base, len)) = pair(index) else {
+                return;
+            };
+            if !self.push(MemoryRegion {
+                base,
+                len,
+                kind: MemoryKind::Usable,
+            }) {
+                return; // map full; keep the regions we already have
+            }
+        }
+    }
+
     /// The regions recorded so far.
     #[must_use]
     pub fn as_slice(&self) -> &[MemoryRegion] {
@@ -54,7 +62,16 @@ impl Regions {
 }
 
 impl Default for Regions {
+    /// An empty map.
     fn default() -> Self {
-        Self::new()
+        let empty = MemoryRegion {
+            base: 0,
+            len: 0,
+            kind: MemoryKind::Reserved,
+        };
+        Self {
+            items: [empty; MAX_REGIONS],
+            len: 0,
+        }
     }
 }

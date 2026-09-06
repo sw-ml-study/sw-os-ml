@@ -18,6 +18,8 @@ bench = false
 workspace = true
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
+mlos-device      = { path = "../mlos-device",      version = "0.0.1" }
+mlos-gic-aarch64 = { path = "../mlos-gic-aarch64", version = "0.0.1" }
 mlos-hal         = { path = "../mlos-hal",         version = "0.0.1" }
 mlos-hal-aarch64 = { path = "../mlos-hal-aarch64", version = "0.0.1" }
 mlos-machine     = { path = "../mlos-machine",     version = "0.0.1" }

@@ -8,7 +8,7 @@ use mlos_hal::{MemoryKind::*, MemoryRegion};
 use mlos_machine::{MAX_REGIONS, Regions, reserve};
 
 fn map(parts: &[(u64, u64, mlos_hal::MemoryKind)]) -> Regions {
-    let mut regions = Regions::new();
+    let mut regions = Regions::default();
     for &(base, len, kind) in parts {
         assert!(regions.push(MemoryRegion { base, len, kind }));
     }
@@ -90,7 +90,7 @@ fn a_reservation_can_span_regions() {
 /// Losing a region at boot is bad; a panic with no console is worse.
 #[test]
 fn a_full_map_refuses_rather_than_panics() {
-    let mut regions = Regions::new();
+    let mut regions = Regions::default();
     for index in 0..MAX_REGIONS as u64 {
         assert!(regions.push(MemoryRegion {
             base: index << 20,
@@ -104,4 +104,17 @@ fn a_full_map_refuses_rather_than_panics() {
         kind: Usable
     }));
     assert_eq!(regions.as_slice().len(), MAX_REGIONS);
+}
+
+/// The interrupt controller is discovered the same way the console is.
+/// Checked against the real QEMU blob rather than at boot, so a wrong
+/// answer shows up as a test failure and not as a machine that hangs.
+#[test]
+fn the_gic_is_found_in_a_real_device_tree() {
+    let blob = include_bytes!("../../mlos-fdt/tests/qemu-virt.dtb");
+    // SAFETY: a slice we own, not a raw pointer from firmware.
+    let machine = unsafe { mlos_machine::Machine::probe(blob.as_ptr()) }.expect("valid blob");
+
+    assert_eq!(machine.gic, Some((0x0800_0000, 0x080A_0000)));
+    assert_eq!(machine.uart_base, Some(0x0900_0000));
 }

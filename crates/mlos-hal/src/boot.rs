@@ -46,7 +46,13 @@ pub struct BootInfo<'a> {
     pub cpu_count: u32,
 }
 
-impl BootInfo<'_> {
+impl<'a> BootInfo<'a> {
+    /// The machine, from a memory map and a CPU count.
+    #[must_use]
+    pub const fn new(regions: &'a [MemoryRegion], cpu_count: u32) -> Self {
+        Self { regions, cpu_count }
+    }
+
     /// Total allocatable bytes.
     ///
     /// The number every residency budget in `docs/PRD.md` is a fraction
