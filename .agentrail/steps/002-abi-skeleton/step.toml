@@ -1,6 +1,6 @@
 number = 2
 slug = "abi-skeleton"
-status = "pending"
+status = "in-progress"
 description = "mlos-abi: error codes, ObjectId bit layout and its layout test. The ML-MMU re..."
 role = "production"
 context_files = []

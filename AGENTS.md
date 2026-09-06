@@ -310,18 +310,24 @@ cargo fmt --all                          # write, do not just check
 cargo fmt --all -- --check               # now it must be clean
 cargo test                               # host-side crates
 cargo clippy --all-targets -- -D warnings
-cargo clippy -p mlos-kernel --target aarch64-unknown-none-softfloat --all-targets -- -D warnings
-cargo clippy -p mlos-kernel --target x86_64-unknown-none            --all-targets -- -D warnings
-cargo kbuild-arm                         # = build -p mlos-kernel --target aarch64-unknown-none-softfloat
-cargo kbuild-x86                         # = build -p mlos-kernel --target x86_64-unknown-none
+cargo kclippy-arm -- -D warnings          # bare-target crates, aarch64
+cargo kclippy-x86 -- -D warnings          # bare-target crates, x86-64
+cargo kbuild-arm                          # build the same set
+cargo kbuild-x86
 sw-checklist
 ```
 
-**Why the kernel gets its own lines.** `--workspace` does not work for it:
-`mlos-kernel` is `no_std`/`no_main` and cannot link for the host triple, so
-any command that sweeps it in on the host fails. It is always named with
-`-p` and a bare `--target`. Host-side crates are reached by the plain
-commands, via `default-members` in the root `Cargo.toml`.
+**Why the bare targets get their own lines.** `--workspace` does not work
+for them: `mlos-kernel` is `no_std`/`no_main` and cannot link for the host
+triple, so anything that sweeps it in on the host fails. The `k*` aliases
+in `.cargo/config.toml` name the bare-target-capable crates explicitly --
+not a bare `--target`, which would sweep in host-only crates (`mlos-sim`,
+`mlos-cli`) as soon as they exist. Host-side crates are reached by the
+plain commands, via `default-members` in the root `Cargo.toml`.
+
+**`mlos-abi` is built for the bare targets too, and that is the point.**
+It is the one crate both the kernel and userspace depend on; if it ever
+stops being `no_std`-clean, the ABI has quietly grown a host dependency.
 
 Rules:
 

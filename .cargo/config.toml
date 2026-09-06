@@ -7,6 +7,15 @@ target-dir = "target"
 # resolves it to an absolute path -- a relative -T is resolved against the
 # working directory, which is not stable across cargo invocations.
 
+# Every bare-target-capable crate, named explicitly. Not a bare
+# `--target`, which would sweep in host-only crates (mlos-sim, mlos-cli)
+# as soon as they exist and fail confusingly.
+#
+# `--lib --bins`, not `--all-targets`: there is no test harness on a bare
+# target, so `--all-targets` tries to build the test binaries and fails.
+# Tests are a host-side concern and run under `cargo test`.
 [alias]
-kbuild-arm = "build -p mlos-kernel --target aarch64-unknown-none-softfloat"
-kbuild-x86 = "build -p mlos-kernel --target x86_64-unknown-none"
+kbuild-arm = "build -p mlos-abi -p mlos-kernel --target aarch64-unknown-none-softfloat"
+kbuild-x86 = "build -p mlos-abi -p mlos-kernel --target x86_64-unknown-none"
+kclippy-arm = "clippy -p mlos-abi -p mlos-kernel --target aarch64-unknown-none-softfloat --lib --bins"
+kclippy-x86 = "clippy -p mlos-abi -p mlos-kernel --target x86_64-unknown-none --lib --bins"
