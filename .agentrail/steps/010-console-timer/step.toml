@@ -1,8 +1,9 @@
 number = 10
 slug = "console-timer"
-status = "in-progress"
+status = "completed"
 description = "PL011 console, GICv3, ARM generic timer. First printed line, first interrupt."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:47:32"
-commits = []
+completed_at = "2026-09-06T13:59:04"
+commits = ["7c9060ce14a1b8f9b64be53ae578258173ec3600"]
