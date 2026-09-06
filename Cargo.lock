@@ -45,6 +45,7 @@ dependencies = [
  "mlos-hal-aarch64",
  "mlos-machine",
  "mlos-mmu-aarch64",
+ "mlos-pl011",
  "mlos-trap-aarch64",
 ]
 
@@ -61,6 +62,13 @@ name = "mlos-mmu-aarch64"
 version = "0.0.1"
 dependencies = [
  "mlos-hal",
+]
+
+[[package]]
+name = "mlos-pl011"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
 ]
 
 [[package]]

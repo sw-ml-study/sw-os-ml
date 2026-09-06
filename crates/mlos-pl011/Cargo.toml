@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-pl011"
+version     = "0.0.1"
+description = "The Arm PL011 UART: transmit, receive, and its receive interrupt."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-device = { path = "../mlos-device", version = "0.0.1" }
+
+[lints]
+workspace = true

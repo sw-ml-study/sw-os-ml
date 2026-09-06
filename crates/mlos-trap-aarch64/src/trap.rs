@@ -1,6 +1,6 @@
 //! What the CPU can tell us about why it stopped.
 
-use core::arch::asm;
+use core::{arch::asm, fmt::Write};
 
 /// The sixteen entries of an aarch64 vector table, in architectural order.
 ///
@@ -83,4 +83,22 @@ impl Trap {
     pub const fn exception_class(self) -> u8 {
         ((self.esr >> 26) & 0x3f) as u8
     }
+}
+
+/// Writes what the CPU said about a fault.
+///
+/// Lives with `Trap` rather than in the kernel because it is entirely
+/// about this type: which registers matter, and what their bits mean.
+pub fn describe(trap: &Trap, out: &mut impl Write) {
+    let name = VECTOR_NAMES.get(trap.vector).copied().unwrap_or("?");
+    let _ = writeln!(out, "\n!! trap {} ({name})", trap.vector);
+    let _ = writeln!(
+        out,
+        "   esr  {:#018x}  ec {:#04x}",
+        trap.esr,
+        trap.exception_class()
+    );
+    let _ = writeln!(out, "   elr  {:#018x}", trap.elr);
+    let _ = writeln!(out, "   far  {:#018x}", trap.far);
+    let _ = writeln!(out, "   spsr {:#018x}", trap.spsr);
 }

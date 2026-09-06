@@ -11,10 +11,8 @@
 
 mod boot;
 mod timer;
-mod uart;
 
 pub use timer::{GenericTimer, TIMER_PPI};
-pub use uart::Pl011;
 
 // The image extent lives here rather than in its own module: it is one
 // function, and `mlos-hal-aarch64` has four modules, which is the

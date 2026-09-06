@@ -7,10 +7,11 @@ use mlos_device::{Irq, IrqController, Timer};
 use mlos_gic_aarch64::Gic;
 use mlos_hal::BootInfo;
 use mlos_hal::MemoryKind;
-use mlos_hal_aarch64::{GenericTimer, Pl011, TIMER_PPI};
+use mlos_hal_aarch64::{GenericTimer, TIMER_PPI};
 use mlos_machine::{Machine, reserve};
+use mlos_pl011::Pl011;
 
-use crate::{banner, trap};
+use crate::{banner, handlers};
 
 /// Probes the device tree, opens the console it names, reports the
 /// machine, then turns on translation.
@@ -39,7 +40,7 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     banner::mmu(&mut console);
 
     // SAFETY: boot core, once, with the console known.
-    unsafe { arm_interrupts(&mut console, uart, machine.gic?) };
+    unsafe { arm_interrupts(&mut console, uart, &machine) }?;
 
     // Nothing else to do yet; the timer interrupt is the only thing that
     // happens from here. `wfi` rather than a spin so the host CPU is not
@@ -80,23 +81,41 @@ unsafe fn describe(dtb: *const u8) -> Option<Machine> {
 ///
 /// Call once, on the boot core, with interrupts masked and the console
 /// already known.
-unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, gic: (u64, u64)) {
+unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, machine: &Machine) -> Option<()> {
     // SAFETY: boot core, once. Neither handler allocates or takes a lock.
-    unsafe { mlos_trap_aarch64::install(trap::report, trap::on_irq) };
+    unsafe { mlos_trap_aarch64::install(handlers::report, handlers::on_irq) };
 
-    // SAFETY: the windows came from the device tree's `arm,gic-v3` node.
-    let gic = unsafe { Gic::new(gic.0 as usize, gic.1 as usize) };
-    gic.enable(Irq(TIMER_PPI));
+    // SAFETY: forwarded to `route`, whose contract this is.
+    let (gic, uart_irq) = unsafe { route(console, machine) }?;
 
     // Twice a second: slow enough to read on a console, fast enough that
     // a boot capture of a few seconds shows time actually passing.
     let interval = GenericTimer.frequency().0 / 2;
-    banner::interrupts(console, GenericTimer.frequency().0, TIMER_PPI);
+    banner::interrupts(console, GenericTimer.frequency().0, TIMER_PPI, uart_irq);
 
     // SAFETY: boot core, interrupts still masked, nothing has run yet.
-    unsafe { trap::publish(uart, gic, interval) };
+    unsafe { handlers::publish(uart, gic, interval, (TIMER_PPI, uart_irq)) };
     GenericTimer.arm(interval);
 
     // SAFETY: vectors installed, controller up, timer armed.
     unsafe { mlos_trap_aarch64::unmask() };
+    Some(())
+}
+
+/// Brings up the interrupt controller and routes the two sources that
+/// exist: the timer, private to this CPU, and the console, shared.
+///
+/// # Safety
+///
+/// Call once, on the boot core, with interrupts masked.
+unsafe fn route(console: &Pl011, machine: &Machine) -> Option<(Gic, u32)> {
+    let (dist, redist) = machine.gic?;
+    // SAFETY: the windows came from the device tree's `arm,gic-v3` node.
+    let gic = unsafe { Gic::new(dist as usize, redist as usize) };
+
+    let uart_irq = machine.uart_irq?;
+    gic.enable(Irq(TIMER_PPI));
+    gic.enable(Irq(uart_irq));
+    console.enable_receive_interrupt();
+    Some((gic, uart_irq))
 }

@@ -19,11 +19,15 @@ mod redist;
 
 use mlos_device::{Irq, IrqController};
 
+/// Interrupts below this are private to a CPU; above, they are shared.
+const PRIVATE_INTERRUPTS: u32 = 32;
+
 /// The architectural "nothing was pending" answer from `ICC_IAR1_EL1`.
 const SPURIOUS: u32 = 1023;
 
 /// This CPU's view of a GICv3.
 pub struct Gic {
+    distributor: usize,
     redistributor: usize,
 }
 
@@ -46,17 +50,29 @@ impl Gic {
             redist::wake(redistributor);
             cpuif::enable();
         }
-        Self { redistributor }
+        Self {
+            distributor,
+            redistributor,
+        }
     }
 }
 
 impl IrqController for Gic {
-    /// Only private interrupts for now: shared ones live in the
-    /// distributor, and nothing has raised one yet.
+    /// Dispatches by interrupt number, because the two kinds live in
+    /// different devices: interrupts below 32 are private to a CPU and
+    /// configured in its redistributor, everything above is shared and
+    /// configured in the distributor. Getting this the wrong way round
+    /// writes to a register that exists and does nothing.
     fn enable(&self, irq: Irq) {
-        // SAFETY: `redistributor` came from `new`, whose contract covers
-        // it. Priority 0 is the most urgent, below the accept-all mask.
-        unsafe { redist::enable_ppi(self.redistributor, irq.0, 0) };
+        // SAFETY: both windows came from `new`, whose contract covers
+        // them. Priority 0 is the most urgent, below the accept-all mask.
+        unsafe {
+            if irq.0 < PRIVATE_INTERRUPTS {
+                redist::enable_ppi(self.redistributor, irq.0, 0);
+            } else {
+                dist::enable_spi(self.distributor, irq.0, 0);
+            }
+        }
     }
 
     fn claim(&self) -> Option<Irq> {

@@ -18,7 +18,7 @@ mod vectors;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-pub use trap::{Trap, VECTOR_NAMES};
+pub use trap::{Trap, VECTOR_NAMES, describe};
 
 /// Where to send an interrupt, as a raw function pointer.
 static HANDLER: AtomicUsize = AtomicUsize::new(0);

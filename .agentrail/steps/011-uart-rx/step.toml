@@ -1,0 +1,8 @@
+number = 11
+slug = "uart-rx"
+status = "in-progress"
+description = "PL011 receive: RX interrupt via a GIC SPI (the distributor path, not the redi..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T14:40:49"
+commits = []

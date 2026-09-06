@@ -1,7 +1,7 @@
 number = 13
-slug = "ci-tcg"
+slug = "cli-run"
 status = "pending"
-description = "Deterministic TCG boot test in CI."
+description = "mlos build / mlos run --host hvf|tcg / mlos doctor."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:47:32"

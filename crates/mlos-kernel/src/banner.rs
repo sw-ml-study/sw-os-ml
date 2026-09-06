@@ -34,10 +34,14 @@ pub fn mmu(console: &mut impl Write) {
 }
 
 /// Reports the interrupt setup, so the ticks that follow are legible.
-pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32) {
-    let _ = writeln!(console, "  gicv3    up, timer on ppi {ppi}");
+pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32, uart: u32) {
+    let _ = writeln!(
+        console,
+        "  gicv3    up, timer ppi {ppi}, console spi {uart}"
+    );
     let _ = writeln!(
         console,
         "  timer    {frequency} Hz counter, ticking at 2 Hz"
     );
+    let _ = writeln!(console, "\ntype something -- it echoes:");
 }

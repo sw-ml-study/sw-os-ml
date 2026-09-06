@@ -118,3 +118,15 @@ fn the_gic_is_found_in_a_real_device_tree() {
     assert_eq!(machine.gic, Some((0x0800_0000, 0x080A_0000)));
     assert_eq!(machine.uart_base, Some(0x0900_0000));
 }
+
+/// The console's interrupt comes from the tree too. QEMU gives the PL011
+/// SPI 1, which the GIC numbers 33 -- the tree counts from the start of
+/// the shared range and the controller does not, and getting that offset
+/// wrong is an interrupt that never arrives.
+#[test]
+fn the_console_interrupt_is_found_and_rebased() {
+    let blob = include_bytes!("../../mlos-fdt/tests/qemu-virt.dtb");
+    // SAFETY: a slice we own, not a raw pointer from firmware.
+    let machine = unsafe { mlos_machine::Machine::probe(blob.as_ptr()) }.expect("valid blob");
+    assert_eq!(machine.uart_irq, Some(33));
+}

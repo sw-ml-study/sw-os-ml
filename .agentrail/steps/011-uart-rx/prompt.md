@@ -1,0 +1,1 @@
+PL011 receive: RX interrupt via a GIC SPI (the distributor path, not the redistributor), UART interrupt number discovered from the device tree, characters echoed back. Proves input works before a shell depends on it.

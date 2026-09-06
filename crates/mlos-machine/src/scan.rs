@@ -20,6 +20,8 @@ pub struct Scan<'a> {
     pub cpu_count: u32,
     /// Base address of the PL011, if the tree has one.
     pub uart_base: Option<usize>,
+    /// The console's interrupt number, if the tree gives one.
+    pub uart_irq: Option<u32>,
     /// Whether the interrupt controller claimed `arm,gic-v3`.
     ///
     /// Kept apart from [`Self::gic_reg`] because a device tree does not
@@ -54,11 +56,21 @@ impl<'a> Scan<'a> {
 
     /// Folds one property, ignoring everything not asked about.
     fn prop(&mut self, name: &str, value: &[u8]) {
-        let cell = || -> Option<u32> { Some(u32::from_be_bytes(value.get(..4)?.try_into().ok()?)) };
+        let cell = |index: usize| -> Option<u32> {
+            let at = index * 4;
+            Some(u32::from_be_bytes(value.get(at..at + 4)?.try_into().ok()?))
+        };
         match (self.depth, name) {
-            (1, "#address-cells") => self.address_cells = cell().unwrap_or(2),
-            (1, "#size-cells") => self.size_cells = cell().unwrap_or(2),
+            (1, "#address-cells") => self.address_cells = cell(0).unwrap_or(2),
+            (1, "#size-cells") => self.size_cells = cell(0).unwrap_or(2),
             (2, "reg") => self.reg(value),
+            (2, "interrupts") if self.node.starts_with("pl011@") => {
+                // <kind, number, flags>. Kind 0 is a shared interrupt,
+                // whose numbering starts at 32 -- the device tree counts
+                // from the start of the SPI range, the GIC does not.
+                let kind = cell(0);
+                self.uart_irq = (kind == Some(0)).then(|| cell(1)).flatten().map(|n| n + 32);
+            }
             (2, "compatible") if self.node.starts_with("intc@") => {
                 self.gic_v3 = value.split(|&b| b == 0).any(|name| name == b"arm,gic-v3");
             }
@@ -101,6 +113,7 @@ impl Default for Scan<'_> {
             regions: Regions::default(),
             cpu_count: 0,
             uart_base: None,
+            uart_irq: None,
             gic_v3: false,
             gic_reg: None,
         }

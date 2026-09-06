@@ -31,6 +31,8 @@ pub struct Machine {
     pub cpu_count: u32,
     /// Base address of the console, if the tree names one.
     pub uart_base: Option<usize>,
+    /// The console's interrupt number, if the tree gives one.
+    pub uart_irq: Option<u32>,
     /// GICv3 distributor and redistributor bases, if the tree has them.
     pub gic: Option<(u64, u64)>,
     /// Where the blob itself lives, so it can be reclaimed once read.
@@ -65,6 +67,7 @@ impl Machine {
             regions: scan.regions,
             cpu_count: scan.cpu_count,
             uart_base: scan.uart_base,
+            uart_irq: scan.uart_irq,
             // Only a v3 layout is understood; a v2 reports a CPU
             // interface in that second range, which is a different device.
             gic: scan.gic_v3.then_some(scan.gic_reg).flatten(),

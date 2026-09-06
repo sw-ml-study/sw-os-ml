@@ -1,4 +1,4 @@
-number = 12
+number = 14
 slug = "uefi-and-vz"
 status = "pending"
 description = "UEFI image path; boot under Virtualization.framework. Satisfies requirement N2."

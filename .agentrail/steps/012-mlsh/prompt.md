@@ -1,0 +1,1 @@
+mlsh: a line reader and an inspector shell over the state that exists (memory map, cpus, gic, ticks, image extent). Closes PRD gate G1, which asks for a shell.
