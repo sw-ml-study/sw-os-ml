@@ -21,7 +21,7 @@ mod reg;
 
 use cursor::Cursor;
 pub use header::Header;
-pub use reg::reg_pair;
+pub use reg::{reg_pair, string};
 
 /// Structure-block tokens.
 mod token {

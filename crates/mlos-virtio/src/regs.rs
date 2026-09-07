@@ -12,6 +12,10 @@ pub const MAGIC: u32 = 0x7472_6976;
 pub const VERSION: u32 = 2;
 
 /// Register offsets.
+///
+/// Only the ones this driver uses. The interrupt registers are absent
+/// because transmit spins for completion rather than waiting for one --
+/// they arrive with receive, which needs a handler anyway.
 pub mod reg {
     /// Magic value, must read as [`super::MAGIC`].
     pub const MAGIC: usize = 0x000;
@@ -37,10 +41,6 @@ pub mod reg {
     pub const QUEUE_READY: usize = 0x044;
     /// Writing a queue index tells the device to look at it.
     pub const QUEUE_NOTIFY: usize = 0x050;
-    /// Why the device raised an interrupt.
-    pub const INTERRUPT_STATUS: usize = 0x060;
-    /// Acknowledging the above.
-    pub const INTERRUPT_ACK: usize = 0x064;
     /// Driver status; the handshake lives here.
     pub const STATUS: usize = 0x070;
     /// Descriptor table address, low then high.

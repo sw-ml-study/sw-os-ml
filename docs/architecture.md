@@ -517,10 +517,15 @@ matters more than an earlier draft of this document assumed:
   firmware services.
 
 Its device set is whatever Apple provides -- you cannot add one -- and
-that is the real constraint. **There is no PL011.** The console is a
-virtio console, so a kernel that drives only a PL011 boots, runs, and
-says nothing. Requirement N2 therefore costs a virtio-console driver,
-not a boot-path change.
+that is the real constraint. **There is no PL011**, and its virtio
+devices are on the **PCI** bus: a Linux guest under VZ needs
+`CONFIG_VIRTIO_PCI`, not `CONFIG_VIRTIO_MMIO`. So a kernel that drives a
+PL011 boots and says nothing, and so does one that drives virtio-mmio.
+
+Requirement N2 therefore costs PCI ECAM enumeration plus virtio-pci --
+which is `mlos-pci`, the crate M6 already needs for GPU passthrough. That
+is why N2 moves to M6 rather than being forced sooner: writing PCI twice
+to close a requirement a milestone early is the wrong trade.
 
 Two related measurements from the same step, both correcting assumptions:
 

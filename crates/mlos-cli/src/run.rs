@@ -22,9 +22,9 @@ pub const HOSTS: [&str; 3] = ["hvf", "tcg", "vz"];
 /// virtio console and no PL011, and MLOS drives only the latter. The VM
 /// runs; nothing says so. Requirement N2 closes when the virtio-console
 /// driver lands.
-pub fn run(host: &str, debug: bool) -> io::Result<()> {
+pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
     let image = image::build()?;
-    let (program, mut args) = command(host, &image.to_string_lossy(), None);
+    let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio);
     if debug {
         // Halted, with the stub open. `target remote :1234` in gdb, then
         // load the ELF for symbols -- the image has none.
@@ -45,12 +45,17 @@ pub fn run(host: &str, debug: bool) -> io::Result<()> {
 /// a change still boots. It cannot exercise the shell -- a file is not a
 /// terminal, so no keystroke ever reaches the guest -- which is why
 /// `demos/*.tape` exists and drives a real pty instead.
-pub fn capture(host: &str, seconds: u64) -> io::Result<()> {
+pub fn capture(host: &str, seconds: u64, virtio: bool) -> io::Result<()> {
     let image = image::build()?;
     let log = std::env::temp_dir().join("mlos-console.txt");
     let _ = fs::remove_file(&log);
 
-    let (program, args) = command(host, &image.to_string_lossy(), Some(&log.to_string_lossy()));
+    let (program, args) = command(
+        host,
+        &image.to_string_lossy(),
+        Some(&log.to_string_lossy()),
+        virtio,
+    );
     let mut child = Command::new(program).args(args).spawn()?;
     thread::sleep(Duration::from_secs(seconds));
     child.kill()?;
@@ -63,8 +68,10 @@ pub fn capture(host: &str, seconds: u64) -> io::Result<()> {
 /// Boots, headless or interactive, according to the arguments.
 pub fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, debug) = crate::options(args, true)?;
+    // `--console virtio`; the parser in main.rs accepts the pair.
+    let virtio = args.iter().any(|arg| arg == "virtio");
     match seconds {
-        Some(seconds) => capture(host, seconds),
-        None => run(host, debug),
+        Some(seconds) => capture(host, seconds, virtio),
+        None => run(host, debug, virtio),
     }
 }

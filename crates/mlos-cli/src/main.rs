@@ -63,6 +63,9 @@ fn options(args: &[String], takes_host: bool) -> io::Result<(&str, Option<u64>, 
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--debug" => debug = true,
+            // `--console virtio` selects the virtio console. Its value is
+            // consumed here so it is not mistaken for an accelerator.
+            "--console" => drop(rest.next()),
             "--capture" => {
                 let value = rest.next().and_then(|seconds| seconds.parse().ok());
                 seconds = Some(

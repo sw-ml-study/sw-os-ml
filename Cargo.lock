@@ -11,6 +11,16 @@ name = "mlos-cli"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-console"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+ "mlos-machine",
+ "mlos-pl011",
+ "mlos-virtio",
+]
+
+[[package]]
 name = "mlos-device"
 version = "0.0.1"
 
@@ -43,14 +53,15 @@ dependencies = [
 name = "mlos-kernel"
 version = "0.0.1"
 dependencies = [
+ "mlos-console",
  "mlos-device",
  "mlos-gic-aarch64",
  "mlos-hal",
  "mlos-hal-aarch64",
  "mlos-machine",
  "mlos-mmu-aarch64",
- "mlos-pl011",
  "mlos-trap-aarch64",
+ "mlos-virtio",
  "mlsh",
 ]
 

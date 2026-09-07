@@ -38,6 +38,12 @@ pub struct Facts<'a> {
     pub timer_irq: u32,
     /// GICv3 distributor and redistributor.
     pub gic: Option<(u64, u64)>,
+    /// Which kind of console is in use.
+    pub console: &'static str,
+    /// The lowest virtio-mmio window and how many slots follow it.
+    pub virtio: Option<(usize, usize)>,
+    /// How many virtio-mmio slots the device tree describes.
+    pub virtio_count: u32,
     /// Ticks so far. Borrowed rather than copied, because it keeps
     /// changing and the shell should report the count at the moment it
     /// was asked, not at the moment boot handed these over.

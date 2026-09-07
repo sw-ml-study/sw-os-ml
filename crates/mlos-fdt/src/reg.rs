@@ -36,3 +36,16 @@ pub fn reg_pair(
     let size = cells(value, base + address_cells as usize, size_cells)?;
     Some((address, size))
 }
+
+/// A device tree string property, if it is valid UTF-8.
+///
+/// Property strings are NUL-terminated, and the terminator is inside the
+/// value's declared length -- so a caller that compares the raw bytes to a
+/// string literal is comparing against a trailing zero and always losing.
+#[must_use]
+pub const fn string(value: &[u8]) -> Option<&str> {
+    match core::str::from_utf8(value) {
+        Ok(text) => Some(text.trim_ascii_end()),
+        Err(_) => None,
+    }
+}

@@ -7,9 +7,9 @@ use mlos_device::{Irq, IrqController, Timer};
 use mlos_gic_aarch64::Gic;
 use mlos_hal::BootInfo;
 
+use mlos_console::Terminal;
 use mlos_hal_aarch64::{GenericTimer, TIMER_PPI};
 use mlos_machine::Machine;
-use mlos_pl011::Pl011;
 use mlsh::{Facts, Shell};
 
 use crate::{banner, handlers};
@@ -30,11 +30,12 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     // SAFETY: forwarded to `describe`, whose contract this is.
     let machine = unsafe { Machine::probe(dtb) }?
         .reserving(mlos_hal_aarch64::extent().0, mlos_hal_aarch64::extent().1);
-    let uart = machine.uart_base?;
-    let mut console = Pl011::at(uart);
+    // SAFETY: boot core, once, from device tree addresses.
+    let mut console = unsafe { Terminal::open(&machine) }?;
+    let console_kind = console.kind();
 
     let info = BootInfo::new(machine.regions.as_slice(), machine.cpu_count);
-    banner::report(&mut console, dtb as usize, &info, uart);
+    banner::report(&mut console, dtb as usize, &info, console_kind);
 
     // SAFETY: boot core, MMU off, once. The map covers the kernel image
     // and its stack, so the code that must survive the switch is mapped.
@@ -42,11 +43,11 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     banner::mmu(&mut console);
 
     // SAFETY: boot core, once, with the console known.
-    unsafe { arm_interrupts(&mut console, uart, &machine) }?;
+    unsafe { arm_interrupts(&mut console, &machine) }?;
 
     Shell::default().run(
         &mut console,
-        &facts(&machine, uart),
+        &facts(&machine, console_kind),
         mlos_hal_aarch64::wait_for_interrupt,
     );
 }
@@ -65,7 +66,7 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
 ///
 /// Call once, on the boot core, with interrupts masked and the console
 /// already known.
-unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, machine: &Machine) -> Option<()> {
+unsafe fn arm_interrupts(console: &mut Terminal, machine: &Machine) -> Option<()> {
     // SAFETY: boot core, once. Neither handler allocates or takes a lock.
     unsafe { mlos_trap_aarch64::install(banner::fault, handlers::on_irq) };
 
@@ -78,7 +79,7 @@ unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, machine: &Machine) ->
     banner::interrupts(console, GenericTimer.frequency().0, TIMER_PPI, uart_irq);
 
     // SAFETY: boot core, interrupts still masked, nothing has run yet.
-    unsafe { handlers::publish(uart, gic, interval, (TIMER_PPI, uart_irq)) };
+    unsafe { handlers::publish(*console, gic, interval, (TIMER_PPI, uart_irq)) };
     GenericTimer.arm(interval);
 
     // SAFETY: vectors installed, controller up, timer armed.
@@ -92,7 +93,7 @@ unsafe fn arm_interrupts(console: &mut Pl011, uart: usize, machine: &Machine) ->
 /// # Safety
 ///
 /// Call once, on the boot core, with interrupts masked.
-unsafe fn route(console: &Pl011, machine: &Machine) -> Option<(Gic, u32)> {
+unsafe fn route(console: &Terminal, machine: &Machine) -> Option<(Gic, u32)> {
     let (dist, redist) = machine.gic?;
     // SAFETY: the windows came from the device tree's `arm,gic-v3` node.
     let gic = unsafe { Gic::new(dist as usize, redist as usize) };
@@ -105,15 +106,18 @@ unsafe fn route(console: &Pl011, machine: &Machine) -> Option<(Gic, u32)> {
 }
 
 /// Everything the shell can report on, gathered once.
-fn facts(machine: &Machine, uart: usize) -> Facts<'_> {
+fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
     Facts {
         info: BootInfo::new(machine.regions.as_slice(), machine.cpu_count),
         total: machine.regions.as_slice().iter().map(|r| r.len).sum(),
         image: mlos_hal_aarch64::extent(),
-        uart,
+        uart: machine.uart_base.unwrap_or_default(),
         uart_irq: machine.uart_irq.unwrap_or_default(),
         timer_irq: TIMER_PPI,
         gic: machine.gic,
+        console: kind,
+        virtio: machine.virtio,
+        virtio_count: machine.virtio_count,
         ticks: &handlers::TICKS,
     }
 }

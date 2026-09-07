@@ -26,15 +26,13 @@ pub struct Descriptor {
     pub address: u64,
     /// Length in bytes.
     pub length: u32,
-    /// `WRITE` if the device fills it, 0 if the device reads it.
+    /// Zero when the device reads the buffer, which is every buffer this
+    /// driver submits. The device-writable flag arrives with receive.
     pub flags: u16,
     /// Next descriptor in a chain. Unused: every buffer here is one
     /// descriptor.
     pub next: u16,
 }
-
-/// Descriptor flag: the device writes this buffer rather than reading it.
-pub const WRITE: u16 = 2;
 
 /// The ring the driver fills with descriptor indices.
 #[repr(C, align(2))]
@@ -120,12 +118,23 @@ pub unsafe fn submit(base: usize, queue: u32, available: &mut Available, used: &
 
     // SAFETY: forwarded from this function's contract.
     unsafe { regs::write(base, reg::QUEUE_NOTIFY, queue) };
-
-    // SAFETY: as above; volatile because the device, not this code,
-    // advances the index.
-    while unsafe { core::ptr::read_volatile(&raw const used.index) } == before {
-        core::hint::spin_loop();
-    }
     // SAFETY: as above.
-    unsafe { core::ptr::read_volatile(&raw const used.ring[slot].length) }
+    unsafe { wait(used, before) }
+}
+
+/// Spins until the device returns something, then reports how much it
+/// moved.
+///
+/// # Safety
+///
+/// `used` must be the ring the device was configured with.
+unsafe fn wait(used: &UsedRing, before: u16) -> u32 {
+    // SAFETY: volatile because the device, not this code, advances these.
+    unsafe {
+        while core::ptr::read_volatile(&raw const used.index) == before {
+            core::hint::spin_loop();
+        }
+        let slot = before as usize % SIZE;
+        core::ptr::read_volatile(&raw const used.ring[slot].length)
+    }
 }

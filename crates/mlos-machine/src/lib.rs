@@ -38,6 +38,8 @@ pub struct Machine {
     pub virtio: Option<(usize, usize)>,
     /// How many `virtio_mmio@` slots the tree describes.
     pub virtio_count: u32,
+    /// `/chosen/bootargs`, which says which console was asked for.
+    pub bootargs: Option<&'static str>,
     /// GICv3 distributor and redistributor bases, if the tree has them.
     pub gic: Option<(u64, u64)>,
     /// Where the blob itself lives, so it can be reclaimed once read.
@@ -85,7 +87,16 @@ impl Machine {
 
         let mut scan = scan::Scan::default();
         fdt.walk(|event| scan.event(event))?;
+        Some(Self::from_scan(&scan, dtb as u64, size))
+    }
 
+    /// Turns a finished walk into a machine, reserving the blob itself.
+    ///
+    /// Firmware structures are real memory -- several kilobytes here, and
+    /// much more on a machine with ACPI -- and on a system whose whole
+    /// premise is accounting for resident bytes, writing them off
+    /// permanently would be an odd place to start.
+    fn from_scan(scan: &scan::Scan<'static>, base: u64, size: u64) -> Self {
         let machine = Self {
             regions: scan.regions,
             cpu_count: scan.cpu_count,
@@ -93,14 +104,15 @@ impl Machine {
             uart_irq: scan.uart_irq,
             virtio: scan.virtio,
             virtio_count: scan.virtio_count,
+            bootargs: scan.bootargs,
             // Only a v3 layout is understood; a v2 reports a CPU
-            // interface in that second range, which is a different device.
+            // interface in that second range, a different device.
             gic: scan.gic_v3.then_some(scan.gic_reg).flatten(),
-            blob: (dtb as u64, size),
+            blob: (base, size),
         };
-        Some(Self {
-            regions: reserve(&machine.regions, dtb as u64, size, MemoryKind::Reclaimable),
+        Self {
+            regions: reserve(&machine.regions, base, size, MemoryKind::Reclaimable),
             ..machine
-        })
+        }
     }
 }

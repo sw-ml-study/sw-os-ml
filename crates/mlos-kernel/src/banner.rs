@@ -3,21 +3,19 @@
 //! Its own module because the entry point should read as a sequence of
 //! decisions, not as a print statement with a probe attached.
 
-use core::{fmt::Write, sync::atomic::Ordering};
+use core::fmt::Write;
 
 use mlos_hal::BootInfo;
-use mlos_pl011::Pl011;
 use mlos_trap_aarch64::Trap;
 
 use crate::handlers::CONSOLE;
-
 /// Reports what the device tree said, so a boot that reaches here proves
 /// the whole chain: Image header, `x0`, the tree walk, and the console
 /// address discovered from it.
-pub fn report(console: &mut impl Write, dtb: usize, info: &BootInfo<'_>, uart: usize) {
+pub fn report(console: &mut impl Write, dtb: usize, info: &BootInfo<'_>, kind: &str) {
     let _ = writeln!(console, "\nMLOS aarch64");
     let _ = writeln!(console, "  dtb      {dtb:#018x}");
-    let _ = writeln!(console, "  console  pl011 @ {uart:#x}");
+    let _ = writeln!(console, "  console  {kind}");
     let _ = writeln!(console, "  cpus     {}", info.cpu_count);
     let _ = writeln!(console, "  usable   {} MiB", info.usable_bytes() >> 20);
     for region in info.regions {
@@ -55,9 +53,10 @@ pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32, uart: u32)
 /// recoverable, and resuming into the instruction that faulted would fault
 /// again, forever, with the console filling up.
 pub fn fault(trap: &Trap) -> ! {
-    let base = CONSOLE.load(Ordering::Relaxed);
-    if base != 0 {
-        mlos_trap_aarch64::describe(trap, &mut Pl011::at(base));
+    // SAFETY: published at boot and never rewritten. A fault before the
+    // console exists has nowhere to report and simply stops.
+    if let Some(console) = unsafe { *CONSOLE.0.get() } {
+        mlos_trap_aarch64::describe(trap, &mut { console });
     }
     loop {
         core::hint::spin_loop();

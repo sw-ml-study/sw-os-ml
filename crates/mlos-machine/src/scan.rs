@@ -1,7 +1,7 @@
 //! Folding a device tree walk into a machine description.
 
 use crate::regions::Regions;
-use mlos_fdt::{Event, reg_pair};
+use mlos_fdt::{Event, reg_pair, string};
 
 /// Walk state.
 ///
@@ -65,6 +65,9 @@ impl<'a> Scan<'a> {
     }
 
     /// Folds one property, ignoring everything not asked about.
+    ///
+    /// `/chosen/bootargs` is read here because it says which console was
+    /// asked for, in the same `console=` form Linux uses.
     fn prop(&mut self, name: &str, value: &'a [u8]) {
         let cell = |index: usize| -> Option<u32> {
             let at = index * 4;
@@ -74,17 +77,13 @@ impl<'a> Scan<'a> {
             (1, "#address-cells") => self.address_cells = cell(0).unwrap_or(2),
             (1, "#size-cells") => self.size_cells = cell(0).unwrap_or(2),
             (2, "reg") => self.reg(value),
+            (2, "bootargs") if self.node == "chosen" => self.bootargs = string(value),
             (2, "interrupts") if self.node.starts_with("pl011@") && self.uart_irq.is_none() => {
                 // <kind, number, flags>. Kind 0 is a shared interrupt,
                 // whose numbering starts at 32 -- the device tree counts
                 // from the start of the SPI range, the GIC does not.
                 let kind = cell(0);
                 self.uart_irq = (kind == Some(0)).then(|| cell(1)).flatten().map(|n| n + 32);
-            }
-            (2, "bootargs") if self.node == "chosen" => {
-                self.bootargs = core::str::from_utf8(value)
-                    .ok()
-                    .map(|args| args.trim_end_matches('\0'));
             }
             (2, "compatible") if self.node.starts_with("intc@") => {
                 self.gic_v3 = value.split(|&b| b == 0).any(|name| name == b"arm,gic-v3");

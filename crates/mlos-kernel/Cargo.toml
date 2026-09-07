@@ -24,6 +24,7 @@ mlos-hal         = { path = "../mlos-hal",         version = "0.0.1" }
 mlos-hal-aarch64 = { path = "../mlos-hal-aarch64", version = "0.0.1" }
 mlos-machine     = { path = "../mlos-machine",     version = "0.0.1" }
 mlos-mmu-aarch64 = { path = "../mlos-mmu-aarch64", version = "0.0.1" }
-mlos-pl011       = { path = "../mlos-pl011",       version = "0.0.1" }
+mlos-console     = { path = "../mlos-console",     version = "0.0.1" }
+mlos-virtio      = { path = "../mlos-virtio",      version = "0.0.1" }
 mlsh             = { path = "../mlsh",             version = "0.0.1" }
 mlos-trap-aarch64 = { path = "../mlos-trap-aarch64", version = "0.0.1" }
