@@ -323,6 +323,14 @@ is too slow for the ordinary gate but exactly what CI should do before
 trusting a change. `.github/workflows/ci.yml` runs the whole list on an
 aarch64 Linux runner.
 
+The `k*` aliases are `--workspace --exclude mlos-cli`, not a list of
+crates. A list has to be updated by hand, and it will be wrong: the build
+and clippy lists drifted apart here, four crates were built for the bare
+targets and never linted there, and an unused import reached a commit
+through the gap. Crates that are architecture-specific say so themselves
+with `#![cfg(target_arch = ...)]` rather than being named in an exclude
+list somewhere else.
+
 **Why the bare targets get their own lines.** `--workspace` does not work
 for them: `mlos-kernel` is `no_std`/`no_main` and cannot link for the host
 triple, so anything that sweeps it in on the host fails. The `k*` aliases

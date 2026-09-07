@@ -18,6 +18,11 @@
 //! tree rather than from an assumption about how much there is.
 
 #![no_std]
+// Empty on any other architecture, so the workspace-wide gate can sweep
+// every crate without a hand-maintained exclude list. The crate says where
+// it applies; a list in .cargo/config.toml would say it somewhere else and
+// then drift, which is exactly what happened before this line existed.
+#![cfg(target_arch = "aarch64")]
 
 mod descriptor;
 mod regs;

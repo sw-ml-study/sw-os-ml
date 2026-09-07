@@ -23,7 +23,6 @@ pub const fn start(id: ObjectId, capacity: usize) -> usize {
 }
 
 /// The slots to try, in order, starting from `start`.
-#[must_use]
 pub fn sequence(id: ObjectId, capacity: usize) -> impl Iterator<Item = usize> {
     let first = start(id, capacity);
     (0..capacity).map(move |step| (first + step) % capacity)

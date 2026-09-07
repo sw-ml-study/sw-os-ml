@@ -14,8 +14,18 @@ target-dir = "target"
 # `--lib --bins`, not `--all-targets`: there is no test harness on a bare
 # target, so `--all-targets` tries to build the test binaries and fails.
 # Tests are a host-side concern and run under `cargo test`.
+# `--workspace --exclude mlos-cli` rather than a list of crates.
+#
+# The lists drifted: kbuild-arm named every crate and kclippy-arm did not,
+# so four crates were built for the bare targets and never linted there.
+# An unused import reached a commit that way. A list that has to be
+# updated by hand is a list that will be wrong; excluding the one host-only
+# crate is self-maintaining.
+#
+# `--lib --bins` for clippy: there is no test harness on a bare target, so
+# --all-targets would try to build test binaries and fail.
 [alias]
-kbuild-arm = "build -p mlos-abi -p mlos-console -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-gic-aarch64 -p mlos-hal-aarch64 -p mlos-machine -p mlos-objtab -p mlos-provider -p mlos-provider-dram -p mlos-mmu-aarch64 -p mlos-pl011 -p mlos-queue -p mlos-virtio -p mlsh -p mlos-trap-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat"
-kbuild-x86 = "build -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-kernel --target x86_64-unknown-none"
-kclippy-arm = "clippy -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-gic-aarch64 -p mlos-hal-aarch64 -p mlos-mmu-aarch64 -p mlos-trap-aarch64 -p mlos-kernel --target aarch64-unknown-none-softfloat --lib --bins"
-kclippy-x86 = "clippy -p mlos-abi -p mlos-device -p mlos-fdt -p mlos-hal -p mlos-kernel --target x86_64-unknown-none --lib --bins"
+kbuild-arm  = "build  --workspace --exclude mlos-cli --target aarch64-unknown-none-softfloat"
+kbuild-x86  = "build  --workspace --exclude mlos-cli --target x86_64-unknown-none"
+kclippy-arm = "clippy --workspace --exclude mlos-cli --target aarch64-unknown-none-softfloat --lib --bins"
+kclippy-x86 = "clippy --workspace --exclude mlos-cli --target x86_64-unknown-none --lib --bins"

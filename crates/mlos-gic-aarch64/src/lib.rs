@@ -12,6 +12,11 @@
 //! the one above it is ready, and ignore them.
 
 #![no_std]
+// Empty on any other architecture, so the workspace-wide gate can sweep
+// every crate without a hand-maintained exclude list. The crate says where
+// it applies; a list in .cargo/config.toml would say it somewhere else and
+// then drift, which is exactly what happened before this line existed.
+#![cfg(target_arch = "aarch64")]
 
 mod cpuif;
 mod dist;

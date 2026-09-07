@@ -14,7 +14,7 @@
 
 use core::ptr;
 
-use mlos_abi::{Error, Result};
+use mlos_abi::Result;
 use mlos_objtab::{CostNs, ProviderId};
 use mlos_provider::{Cost, Located, Provider};
 
