@@ -1,8 +1,9 @@
 number = 18
 slug = "ci-tcg"
-status = "in-progress"
+status = "completed"
 description = "Deterministic TCG boot test in CI."
 role = "production"
 context_files = []
 created_at = "2026-09-06T09:47:32"
-commits = []
+completed_at = "2026-09-06T17:59:01"
+commits = ["bbe96f6afd4bbe3a5b4b432a1be864ab8447940d"]
