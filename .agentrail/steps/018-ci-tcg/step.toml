@@ -1,6 +1,6 @@
 number = 18
 slug = "ci-tcg"
-status = "pending"
+status = "in-progress"
 description = "Deterministic TCG boot test in CI."
 role = "production"
 context_files = []

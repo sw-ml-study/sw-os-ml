@@ -36,7 +36,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | Milestone | State |
 | --- | --- |
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
-| M1 it boots | **15 of 18 steps** -- saga `mlos-boot`. Gate G1 met; virtio console, EFI stub and CI remain |
+| M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | not started -- **this is where the ML content begins** |
 | M3 it knows better | not started |
 | M4 it shares | not started |
@@ -61,8 +61,9 @@ x86-64 anywhere in this repo.
 | Faults | Vector table installed; a fault reports `ESR`/`ELR`/`FAR`/`SPSR` and which of the sixteen vectors fired |
 | Interrupts | GICv3 + generic timer at 2 Hz, tracking wall clock; PL011 receive on a shared interrupt |
 | Shell | `mlsh` with `help`, `mem`, `dev`, `ticks`, line editing |
+| Consoles | PL011, or a virtio console over virtio-mmio, chosen from `/chosen/bootargs` |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` |
-| Tests | 22 test binaries; `sw-checklist` at 0 failures |
+| Tests | 25 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
 
 ## What does not exist yet
 

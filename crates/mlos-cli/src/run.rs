@@ -47,7 +47,11 @@ pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
 /// `demos/*.tape` exists and drives a real pty instead.
 pub fn capture(host: &str, seconds: u64, virtio: bool) -> io::Result<()> {
     let image = image::build()?;
-    let log = std::env::temp_dir().join("mlos-console.txt");
+    // Unique per invocation. A fixed name means two captures running at
+    // once overwrite each other's console -- which is exactly what three
+    // parallel boot tests do, and it looks like a kernel that sometimes
+    // does not print.
+    let log = std::env::temp_dir().join(format!("mlos-console-{}.txt", std::process::id()));
     let _ = fs::remove_file(&log);
 
     let (program, args) = command(
@@ -62,6 +66,7 @@ pub fn capture(host: &str, seconds: u64, virtio: bool) -> io::Result<()> {
     child.wait()?;
 
     print!("{}", fs::read_to_string(&log).unwrap_or_default());
+    let _ = fs::remove_file(&log);
     Ok(())
 }
 

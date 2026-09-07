@@ -315,7 +315,13 @@ cargo kclippy-x86 -- -D warnings          # bare-target crates, x86-64
 cargo kbuild-arm                          # build the same set
 cargo kbuild-x86
 sw-checklist
+cargo test -p mlos-cli -- --ignored    # boots a VM under TCG; slow, so opt-in
 ```
+
+The last one is why `--ignored` exists: booting a VM takes seconds, which
+is too slow for the ordinary gate but exactly what CI should do before
+trusting a change. `.github/workflows/ci.yml` runs the whole list on an
+aarch64 Linux runner.
 
 **Why the bare targets get their own lines.** `--workspace` does not work
 for them: `mlos-kernel` is `no_std`/`no_main` and cannot link for the host

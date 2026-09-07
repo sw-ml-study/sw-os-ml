@@ -1,0 +1,52 @@
+# The gate from AGENTS.md, run on a machine that is not this Mac.
+#
+# aarch64 Linux runners, so QEMU runs an aarch64 guest without emulating a
+# foreign architecture -- the same thing that happens locally. Nothing in
+# this repository emulates x86-64; the x86_64-unknown-none target is built
+# so it cannot rot, and its entry point halts.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      # QEMU only. `mlos build` finds llvm-objcopy inside the toolchain
+      # rustup installs, so nothing else is needed.
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-arm
+
+      # rust-toolchain.toml pins the version and both bare targets.
+      - name: Show toolchain
+        run: rustc --version && rustc --print target-list | grep -c none
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+      - name: Bare targets
+        run: |
+          cargo kclippy-arm -- -D warnings
+          cargo kclippy-x86 -- -D warnings
+          cargo kbuild-arm
+          cargo kbuild-x86
+
+      # TCG, not KVM: deterministic, and available on any runner. A boot
+      # that fails here fails the same way every time.
+      - name: Boot under TCG
+        run: cargo test -p mlos-cli -- --ignored
+
+      - name: Report what the guest said
+        if: always()
+        run: cargo run -q -p mlos-cli -- run tcg --capture 8
