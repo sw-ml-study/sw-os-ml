@@ -95,6 +95,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-provider"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+]
+
+[[package]]
+name = "mlos-provider-dram"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+ "mlos-provider",
+]
+
+[[package]]
 name = "mlos-queue"
 version = "0.0.1"
 

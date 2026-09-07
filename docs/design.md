@@ -332,12 +332,32 @@ microkernel stops being one.
 
 ```rust
 pub trait Provider {
-    fn resolve(&self, id: ObjectId) -> Result<Placement>;
-    fn read(&self, id: ObjectId, off: u32, into: &mut [u8]) -> Result<u32>;
-    fn prefetch(&self, id: ObjectId, hint: Hint) -> Result<()>;
-    fn cost(&self, id: ObjectId) -> Cost;
+    fn id(&self) -> ProviderId;
+    fn read(&self, object: Located, offset: u32, into: &mut [u8]) -> Result<u32>;
+    fn cost(&self, object: Located) -> Cost;
+    fn prefetch(&self, object: Located) -> Result<()> { Ok(()) }   // default
 }
 ```
+
+Two changes made when this was implemented in M2 step 002, recorded here
+rather than left as drift:
+
+- **`resolve` is gone.** Resolution is the object table's job: an id
+  yields an `ObjectMeta`, which names the provider and carries a handle.
+  Asking the provider to resolve as well is a second lookup answering a
+  question already answered -- on the fault path, where there is least
+  room for one.
+- **Providers take a `Located`, not an `ObjectId`**: the id *and* the
+  handle, because different providers need different halves. A block
+  store needs the handle and does not care what the bytes mean; a
+  recompute provider needs the id, because it has to know which
+  activation to rebuild and that is exactly what class, layer and tensor
+  say.
+
+`Cost` is two numbers, not one -- a fixed latency and a throughput --
+because they behave differently: latency is paid once however small the
+object, throughput scales with size. A policy comparing a 2 MB activation
+against a 40 MB expert gets the wrong answer from either alone.
 
 Four methods (the `sw-checklist` gate again, and it happens to be the
 right number). `cost()` is not optional: an eviction policy that cannot

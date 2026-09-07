@@ -1,6 +1,6 @@
 number = 2
 slug = "provider-trait"
-status = "pending"
+status = "in-progress"
 description = "Provider trait (resolve/read/prefetch/cost) plus the DRAM provider and the re..."
 role = "production"
 context_files = []

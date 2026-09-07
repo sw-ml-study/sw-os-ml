@@ -113,6 +113,12 @@ pub struct ObjectMeta {
     pub tier: Tier,
     /// Who can produce it.
     pub provider: ProviderId,
+    /// Where it is, as that provider understands "where".
+    ///
+    /// Opaque here on purpose: a DRAM address, a block number, a recipe
+    /// for recomputing it. The table records which provider to ask and
+    /// what to tell it; only the provider knows what the number means.
+    pub handle: u64,
     /// When it is next wanted.
     pub next_use: NextUse,
     /// How often it has been wanted, for frequency-aware caching.
