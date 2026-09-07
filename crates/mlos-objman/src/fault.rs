@@ -79,7 +79,9 @@ impl<'a, const N: usize> Manager<'a, N> {
         let located = Located::new(id, &meta);
 
         let cost = provider.cost(located).for_bytes(meta.size);
-        self.last_fault = Some(ModelFault::new(id, by, cost).ok_or(Error::BadClass)?);
+        let fault = ModelFault::new(id, by, cost).ok_or(Error::BadClass)?;
+        self.last_fault = Some(fault);
+        self.counters.fault(fault.class, meta.size);
 
         provider.prefetch(located)?;
         self.place(id, meta.size, lease)
@@ -107,6 +109,7 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// session's admission contract exists to prevent.
     fn place(&mut self, id: ObjectId, size: u32, lease: Lease) -> Result<Handle> {
         let address = self.arena.place(size)?;
+        self.counters.resident(i64::from(size));
         let placed = self.table.get_mut(id).ok_or(Error::BadObject)?;
         placed.resident_at = address;
         placed.tier = Tier::Warm;

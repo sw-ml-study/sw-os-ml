@@ -218,3 +218,42 @@ fn missing_objects_and_missing_providers_differ() {
         "registered, but nothing can produce it"
     );
 }
+
+/// The manager counts what it services. Kept here rather than left to a
+/// caller because a fault the caller forgot to count is, as far as any
+/// measurement goes, a fault that did not happen.
+#[test]
+fn the_manager_accounts_for_what_it_did() {
+    let provider = Recording {
+        reads: Cell::new(0),
+        prefetches: Cell::new(0),
+    };
+    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    manager.attach(&provider).unwrap();
+
+    manager.register(tile(1, 0), cold(4096)).unwrap();
+    manager.register(tile(2, 0), cold(4096)).unwrap();
+    manager
+        .acquire(tile(1, 0), Lease::Pin, SessionId(1))
+        .unwrap();
+
+    let report = manager.counters.report();
+    assert_eq!(report.total_faults(), 1, "one miss");
+    assert_eq!(report.worst(), Some((ObjectClass::WeightTile, 1)));
+    assert_eq!(report.registered, 8192, "both objects exist");
+    assert_eq!(report.resident, 4096, "one of them is in memory");
+    assert_eq!(
+        report.residency_per_mille(),
+        Some(500),
+        "half the model resident -- the ratio the system optimises"
+    );
+
+    manager
+        .acquire(tile(1, 0), Lease::Pin, SessionId(2))
+        .unwrap();
+    assert_eq!(
+        manager.counters.report().total_faults(),
+        1,
+        "a hit is not a fault"
+    );
+}

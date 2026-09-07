@@ -1,6 +1,6 @@
 number = 4
 slug = "metrics"
-status = "pending"
+status = "in-progress"
 description = "Per-class fault counters and the Rm/Bt ratios, readable from mlsh."
 role = "production"
 context_files = []

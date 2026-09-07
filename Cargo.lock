@@ -74,6 +74,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-metrics"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+]
+
+[[package]]
 name = "mlos-mmu-aarch64"
 version = "0.0.1"
 dependencies = [
@@ -85,6 +92,7 @@ name = "mlos-objman"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-metrics",
  "mlos-objtab",
  "mlos-provider",
 ]

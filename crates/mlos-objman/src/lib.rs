@@ -18,6 +18,7 @@ mod fault;
 mod lease;
 
 use mlos_abi::{Error, ObjectId, Result};
+use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
 use mlos_provider::Provider;
 
@@ -34,8 +35,15 @@ pub struct Manager<'a, const N: usize> {
     pub table: Table<N>,
     arena: Arena,
     providers: [Option<&'a dyn Provider>; MAX_PROVIDERS],
-    /// The most recent fault, for a caller to report or count.
+    /// The most recent fault, for a caller to report on.
     pub last_fault: Option<ModelFault>,
+    /// What has happened, counted.
+    ///
+    /// Kept here rather than by a caller because this is where the events
+    /// are: a fault that the manager serviced and a caller forgot to
+    /// count is a fault that did not happen, as far as any measurement is
+    /// concerned.
+    pub counters: Counters,
 }
 
 impl<'a, const N: usize> Manager<'a, N> {
@@ -46,6 +54,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
+            counters: Counters::EMPTY,
         }
     }
 
@@ -78,10 +87,11 @@ impl<'a, const N: usize> Manager<'a, N> {
 
     /// Registers an object the manager may later be asked for.
     pub fn register(&mut self, id: ObjectId, meta: ObjectMeta) -> Result<()> {
-        if self.table.insert(id, meta) {
-            return Ok(());
+        if !self.table.insert(id, meta) {
+            return Err(Error::NoBudget);
         }
-        Err(Error::NoBudget)
+        self.counters.registered(meta.size);
+        Ok(())
     }
 }
 

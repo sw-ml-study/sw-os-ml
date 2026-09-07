@@ -43,6 +43,28 @@ pub enum ObjectClass {
 }
 
 impl ObjectClass {
+    /// Every class, in discriminant order.
+    ///
+    /// Exists so accounting can be per-class without anywhere keeping a
+    /// second list that drifts from this one. Adding a class here is the
+    /// only edit a new class needs.
+    pub const ALL: [Self; 8] = [
+        Self::WeightTile,
+        Self::Scale,
+        Self::Expert,
+        Self::KvBlock,
+        Self::Activation,
+        Self::EmbedBlock,
+        Self::RagBlock,
+        Self::Adapter,
+    ];
+
+    /// Its position in [`Self::ALL`], for indexing a per-class array.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize - 1
+    }
+
     /// Decodes a class byte, rejecting anything this ABI does not define.
     #[must_use]
     pub const fn from_u8(value: u8) -> Option<Self> {
