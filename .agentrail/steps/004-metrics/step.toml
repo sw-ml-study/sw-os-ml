@@ -1,8 +1,9 @@
 number = 4
 slug = "metrics"
-status = "in-progress"
+status = "completed"
 description = "Per-class fault counters and the Rm/Bt ratios, readable from mlsh."
 role = "production"
 context_files = []
 created_at = "2026-09-06T18:37:35"
-commits = []
+completed_at = "2026-09-07T11:48:15"
+commits = ["2fe6dd7e29bc05b55d8296e5916b45391beb6a2f"]
