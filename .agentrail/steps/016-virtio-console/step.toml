@@ -1,6 +1,6 @@
-number = 17
+number = 16
 slug = "virtio-console"
-status = "pending"
+status = "in-progress"
 description = "A virtio-console driver, so MLOS has a console under Virtualization.framework..."
 role = "production"
 context_files = []

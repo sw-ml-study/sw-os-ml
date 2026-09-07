@@ -33,6 +33,11 @@ pub struct Machine {
     pub uart_base: Option<usize>,
     /// The console's interrupt number, if the tree gives one.
     pub uart_irq: Option<u32>,
+    /// The lowest `virtio_mmio@` window and its size, with how many
+    /// identical slots follow it.
+    pub virtio: Option<(usize, usize)>,
+    /// How many `virtio_mmio@` slots the tree describes.
+    pub virtio_count: u32,
     /// GICv3 distributor and redistributor bases, if the tree has them.
     pub gic: Option<(u64, u64)>,
     /// Where the blob itself lives, so it can be reclaimed once read.
@@ -86,6 +91,8 @@ impl Machine {
             cpu_count: scan.cpu_count,
             uart_base: scan.uart_base,
             uart_irq: scan.uart_irq,
+            virtio: scan.virtio,
+            virtio_count: scan.virtio_count,
             // Only a v3 layout is understood; a v2 reports a CPU
             // interface in that second range, which is a different device.
             gic: scan.gic_v3.then_some(scan.gic_reg).flatten(),

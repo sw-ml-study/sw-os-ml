@@ -1,4 +1,4 @@
-number = 16
+number = 17
 slug = "efi-stub"
 status = "pending"
 description = "Make the kernel image dual-format: a valid arm64 Image AND a PE/COFF EFI appl..."

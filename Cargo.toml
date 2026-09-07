@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/mlos-abi",
+    "crates/mlos-virtio",
     "crates/mlos-cli",
     "crates/mlsh",
     "crates/mlos-device",
@@ -23,6 +24,7 @@ members = [
 # `kbuild-arm` / `kbuild-x86` aliases in .cargo/config.toml.
 default-members = [
     "crates/mlos-abi",
+    "crates/mlos-virtio",
     "crates/mlos-device",
     "crates/mlos-fdt",
     "crates/mlos-hal",

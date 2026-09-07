@@ -22,6 +22,16 @@ pub struct Scan<'a> {
     pub uart_base: Option<usize>,
     /// The console's interrupt number, if the tree gives one.
     pub uart_irq: Option<u32>,
+    /// The lowest `virtio_mmio@` window, and how many follow it.
+    ///
+    /// QEMU lays out 32 identical slots whether or not anything is
+    /// plugged in, so the count matters more than any single address:
+    /// finding the console means probing them.
+    pub virtio: Option<(usize, usize)>,
+    /// How many `virtio_mmio@` nodes were seen.
+    pub virtio_count: u32,
+    /// `/chosen/bootargs`, which says which console was asked for.
+    pub bootargs: Option<&'a str>,
     /// Whether the interrupt controller claimed `arm,gic-v3`.
     ///
     /// Kept apart from [`Self::gic_reg`] because a device tree does not
@@ -55,7 +65,7 @@ impl<'a> Scan<'a> {
     }
 
     /// Folds one property, ignoring everything not asked about.
-    fn prop(&mut self, name: &str, value: &[u8]) {
+    fn prop(&mut self, name: &str, value: &'a [u8]) {
         let cell = |index: usize| -> Option<u32> {
             let at = index * 4;
             Some(u32::from_be_bytes(value.get(at..at + 4)?.try_into().ok()?))
@@ -70,6 +80,11 @@ impl<'a> Scan<'a> {
                 // from the start of the SPI range, the GIC does not.
                 let kind = cell(0);
                 self.uart_irq = (kind == Some(0)).then(|| cell(1)).flatten().map(|n| n + 32);
+            }
+            (2, "bootargs") if self.node == "chosen" => {
+                self.bootargs = core::str::from_utf8(value)
+                    .ok()
+                    .map(|args| args.trim_end_matches('\0'));
             }
             (2, "compatible") if self.node.starts_with("intc@") => {
                 self.gic_v3 = value.split(|&b| b == 0).any(|name| name == b"arm,gic-v3");
@@ -99,6 +114,16 @@ impl<'a> Scan<'a> {
             self.regions.extend_usable(&pair);
         } else if self.node.starts_with("pl011@") && self.uart_base.is_none() {
             self.uart_base = pair(0).map(|(base, _)| base as usize);
+        } else if self.node.starts_with("virtio_mmio@") {
+            self.virtio_count += 1;
+            // The lowest window: the slots are uniform and contiguous, so
+            // one base and one size describe all of them.
+            if let Some((base, size)) = pair(0) {
+                let seen = self.virtio.map_or(usize::MAX, |(base, _)| base);
+                if (base as usize) < seen {
+                    self.virtio = Some((base as usize, size as usize));
+                }
+            }
         } else if self.node.starts_with("intc@") {
             // Both ranges or neither: half an interrupt controller is
             // worse than none, because it looks initialised.
@@ -123,6 +148,9 @@ impl Default for Scan<'_> {
             cpu_count: 0,
             uart_base: None,
             uart_irq: None,
+            virtio: None,
+            virtio_count: 0,
+            bootargs: None,
             gic_v3: false,
             gic_reg: None,
         }

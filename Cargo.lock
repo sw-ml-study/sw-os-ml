@@ -85,6 +85,13 @@ name = "mlos-trap-aarch64"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-virtio"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+]
+
+[[package]]
 name = "mlsh"
 version = "0.0.1"
 dependencies = [

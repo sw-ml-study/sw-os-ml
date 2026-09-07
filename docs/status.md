@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-06, saga `ml-os-foundations` + step 006 (GPU path correction).
+Last updated: 2026-09-06, during saga `mlos-boot` step 016.
 
 ---
 
@@ -35,30 +35,41 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 
 | Milestone | State |
 | --- | --- |
-| M0 foundations | **complete** -- saga `ml-os-foundations`, 5 steps |
-| M1 it boots | not started -- saga `mlos-boot` proposed in [plan.md](plan.md#saga-mlos-boot-m1) |
-| M2 it holds objects | not started |
+| M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
+| M1 it boots | **15 of 18 steps** -- saga `mlos-boot`. Gate G1 met; virtio console, EFI stub and CI remain |
+| M2 it holds objects | not started -- **this is where the ML content begins** |
 | M3 it knows better | not started |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
 
-## What exists in this repo
+Read that honestly: M1 is the part any small operating system has to do.
+Nothing in `docs/PRD.md`'s thesis is tested until M3, and no ML object
+exists until M2. One gate of eight is met.
 
-```
-  AGENTS.md          agentrail briefing + sw-os-ml policy
-  CLAUDE.md          -> AGENTS.md
-  README.md          document map
-  docs/PRD.md        what MLOS is for, 8 gates, non-goals
-  docs/architecture.md   kernel concepts + platform/hypervisor/GPU survey
-  docs/design.md     crates, syscalls, object table, ML-MMU contract
-  docs/plan.md       6 milestones, 6 follow-on sagas
-  docs/status.md     this file
-  docs/research.txt  raw source material (input, not specification)
-  .agentrail/        saga ml-os-foundations
-```
+## What works today
 
-No `crates/`. No `scripts/`. No workspace.
+Booted as a native aarch64 guest on Apple Silicon -- nothing emulates
+x86-64 anywhere in this repo.
+
+| | |
+| --- | --- |
+| Boot | arm64 `Image` header, so the loader applies the Linux boot protocol and hands us the device tree in `x0` |
+| Hosts | QEMU/HVF (native), QEMU/TCG (deterministic), Virtualization.framework via vfkit (starts, no output yet) |
+| Discovery | Memory map, CPU count, PL011 base and IRQ, GICv3 distributor and redistributor -- all read from the device tree, none hardcoded |
+| Memory | Identity map, 1 GiB blocks, `SCTLR_EL1.M` read back to prove it. Kernel image and blob carved out: 510 MiB usable of 512 |
+| Faults | Vector table installed; a fault reports `ESR`/`ELR`/`FAR`/`SPSR` and which of the sixteen vectors fired |
+| Interrupts | GICv3 + generic timer at 2 Hz, tracking wall clock; PL011 receive on a shared interrupt |
+| Shell | `mlsh` with `help`, `mem`, `dev`, `ticks`, line editing |
+| Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` |
+| Tests | 22 test binaries; `sw-checklist` at 0 failures |
+
+## What does not exist yet
+
+No `ML_OBJECT`, no object table, no provider, no model fault, no
+residency policy, no scheduler beyond a single kernel thread. The kernel
+manages memory the way any small OS does; it does not yet manage anything
+the PRD is about. That work starts at M2.
 
 ## Environment as verified on this machine
 
