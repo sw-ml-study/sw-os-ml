@@ -1,8 +1,9 @@
 number = 5
 slug = "synthetic-model"
-status = "in-progress"
+status = "completed"
 description = "8 layers x 16 tiles across three tiers, swept from mlsh. Gates G2 and G3."
 role = "production"
 context_files = []
 created_at = "2026-09-06T18:37:35"
-commits = []
+completed_at = "2026-09-07T14:43:40"
+commits = ["d72643582b2eee92ac6aa8a092b5c8b85cbb9ae1"]
