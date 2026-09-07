@@ -1,8 +1,9 @@
 number = 2
 slug = "provider-trait"
-status = "in-progress"
+status = "completed"
 description = "Provider trait (resolve/read/prefetch/cost) plus the DRAM provider and the re..."
 role = "production"
 context_files = []
 created_at = "2026-09-06T18:37:35"
-commits = []
+completed_at = "2026-09-06T20:28:11"
+commits = ["59bdcd3858a257af9735a8b32e6261ab3d4573ca"]
