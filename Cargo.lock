@@ -81,6 +81,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-objtab"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+]
+
+[[package]]
 name = "mlos-pl011"
 version = "0.0.1"
 dependencies = [

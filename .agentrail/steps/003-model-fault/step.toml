@@ -1,0 +1,8 @@
+number = 3
+slug = "model-fault"
+status = "pending"
+description = "The fault path end to end: acquire, miss, MODEL_FAULT{class,model,layer,tile}..."
+role = "production"
+context_files = []
+created_at = "2026-09-06T18:37:35"
+commits = []

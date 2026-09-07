@@ -1,6 +1,6 @@
-name = "mlos-boot"
-status = "completed"
-current_step = 18
-created_at = "2026-09-06T09:47:32"
+name = "mlos-objects"
+status = "active"
+current_step = 1
+created_at = "2026-09-06T18:37:35"
 plan_file = ".agentrail/plan.md"
 retroactive = false

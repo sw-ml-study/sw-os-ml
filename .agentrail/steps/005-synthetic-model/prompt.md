@@ -1,0 +1,1 @@
+8 layers x 16 tiles across three tiers, swept from mlsh. Gates G2 and G3.

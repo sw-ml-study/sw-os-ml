@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-objtab"
+version     = "0.0.1"
+description = "The ML object table: what MLOS knows about a piece of model state."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi = { path = "../mlos-abi", version = "0.0.1" }
+
+[lints]
+workspace = true

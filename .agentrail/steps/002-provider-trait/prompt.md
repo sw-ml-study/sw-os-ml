@@ -1,0 +1,1 @@
+Provider trait (resolve/read/prefetch/cost) plus the DRAM provider and the resolution path.

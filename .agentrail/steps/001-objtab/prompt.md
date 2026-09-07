@@ -1,0 +1,1 @@
+The ML object table: open-addressed on ObjectId, ObjectMeta, residency state. Host-tested.

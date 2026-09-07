@@ -1,45 +1,51 @@
-# MLOS Boot
+# MLOS Objects
 
-Vision: one kernel binary that reaches a console and a timer tick as an
-aarch64 guest, under two different hypervisors, from one source tree.
+Vision: the kernel stops managing memory the way every operating system
+does and starts managing ML state the way none of them do.
 
-Nothing ML-shaped exists yet. This saga earns the right to write the
-interesting parts: until MLOS boots, every claim in docs/architecture.md
-is untested prose. M1 turns the document set into a running program that
-prints one honest line.
+M1 produced a small aarch64 kernel: it boots, maps memory, takes
+interrupts, and answers a shell. Nothing in it is about machine learning.
+This saga adds the thing the whole project is for -- an object table whose
+entries are weights, KV blocks, experts and activations, with residency,
+providers, leases and a fault that carries meaning.
 
-Gate G1 from docs/PRD.md: MLOS starts from firmware, initializes memory,
-brings up a timer and a console, and reaches a shell prompt -- under
-QEMU/HVF and under Virtualization.framework, from the same source.
+Gates G2 and G3 from docs/PRD.md:
 
-Deliberately NOT in this saga: x86-64 (that is M6), userspace, scheduling
-beyond a single kernel thread, and any ML concept whatsoever. The object
-table is M2. Resisting that is the point.
+- G2: a synthetic transformer's weights registered as ML_OBJECTs across
+  at least three tiers, resolved through providers.
+- G3: touching a non-resident object raises MODEL_FAULT carrying
+  {class, model, layer, tile}, the provider services it, and the fault is
+  counted per class.
 
-1. **workspace** -- Cargo workspace on Rust 2024, both bare targets
-   building an empty kernel, sw-checklist green. Turns the pre-commit
-   gate on for the first time.
-2. **abi-skeleton** -- mlos-abi: error codes, ObjectId bit layout and
-   its layout test. Written now, not at M2, because the ML-MMU register
-   contract in docs/design.md depends on these exact bit positions and
-   changing them later is expensive.
-3. **hal-trait** -- mlos-hal: the four-method Hal trait, BootInfo,
-   Console/Timer/IrqController traits. No implementation.
-4. **aarch64-entry** -- _start at EL1, DTB parse, page tables, MMU on,
-   stack switch. The first code that must run on real silicon.
-5. **console-timer** -- PL011 console, GICv3, ARM generic timer. The
-   first printed line and the first interrupt.
-6. **cli-run** -- mlos build / mlos run --host hvf|tcg / mlos doctor.
-   doctor earns its place: host prerequisites differ sharply between
-   the Mac and the Linux box.
-7. **uefi-and-vz** -- UEFI image path; boot under
-   Virtualization.framework. Requirement N2 (two hypervisors per arch)
-   satisfied, or it never will be -- direct -kernel boot works too
-   easily to leave this for later.
-8. **ci-tcg** -- deterministic TCG boot test in CI. A boot failure that
-   reproduces identically every run is what makes kernel debugging
-   tractable.
+The ObjectId bit layout was fixed in M1 step 002 precisely so this saga
+would not have to move it.
+
+DEFERRED, deliberately: userspace and the syscall surface. docs/plan.md
+put them before the model fault, and that was the wrong order. Neither
+gate needs EL0: a fault is a kernel mechanism, and the object manager is
+the thing under test. Building a process model first would be weeks of
+POSIX-shaped machinery in front of the experiment. Userspace arrives when
+sessions need isolating from each other, which is M4.
+
+1. **objtab** -- the object table. Open-addressed on ObjectId, sized from
+   the residency budget, in a kernel arena. Host-tested: the table is
+   pure data structure and needs no VM to exercise.
+2. **provider-trait** -- Provider (resolve/read/prefetch/cost) and the
+   DRAM provider. `cost()` is not optional: an eviction policy that
+   cannot ask what recovery costs is guessing, which is what LRU does.
+3. **model-fault** -- acquire, miss, MODEL_FAULT{class,model,layer,tile},
+   provider services it, lease installed, resume. The fast path must not
+   cross into a service.
+4. **metrics** -- per-class counters. `Pf` broken down by class, `Rm`,
+   `Bt`. "40,000 faults" is meaningless; "38,000 of them cold KV" is a
+   diagnosis.
+5. **synthetic-model** -- 8 layers x 16 tiles across DRAM, a block store
+   and recompute; swept from mlsh. Gates G2 and G3, visibly.
+6. **blockstore** -- a virtio-blk provider, so objects can come from
+   somewhere that is not RAM and the tiers are real rather than
+   simulated. M1's virtio-mmio transport already exists.
 
 Parked until this saga lands:
-- x86-64 HAL. One architecture working beats two half-working.
-- Anything from docs/plan.md M2 onward.
+- Eviction policy. There is nothing to evict until residency is tracked.
+- Streams and next-use, which are M3 and the actual thesis.
+- Userspace, per above.
