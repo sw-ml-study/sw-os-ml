@@ -1,6 +1,6 @@
 number = 3
 slug = "model-fault"
-status = "pending"
+status = "in-progress"
 description = "The fault path end to end: acquire, miss, MODEL_FAULT{class,model,layer,tile}..."
 role = "production"
 context_files = []

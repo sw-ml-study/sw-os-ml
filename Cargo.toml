@@ -13,6 +13,7 @@ members = [
     "crates/mlos-hal-aarch64",
     "crates/mlos-machine",
     "crates/mlos-objtab",
+    "crates/mlos-objman",
     "crates/mlos-provider",
     "crates/mlos-provider-dram",
     "crates/mlos-mmu-aarch64",

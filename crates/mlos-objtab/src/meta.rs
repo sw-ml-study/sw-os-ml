@@ -113,12 +113,19 @@ pub struct ObjectMeta {
     pub tier: Tier,
     /// Who can produce it.
     pub provider: ProviderId,
-    /// Where it is, as that provider understands "where".
+    /// Where its *home* is, as that provider understands "where".
     ///
-    /// Opaque here on purpose: a DRAM address, a block number, a recipe
-    /// for recomputing it. The table records which provider to ask and
-    /// what to tell it; only the provider knows what the number means.
+    /// Opaque on purpose: a DRAM address, a block number, a recipe for
+    /// recomputing it. The table records which provider to ask and what
+    /// to tell it; only the provider knows what the number means.
+    ///
+    /// Distinct from [`Self::resident_at`], and both are needed. The home
+    /// is where the object comes from and does not change when it is
+    /// evicted; the residency is where it happens to be now. Collapsing
+    /// them would mean an object could only be fetched once.
     pub handle: u64,
+    /// Where it is in memory right now, or zero if it is not.
+    pub resident_at: u64,
     /// When it is next wanted.
     pub next_use: NextUse,
     /// How often it has been wanted, for frequency-aware caching.

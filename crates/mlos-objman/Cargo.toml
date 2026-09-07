@@ -1,0 +1,17 @@
+[package]
+name        = "mlos-objman"
+version     = "0.0.1"
+description = "The model object manager: residency, leases, and the model fault."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi      = { path = "../mlos-abi",      version = "0.0.1" }
+mlos-objtab   = { path = "../mlos-objtab",   version = "0.0.1" }
+mlos-provider = { path = "../mlos-provider", version = "0.0.1" }
+
+[lints]
+workspace = true
