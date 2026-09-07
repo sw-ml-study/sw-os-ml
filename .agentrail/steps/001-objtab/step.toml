@@ -1,8 +1,9 @@
 number = 1
 slug = "objtab"
-status = "in-progress"
+status = "completed"
 description = "The ML object table: open-addressed on ObjectId, ObjectMeta, residency state...."
 role = "production"
 context_files = []
 created_at = "2026-09-06T18:37:35"
-commits = []
+completed_at = "2026-09-06T18:41:29"
+commits = ["36dc7d5244beaf5c22d9343bb8c16563165a3fe7"]
