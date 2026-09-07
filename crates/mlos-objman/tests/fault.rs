@@ -28,8 +28,11 @@ impl Provider for Recording {
     fn id(&self) -> ProviderId {
         ProviderId(2)
     }
-    fn read(&self, object: Located, _offset: u32, _into: &mut [u8]) -> mlos_abi::Result<u32> {
+    fn read(&self, object: Located, _offset: u32, into: &mut [u8]) -> mlos_abi::Result<u32> {
         self.reads.set(self.reads.get() + 1);
+        // A pattern derived from the object, so a test can tell whose
+        // bytes it got -- and notice if it got nobody's.
+        into.fill(object.id.fields().layer as u8);
         Ok(object.size)
     }
     fn cost(&self, _object: Located) -> Cost {
@@ -39,6 +42,10 @@ impl Provider for Recording {
             bytes_per_ms: 1_000_000,
         }
     }
+    /// Never called on the fault path, and that is correct: prefetch is
+    /// what a policy does *ahead* of a fault, asynchronously. A
+    /// synchronous fetch that first asks to be prefetched is asking for
+    /// the same bytes twice.
     fn prefetch(&self, _object: Located) -> mlos_abi::Result<()> {
         self.prefetches.set(self.prefetches.get() + 1);
         Ok(())
@@ -84,7 +91,7 @@ fn a_fault_says_what_was_wanted() {
         reads: Cell::new(0),
         prefetches: Cell::new(0),
     };
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 1 << 20])));
     manager.attach(&provider).expect("slot 2 exists");
     manager.register(tile(17, 4), cold(2048)).expect("room");
 
@@ -114,25 +121,21 @@ fn a_hit_does_not_reach_the_provider() {
         reads: Cell::new(0),
         prefetches: Cell::new(0),
     };
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 1 << 20])));
     manager.attach(&provider).unwrap();
     manager.register(tile(3, 0), cold(1024)).unwrap();
 
     let first = manager
         .acquire(tile(3, 0), Lease::Pin, SessionId(1))
         .unwrap();
-    assert_eq!(
-        provider.prefetches.get(),
-        1,
-        "the miss reached the provider"
-    );
+    assert_eq!(provider.reads.get(), 1, "the miss reached the provider");
 
     manager.last_fault = None;
     let second = manager
         .acquire(tile(3, 0), Lease::Borrow, SessionId(2))
         .unwrap();
 
-    assert_eq!(provider.prefetches.get(), 1, "the hit did not");
+    assert_eq!(provider.reads.get(), 1, "the hit did not");
     assert!(manager.last_fault.is_none(), "and did not record a fault");
     assert_eq!(first.address, second.address, "same object, same place");
 }
@@ -145,7 +148,7 @@ fn concurrent_holders_are_counted_and_fetch_once() {
         reads: Cell::new(0),
         prefetches: Cell::new(0),
     };
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 1 << 20])));
     manager.attach(&provider).unwrap();
     manager.register(tile(13, 0), cold(4096)).unwrap();
 
@@ -157,7 +160,7 @@ fn concurrent_holders_are_counted_and_fetch_once() {
         })
         .collect();
 
-    assert_eq!(provider.prefetches.get(), 1, "one fetch for four sessions");
+    assert_eq!(provider.reads.get(), 1, "one fetch for four sessions");
     assert!(
         handles
             .windows(2)
@@ -177,7 +180,7 @@ fn a_full_arena_refuses_rather_than_overwriting() {
         reads: Cell::new(0),
         prefetches: Cell::new(0),
     };
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 4096));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 4096])));
     manager.attach(&provider).unwrap();
     manager.register(tile(1, 0), cold(4096)).unwrap();
     manager.register(tile(2, 0), cold(4096)).unwrap();
@@ -204,7 +207,7 @@ fn a_full_arena_refuses_rather_than_overwriting() {
 /// are different failures and say so.
 #[test]
 fn missing_objects_and_missing_providers_differ() {
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 1 << 20])));
     assert_eq!(
         manager.acquire(tile(1, 0), Lease::Pin, SessionId(1)),
         Err(Error::BadObject),
@@ -228,7 +231,7 @@ fn the_manager_accounts_for_what_it_did() {
         reads: Cell::new(0),
         prefetches: Cell::new(0),
     };
-    let mut manager = Manager::<64>::new(Arena::new(0x4000_0000, 1 << 20));
+    let mut manager = Manager::<64>::new(Arena::new(Vec::leak(vec![0u8; 1 << 20])));
     manager.attach(&provider).unwrap();
 
     manager.register(tile(1, 0), cold(4096)).unwrap();
@@ -255,5 +258,33 @@ fn the_manager_accounts_for_what_it_did() {
         manager.counters.report().total_faults(),
         1,
         "a hit is not a fault"
+    );
+}
+
+/// A fault must FETCH, not merely allocate. An earlier version of the
+/// manager reserved space and never filled it, so the next acquire was a
+/// hit that returned whatever had been in the arena before -- a bug that
+/// only a test reading the bytes back can catch.
+#[test]
+fn a_fault_actually_brings_the_bytes_in() {
+    let provider = Recording {
+        reads: Cell::new(0),
+        prefetches: Cell::new(0),
+    };
+    let arena: &'static mut [u8] = Vec::leak(vec![0xAAu8; 1 << 16]);
+    let mut manager = Manager::<64>::new(Arena::new(arena));
+    manager.attach(&provider).unwrap();
+    manager.register(tile(5, 0), cold(64)).unwrap();
+
+    let handle = manager
+        .acquire(tile(5, 0), Lease::Pin, SessionId(1))
+        .unwrap();
+
+    // SAFETY: the handle names memory the arena owns and the lease is
+    // still held, which is exactly when an address from a handle is valid.
+    let bytes = unsafe { core::slice::from_raw_parts(handle.address as *const u8, 64) };
+    assert!(
+        bytes.iter().all(|byte| *byte == 5),
+        "layer 5's pattern, not the arena's fill"
     );
 }

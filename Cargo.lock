@@ -133,6 +133,17 @@ name = "mlos-queue"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-synth"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-metrics",
+ "mlos-objman",
+ "mlos-objtab",
+ "mlos-provider",
+]
+
+[[package]]
 name = "mlos-trap-aarch64"
 version = "0.0.1"
 
@@ -147,6 +158,9 @@ dependencies = [
 name = "mlsh"
 version = "0.0.1"
 dependencies = [
+ "mlos-abi",
  "mlos-hal",
+ "mlos-metrics",
  "mlos-queue",
+ "mlos-synth",
 ]

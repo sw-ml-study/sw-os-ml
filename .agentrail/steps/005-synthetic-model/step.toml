@@ -1,6 +1,6 @@
 number = 5
 slug = "synthetic-model"
-status = "pending"
+status = "in-progress"
 description = "8 layers x 16 tiles across three tiers, swept from mlsh. Gates G2 and G3."
 role = "production"
 context_files = []

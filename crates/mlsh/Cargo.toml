@@ -9,8 +9,11 @@ repository.workspace   = true
 authors.workspace      = true
 
 [dependencies]
+mlos-abi   = { path = "../mlos-abi",   version = "0.0.1" }
 mlos-hal   = { path = "../mlos-hal",   version = "0.0.1" }
+mlos-metrics = { path = "../mlos-metrics", version = "0.0.1" }
 mlos-queue = { path = "../mlos-queue", version = "0.0.1" }
+mlos-synth = { path = "../mlos-synth", version = "0.0.1" }
 
 [lints]
 workspace = true

@@ -83,8 +83,7 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.last_fault = Some(fault);
         self.counters.fault(fault.class, meta.size);
 
-        provider.prefetch(located)?;
-        self.place(id, meta.size, lease)
+        self.place(id, located, provider, lease)
     }
 
     /// The provider that can produce an object, or `NoProvider`.
@@ -107,9 +106,22 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// Separate because its failure means something different: no room is
     /// a residency decision nobody has made yet, and it is the error a
     /// session's admission contract exists to prevent.
-    fn place(&mut self, id: ObjectId, size: u32, lease: Lease) -> Result<Handle> {
-        let address = self.arena.place(size)?;
+    fn place(
+        &mut self,
+        id: ObjectId,
+        located: Located,
+        provider: &dyn Provider,
+        lease: Lease,
+    ) -> Result<Handle> {
+        let size = located.size;
+        let (address, into) = self.arena.place(size)?;
+        // Fetch before recording residency. An object the table calls
+        // resident but whose bytes never arrived is worse than a miss:
+        // the next acquire is a hit, and returns whatever was in the
+        // arena beforehand.
+        provider.read(located, 0, into)?;
         self.counters.resident(i64::from(size));
+
         let placed = self.table.get_mut(id).ok_or(Error::BadObject)?;
         placed.resident_at = address;
         placed.tier = Tier::Warm;

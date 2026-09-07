@@ -17,6 +17,7 @@ members = [
     "crates/mlos-objman",
     "crates/mlos-provider",
     "crates/mlos-provider-dram",
+    "crates/mlos-synth",
     "crates/mlos-mmu-aarch64",
     "crates/mlos-pl011",
     "crates/mlos-trap-aarch64",

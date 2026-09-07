@@ -14,6 +14,7 @@
 
 mod commands;
 mod line;
+mod objects;
 
 use core::{fmt::Write, sync::atomic::AtomicU32};
 

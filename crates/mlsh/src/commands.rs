@@ -16,6 +16,9 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "help" | "?" => help(out),
         "mem" => mem(out, facts),
         "dev" => dev(out, facts),
+        "model" => crate::objects::model(out),
+        "sweep" => crate::objects::sweep(out),
+        "faults" => crate::objects::faults(out),
         "ticks" => {
             let ticks = facts.ticks.load(Ordering::Relaxed);
             let _ = writeln!(out, "{ticks} timer ticks since boot");
@@ -29,6 +32,9 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
 /// Lists what there is to ask for.
 fn help(out: &mut impl Write) {
     let _ = out.write_str(concat!(
+        "model  register the synthetic model across three tiers\r\n",
+        "sweep  acquire every tile in order, faulting them in\r\n",
+        "faults what that cost, per object class\r\n",
         "mem    physical memory map, and what is left\r\n",
         "dev    console, timer and interrupt controller\r\n",
         "ticks  timer ticks since boot\r\n",
