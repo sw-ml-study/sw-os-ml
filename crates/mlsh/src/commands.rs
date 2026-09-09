@@ -11,36 +11,56 @@ use crate::Facts;
 
 /// Runs one line.
 pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
-    match line.trim() {
+    let (verb, args) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
+    if NEEDS_MODEL.contains(&verb) && mlos_synth::with(|_| ()).is_none() {
+        let _ = writeln!(out, "  no model registered (try `model`)");
+        return;
+    }
+    match verb {
         "" => {}
-        "help" | "?" => help(out),
+        "help" | "?" => {
+            let _ = out.write_str(HELP);
+        }
         "mem" => mem(out, facts),
         "dev" => dev(out, facts),
-        "model" => crate::objects::model(out),
         "sweep" => crate::objects::sweep(out),
-        "faults" => crate::objects::faults(out),
-        "ticks" => {
-            let ticks = facts.ticks.load(Ordering::Relaxed);
-            let _ = writeln!(out, "{ticks} timer ticks since boot");
-        }
+        "arena" => crate::report::arena(out),
+        "faults" => crate::report::faults(out),
+        "model" => crate::objects::model(out, args),
+        "get" => crate::objects::get(out, args),
+        "objs" => crate::report::objs(out, args),
+        "ticks" => ticks(out, facts),
         other => {
             let _ = writeln!(out, "no such command: {other}   (try `help`)");
         }
     }
 }
 
-/// Lists what there is to ask for.
-fn help(out: &mut impl Write) {
-    let _ = out.write_str(concat!(
-        "model  register the synthetic model across three tiers\r\n",
-        "sweep  acquire every tile in order, faulting them in\r\n",
-        "faults what that cost, per object class\r\n",
-        "mem    physical memory map, and what is left\r\n",
-        "dev    console, timer and interrupt controller\r\n",
-        "ticks  timer ticks since boot\r\n",
-        "help   this\r\n",
-    ));
+/// Timer ticks since boot.
+fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
+    let ticks = facts.ticks.load(Ordering::Relaxed);
+    let _ = writeln!(out, "{ticks} timer ticks since boot");
 }
+
+/// Verbs that need a model to already exist.
+///
+/// A constant, so the check is one line in `dispatch` and the apology
+/// lives in one place -- three copies of it is three places to change.
+const NEEDS_MODEL: [&str; 5] = ["sweep", "get", "objs", "arena", "faults"];
+
+/// What `help` prints.
+const HELP: &str = concat!(
+    "model [KiB]   register the model; optionally set the arena budget\r\n",
+    "sweep         acquire every tile in order, faulting them in\r\n",
+    "get L T       acquire one tile, and say if it had to fault\r\n",
+    "objs [all]    what the table knows: tier, residency, use count\r\n",
+    "arena         how full memory is, and what would still fit\r\n",
+    "faults        what it all cost, per object class\r\n",
+    "mem           physical memory map, and what is left\r\n",
+    "dev           console, timer and interrupt controller\r\n",
+    "ticks         timer ticks since boot\r\n",
+    "help          this\r\n",
+);
 
 /// The physical memory map.
 ///

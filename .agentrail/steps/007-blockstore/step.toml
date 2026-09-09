@@ -1,4 +1,4 @@
-number = 6
+number = 7
 slug = "blockstore"
 status = "pending"
 description = "A virtio-blk provider so a tier is real storage rather than simulated."

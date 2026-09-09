@@ -43,6 +43,12 @@ kernel, turns it into a bootable arm64 image and boots it under QEMU with
 the console on your terminal -- `mlsh` is on the other end. Quit with
 `Ctrl-A x`; type `help` inside for what it can tell you.
 
+Inside, `model 8` registers a synthetic transformer against an 8 KiB
+arena, `get 3 7` acquires one weight tile, `sweep` walks the whole model
+and `arena` says how much of it fits. Running `get` on the same tile
+twice is the shortest demonstration of what an object table is for: the
+second time costs nothing.
+
 (Do not paste a trailing `# comment` after these: interactive zsh does not
 treat `#` as a comment, so it arrives as an argument. `mlos` will now say
 so rather than passing it to QEMU.)

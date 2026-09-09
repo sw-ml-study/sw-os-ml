@@ -1,0 +1,8 @@
+number = 6
+slug = "shell-verbs"
+status = "in-progress"
+description = "Make the object table explorable rather than watchable: objs, get L T, budget..."
+role = "production"
+context_files = []
+created_at = "2026-09-07T14:52:32"
+commits = []

@@ -1,30 +1,39 @@
-//! The verbs that are about ML objects.
+//! The verbs that make the object manager do something.
 //!
-//! Separate from `commands` because this is the part `mlsh` exists for.
-//! Everything else it can tell you -- the memory map, the devices -- any
-//! small operating system could. These three are about the object table,
-//! which is the thing MLOS has that others do not.
+//! Separate from `report`, which only looks. The distinction matters more
+//! here than it usually would: `sweep` and `get` change residency, so
+//! running one changes what the other reports, and knowing which is which
+//! is the difference between exploring a system and disturbing it.
 
 use core::fmt::Write;
 
-use mlos_abi::ObjectClass;
+use mlos_objman::Lease;
+use mlos_objtab::SessionId;
+use mlos_synth::model;
 
-/// Registers the synthetic model.
-pub fn model(out: &mut impl Write) {
-    match mlos_synth::register() {
+/// Default arena, in bytes: a quarter of the model's weights.
+const DEFAULT_BUDGET: usize = 32 * 1024;
+
+/// Registers the synthetic model, optionally with a different budget.
+///
+/// `model` for the default, `model 8` for eight kibibytes -- which is the
+/// knob worth having, because the whole subject is what happens when
+/// memory is smaller than the model.
+pub fn model(out: &mut impl Write, args: &str) {
+    let budget = args
+        .split_whitespace()
+        .next()
+        .and_then(|kib| kib.parse::<usize>().ok())
+        .map_or(DEFAULT_BUDGET, |kib| kib * 1024);
+
+    match mlos_synth::register(budget) {
         Ok((objects, bytes)) => {
             let _ = writeln!(
                 out,
                 "  registered {objects} objects, {} KiB across 3 tiers",
                 bytes >> 10
             );
-            let _ = writeln!(
-                out,
-                "  {} layers x {} tiles of {} B, plus one activation each",
-                mlos_synth::LAYERS,
-                mlos_synth::TILES,
-                mlos_synth::TILE_BYTES
-            );
+            let _ = writeln!(out, "  budget     {} KiB of arena", budget >> 10);
         }
         Err(error) => {
             let _ = writeln!(out, "  could not register: {error:?}");
@@ -41,7 +50,7 @@ pub fn sweep(out: &mut impl Write) {
         swept.acquired, swept.total
     );
     match swept.stopped {
-        // Not a failure. The arena is a quarter of the model, nothing
+        // Not a failure. The arena is smaller than the model, nothing
         // evicts yet, and running out is the honest outcome -- it is the
         // problem M3 exists to solve.
         Some(error) => {
@@ -53,44 +62,52 @@ pub fn sweep(out: &mut impl Write) {
     }
 }
 
-/// The per-class breakdown: the line that says what the system is
-/// actually struggling with, which a total never answers.
-fn by_class(out: &mut impl Write, report: &mlos_metrics::Report) {
-    for class in ObjectClass::ALL {
-        let count = report.faults[class.index()];
-        if count > 0 {
-            let fetched = report.fetched[class.index()] >> 10;
-            let _ = writeln!(out, "    {class:?}: {count} faults, {fetched} KiB fetched");
-        }
-    }
-    let resident = report.residency_per_mille().unwrap_or(0);
-    let _ = writeln!(
-        out,
-        "  Rm       {}/{} KiB resident = {resident} per mille",
-        report.resident >> 10,
-        report.registered >> 10
-    );
-}
-
-/// Reports what it all cost.
-pub fn faults(out: &mut impl Write) {
-    let Some((report, last)) = mlos_synth::report() else {
-        let _ = writeln!(out, "  no model registered (try `model`)");
+/// Acquires one tile by hand, and says whether it had to fault.
+///
+/// The verb that makes the fault path pokeable. Running it twice on the
+/// same tile is the shortest possible demonstration of what the object
+/// table is for: the second time costs nothing.
+pub fn get(out: &mut impl Write, args: &str) {
+    let mut numbers = args
+        .split_whitespace()
+        .filter_map(|word| word.parse::<u16>().ok());
+    let (Some(layer), Some(tensor)) = (numbers.next(), numbers.next()) else {
+        let _ = writeln!(out, "  usage: get <layer> <tensor>");
         return;
     };
-    let _ = writeln!(out, "  faults   {} total", report.total_faults());
-    by_class(out, &report);
-
-    if let Some(fault) = last {
-        let _ = writeln!(
-            out,
-            "  last     {:?} model {} layer {} tensor {} tile {}, {} us",
-            fault.class,
-            fault.model,
-            fault.layer,
-            fault.tensor,
-            fault.tile,
-            fault.cost.0 / 1000
-        );
+    match acquire(layer, tensor) {
+        None => {} // dispatch already said so
+        Some((_, Err(error), _)) => {
+            let _ = writeln!(out, "  refused: {error:?}");
+        }
+        Some((resident, Ok(handle), fault)) => {
+            let how = if resident { "hit" } else { "faulted" };
+            let _ = writeln!(out, "  {how}: {} B at {:#x}", handle.size, handle.address);
+            if let (false, Some(fault)) = (resident, fault) {
+                let _ = writeln!(out, "  cost {} us", fault.cost.0 / 1000);
+            }
+        }
     }
+}
+
+/// Acquires one tile, reporting whether it was already resident.
+///
+/// The residency is read *before* the acquire, because afterwards every
+/// object is resident and the interesting fact -- whether this one had to
+/// be fetched -- is gone.
+type Acquired = (
+    bool,
+    mlos_abi::Result<mlos_objman::Handle>,
+    Option<mlos_objman::ModelFault>,
+);
+fn acquire(layer: u16, tensor: u16) -> Option<Acquired> {
+    let id = model::tile(layer, tensor);
+    mlos_synth::with(|manager| {
+        let resident = manager
+            .table
+            .get(id)
+            .is_some_and(|meta| meta.resident_at != 0);
+        let acquired = manager.acquire(id, Lease::Pin, SessionId(1));
+        (resident, acquired, manager.last_fault)
+    })
 }

@@ -1,4 +1,11 @@
 //! One line of input, in a fixed buffer.
+//!
+//! Its own crate because nothing about it is shell-specific: anything
+//! reading a line from a console needs a buffer, a backspace and a limit.
+//! `mlsh` is only the first such reader.
+
+#![no_std]
+#![forbid(unsafe_code)]
 
 /// The longest command line. Nothing here takes arguments yet, so this is
 /// generous; it is fixed because there is no allocator, and it will still

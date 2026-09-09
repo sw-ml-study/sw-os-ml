@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-line"
+version     = "0.0.1"
+description = "One line of input in a fixed buffer, with the editing a console needs."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

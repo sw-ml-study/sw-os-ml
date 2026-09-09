@@ -33,7 +33,9 @@ pub const MAX_PROVIDERS: usize = 8;
 pub struct Manager<'a, const N: usize> {
     /// What is known about each object.
     pub table: Table<N>,
-    arena: Arena,
+    /// Where resident objects live. Public because how full it is, and
+    /// how much would still fit, is a question anything may ask.
+    pub arena: Arena,
     providers: [Option<&'a dyn Provider>; MAX_PROVIDERS],
     /// The most recent fault, for a caller to report on.
     pub last_fault: Option<ModelFault>,

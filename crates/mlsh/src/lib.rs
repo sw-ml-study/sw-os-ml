@@ -13,8 +13,8 @@
 #![no_std]
 
 mod commands;
-mod line;
 mod objects;
+mod report;
 
 use core::{fmt::Write, sync::atomic::AtomicU32};
 
@@ -54,7 +54,7 @@ pub struct Facts<'a> {
 /// A line reader and a dispatcher.
 #[derive(Default)]
 pub struct Shell {
-    line: line::Line,
+    line: mlos_line::Line,
 }
 
 impl Shell {
@@ -98,7 +98,7 @@ impl Shell {
             b'\r' | b'\n' => {
                 let _ = out.write_str("\r\n");
                 commands::dispatch(self.line.as_str(), out, facts);
-                self.line = line::Line::default();
+                self.line = mlos_line::Line::default();
                 self.prompt(out);
             }
             0x7f | 0x08 if self.line.backspace() => {

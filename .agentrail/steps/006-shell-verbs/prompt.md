@@ -1,0 +1,1 @@
+Make the object table explorable rather than watchable: objs, get L T, budget N, arena. The shell should let you prod the manager by hand, not just run three set pieces.

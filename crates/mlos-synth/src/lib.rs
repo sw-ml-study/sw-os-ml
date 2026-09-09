@@ -11,12 +11,11 @@
 
 #![no_std]
 
-mod model;
+pub mod model;
 mod state;
 mod tiers;
 
 use mlos_abi::Result;
-use mlos_metrics::Report;
 use mlos_objman::{Arena, Lease, Manager};
 
 use mlos_objtab::SessionId;
@@ -28,7 +27,7 @@ pub use model::{ACTIVATION_BYTES, LAYERS, TILE_BYTES, TILES};
 /// a full table is never what a sweep runs into first.
 pub(crate) const CAPACITY: usize = 512;
 
-/// Bytes the arena holds.
+/// Bytes the static arena holds; the ceiling on any budget.
 ///
 /// A quarter of the model's weights, chosen so a sweep runs out. A
 /// demonstration where everything fits demonstrates nothing: the
@@ -48,9 +47,13 @@ pub struct Swept {
 /// Registers the model, replacing whatever was there.
 ///
 /// Returns how many objects were registered and how many bytes they are.
-pub fn register() -> Result<(u32, u64)> {
+pub fn register(budget: usize) -> Result<(u32, u64)> {
     let manager = manager();
-    *manager = Some(Manager::new(Arena::new(arena())));
+    let bytes = arena();
+    // Clamped: a budget below one tile can hold nothing, and one above
+    // the static buffer does not exist. Both are user input.
+    let limit = budget.clamp(TILE_BYTES as usize, bytes.len());
+    *manager = Some(Manager::new(Arena::new(&mut bytes[..limit])));
     let held = manager.as_mut().ok_or(mlos_abi::Error::NoProvider)?;
     held.attach(&tiers::BACKING)?;
     held.attach(&tiers::RECOMPUTE)?;
@@ -105,9 +108,13 @@ fn walk(held: &mut Manager<'static, CAPACITY>, session: u16) -> (u32, Option<mlo
     (acquired, None)
 }
 
-/// What has happened so far, and where the last fault was.
-#[must_use]
-pub fn report() -> Option<(Report, Option<mlos_objman::ModelFault>)> {
-    let held = manager().as_ref()?;
-    Some((held.counters.report(), held.last_fault))
+/// Runs `visit` against the manager, if there is one.
+///
+/// One accessor rather than a wrapper for every question. The shell wants
+/// to ask things nobody has thought of yet -- what tier is this in, how
+/// often has it been used, what would evicting it save -- and a crate
+/// that answers only the questions it anticipated is one the shell has to
+/// be extended through every time it wants a new one.
+pub fn with<T>(visit: impl FnOnce(&mut Manager<'static, CAPACITY>) -> T) -> Option<T> {
+    manager().as_mut().map(visit)
 }
