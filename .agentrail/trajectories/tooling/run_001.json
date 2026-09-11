@@ -1,0 +1,11 @@
+{
+  "task_type": "tooling",
+  "state": {
+    "number": 8,
+    "step": "layout-static"
+  },
+  "action": "Read the pinned contract in ../sw-mlpl/docs/storage-layout-viz.md and sw-tos's shipped emitter summary rather than inventing a variant. Wrote three host crates. Read every figure back from the artifact that decided it: ELF section headers, the arm64 Image header's text_offset/image_size, the disk file's real size. Mutation-checked both test suites -- neutered the checker (6 of 9 fail), neutered only tiling (exactly the 3 tiling tests fail), and corrupted the committed sample four ways without reformatting it (each fails exactly one test). Retired all six sw-checklist warnings the step introduced rather than deferring them. Ran the full gate including the ignored TCG boot tests, because the VMM's -m argument changed.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-11T15:52:27"
+}
