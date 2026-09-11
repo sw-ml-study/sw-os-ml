@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-elf"
+version     = "0.0.1"
+description = "Read section addresses and sizes out of an ELF64 file."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

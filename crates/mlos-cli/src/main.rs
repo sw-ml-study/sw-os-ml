@@ -31,6 +31,11 @@ fn dispatch(args: &[String]) -> io::Result<()> {
             println!("{}", image::build()?.display());
         }
         Some("run") => run::boot(args)?,
+        Some("layout") => {
+            options(args, false)?;
+            let written = mlos_image_map::emit(&image::build()?, &image::disk()?)?;
+            println!("{}", written.display());
+        }
         Some("doctor") => {
             options(args, false)?;
             doctor::doctor();
@@ -105,6 +110,7 @@ mlos -- build, run and diagnose MLOS
 Usage:
   mlos build              build the kernel and its bootable image
   mlos run [HOST]         boot it with the console on this terminal
+  mlos layout             write build/storage-layout.json for the visualizer
   mlos doctor             report what is installed and what is missing
 
 Arguments:

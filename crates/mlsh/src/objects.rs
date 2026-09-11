@@ -11,9 +11,6 @@ use mlos_objman::Lease;
 use mlos_objtab::SessionId;
 use mlos_synth::model;
 
-/// Default arena, in bytes: a quarter of the model's weights.
-const DEFAULT_BUDGET: usize = 32 * 1024;
-
 /// Registers the synthetic model, optionally with a different budget.
 ///
 /// `model` for the default, `model 8` for eight kibibytes -- which is the
@@ -24,7 +21,7 @@ pub fn model(out: &mut impl Write, args: &str) {
         .split_whitespace()
         .next()
         .and_then(|kib| kib.parse::<usize>().ok())
-        .map_or(DEFAULT_BUDGET, |kib| kib * 1024);
+        .map_or(mlos_lab::ARENA_BYTES, |kib| kib * 1024);
 
     match mlos_lab::register(budget) {
         Ok((objects, bytes)) => registered(out, objects, bytes, budget),

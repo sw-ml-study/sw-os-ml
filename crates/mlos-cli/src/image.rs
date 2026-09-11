@@ -77,20 +77,20 @@ fn run(program: &str, args: &[&str]) -> io::Result<()> {
 /// purpose -- so when the guest reads it back from a real device, the
 /// bytes being *right* is not the news. The news is where they came from.
 pub fn disk() -> io::Result<PathBuf> {
-    /// Layers, tiles per layer and bytes per tile, mirroring `mlos-synth`.
-    const SHAPE: (u16, u16, usize) = (8, 16, 1024);
+    use mlos_synth::{LAYERS, TILE_BYTES, TILES};
 
     let path = PathBuf::from("target").join(TARGET).join("debug/model.img");
-    let mut bytes = Vec::with_capacity(SHAPE.0 as usize * SHAPE.1 as usize * SHAPE.2);
-    for layer in 0..SHAPE.0 {
-        for tensor in 0..SHAPE.1 {
+    let bytes_per_tile = TILE_BYTES as usize;
+    let mut bytes = Vec::with_capacity(usize::from(LAYERS) * usize::from(TILES) * bytes_per_tile);
+    for layer in 0..LAYERS {
+        for tensor in 0..TILES {
             // 0xA0 | (layer ^ tensor). The high nibble is the point: the
             // stub provider fills with `layer ^ tensor` alone, so a byte
             // with 0xA0 in it can only have come off the disk. "The right
             // bytes arrived" is then a statement about provenance rather
             // than about arithmetic.
             let fill = 0xA0 | ((layer as u8) ^ (tensor as u8));
-            bytes.extend(std::iter::repeat_n(fill, SHAPE.2));
+            bytes.extend(std::iter::repeat_n(fill, bytes_per_tile));
         }
     }
     std::fs::write(&path, &bytes)?;

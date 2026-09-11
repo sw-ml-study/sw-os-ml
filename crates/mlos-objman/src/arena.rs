@@ -21,6 +21,14 @@ pub struct Arena {
 }
 
 impl Arena {
+    /// What a placement is rounded up to, in bytes.
+    ///
+    /// Enough for anything a device will DMA into, and it keeps one
+    /// object's tail out of the next one's cache line. Public because a
+    /// layout emitter draws the arena in these units, and two statements
+    /// of the same granularity would be one too many.
+    pub const ALIGN: u32 = 16;
+
     /// An arena over `bytes`.
     ///
     /// Safe, which is worth saying because it looks like it should not
@@ -45,10 +53,7 @@ impl Arena {
     /// has made yet, not a failure. It is the error a session's admission
     /// contract exists to prevent.
     pub fn place(&mut self, size: u32) -> Result<(u64, &mut [u8])> {
-        // Sixteen-byte aligned: enough for anything a device will DMA
-        // into, and it keeps one object's tail out of the next one's
-        // cache line.
-        let want = (size as usize).next_multiple_of(16);
+        let want = (size as usize).next_multiple_of(Self::ALIGN as usize);
         let end = self.used.checked_add(want).ok_or(Error::NoBudget)?;
         let room = self.bytes.get_mut(self.used..end).ok_or(Error::NoBudget)?;
         let at = self.base + self.used as u64;

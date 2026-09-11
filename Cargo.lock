@@ -9,6 +9,10 @@ version = "0.0.1"
 [[package]]
 name = "mlos-cli"
 version = "0.0.1"
+dependencies = [
+ "mlos-image-map",
+ "mlos-synth",
+]
 
 [[package]]
 name = "mlos-console"
@@ -23,6 +27,10 @@ dependencies = [
 
 [[package]]
 name = "mlos-device"
+version = "0.0.1"
+
+[[package]]
+name = "mlos-elf"
 version = "0.0.1"
 
 [[package]]
@@ -48,6 +56,20 @@ name = "mlos-hal-aarch64"
 version = "0.0.1"
 dependencies = [
  "mlos-device",
+]
+
+[[package]]
+name = "mlos-image-map"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-elf",
+ "mlos-lab",
+ "mlos-layout",
+ "mlos-objman",
+ "mlos-objtab",
+ "mlos-synth",
+ "mlos-virtio-blk",
 ]
 
 [[package]]
@@ -78,6 +100,10 @@ dependencies = [
  "mlos-virtio",
  "mlos-virtio-blk",
 ]
+
+[[package]]
+name = "mlos-layout"
+version = "0.0.1"
 
 [[package]]
 name = "mlos-line"

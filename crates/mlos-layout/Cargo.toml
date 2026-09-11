@@ -1,0 +1,12 @@
+[package]
+name        = "mlos-layout"
+version     = "0.0.1"
+description = "The sw-ml-study.system-layout columnar contract: spaces, regions, edges."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

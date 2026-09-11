@@ -47,3 +47,8 @@ vm/
 # Belt and braces: no .jsonl under any agentrail path is worth tracking.
 .agentrail/**/*.jsonl
 .agentrail-archive/**/*.jsonl
+
+# `mlos layout` output. Generated from the build artifacts on demand; the
+# conforming sample the sibling repos develop against is committed at
+# examples/viz/ instead.
+/build/

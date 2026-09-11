@@ -35,7 +35,7 @@ pub(crate) const CAPACITY: usize = 512;
 /// A quarter of the model's weights, chosen so a sweep runs out. A
 /// demonstration where everything fits demonstrates nothing: the
 /// interesting number is how far it got.
-pub(crate) const ARENA_BYTES: usize = 32 * 1024;
+pub const ARENA_BYTES: usize = 32 * 1024;
 
 /// Registers the model, replacing whatever was there.
 ///

@@ -8,6 +8,10 @@ license.workspace      = true
 repository.workspace   = true
 authors.workspace      = true
 
+[dependencies]
+mlos-image-map = { path = "../mlos-image-map", version = "0.0.1" }
+mlos-synth     = { path = "../mlos-synth",     version = "0.0.1" }
+
 [[bin]]
 name = "mlos"
 path = "src/main.rs"

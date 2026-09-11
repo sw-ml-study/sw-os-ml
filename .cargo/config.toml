@@ -7,25 +7,27 @@ target-dir = "target"
 # resolves it to an absolute path -- a relative -T is resolved against the
 # working directory, which is not stable across cargo invocations.
 
-# Every bare-target-capable crate, named explicitly. Not a bare
-# `--target`, which would sweep in host-only crates (mlos-sim, mlos-cli)
-# as soon as they exist and fail confusingly.
+# The bare targets get the whole workspace MINUS the host-only crates --
+# the ones that use `std` and so cannot link for a bare target at all.
+# Not a bare `--target`, which would sweep those in and fail confusingly.
+#
+# The lists drifted once: kbuild-arm named every crate and kclippy-arm did
+# not, so four crates were built for the bare targets and never linted
+# there, and an unused import reached a commit through the gap. Excluding
+# host-only crates instead of naming bare-target ones keeps the four
+# aliases identical, which is what stops that recurring.
+#
+# The exclusions still have to be written out four times, so
+# `crates/mlos-cli/tests/aliases.rs` checks that all four agree with each
+# other AND that the set is exactly the crates without `#![no_std]`.
+# Adding a host-side crate and forgetting this line fails `cargo test`
+# with a message saying which line to edit.
 #
 # `--lib --bins`, not `--all-targets`: there is no test harness on a bare
 # target, so `--all-targets` tries to build the test binaries and fails.
 # Tests are a host-side concern and run under `cargo test`.
-# `--workspace --exclude mlos-cli` rather than a list of crates.
-#
-# The lists drifted: kbuild-arm named every crate and kclippy-arm did not,
-# so four crates were built for the bare targets and never linted there.
-# An unused import reached a commit that way. A list that has to be
-# updated by hand is a list that will be wrong; excluding the one host-only
-# crate is self-maintaining.
-#
-# `--lib --bins` for clippy: there is no test harness on a bare target, so
-# --all-targets would try to build test binaries and fail.
 [alias]
-kbuild-arm  = "build  --workspace --exclude mlos-cli --target aarch64-unknown-none-softfloat"
-kbuild-x86  = "build  --workspace --exclude mlos-cli --target x86_64-unknown-none"
-kclippy-arm = "clippy --workspace --exclude mlos-cli --target aarch64-unknown-none-softfloat --lib --bins"
-kclippy-x86 = "clippy --workspace --exclude mlos-cli --target x86_64-unknown-none --lib --bins"
+kbuild-arm  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --target aarch64-unknown-none-softfloat"
+kbuild-x86  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --target x86_64-unknown-none"
+kclippy-arm = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --target aarch64-unknown-none-softfloat --lib --bins"
+kclippy-x86 = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --target x86_64-unknown-none --lib --bins"

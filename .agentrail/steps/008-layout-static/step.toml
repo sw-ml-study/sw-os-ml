@@ -1,6 +1,6 @@
 number = 8
 slug = "layout-static"
-status = "pending"
+status = "in-progress"
 description = "Emit build/storage-layout.json: MLOS's static layout in the COLUMNAR contract..."
 role = "production"
 context_files = []

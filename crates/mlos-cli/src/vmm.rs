@@ -7,6 +7,11 @@
 
 use std::fs;
 
+// `-m` comes from `mlos_image_map::RAM_BYTES` rather than a literal: the
+// layout emitter draws guest RAM at that size, and a VMM handed a
+// different number would make every free region in the picture wrong with
+// nothing to report the disagreement.
+
 /// The program and its whole command line, console included.
 ///
 /// `gic-version=3` is pinned for QEMU rather than left to it: the default
@@ -37,8 +42,9 @@ pub fn command(
 /// QEMU with the console on the PL011.
 fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+    let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
-    args.extend(owned(&["-m", "512", "-display", "none", "-kernel", image]));
+    args.extend(owned(&["-m", &ram, "-display", "none", "-kernel", image]));
     args.extend(disk());
     match log {
         Some(log) => args.extend(owned(&[
@@ -63,8 +69,9 @@ fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
 /// convention Linux uses.
 fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+    let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
-    args.extend(owned(&["-m", "512", "-display", "none", "-kernel", image]));
+    args.extend(owned(&["-m", &ram, "-display", "none", "-kernel", image]));
     args.extend(disk());
     args.extend(owned(&["-global", "virtio-mmio.force-legacy=false"]));
     args.extend(owned(&[
@@ -97,7 +104,8 @@ fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {
     let initrd = std::env::temp_dir().join("mlos-empty.initrd");
     let _ = fs::write(&initrd, [0u8]);
     let boot = format!("linux,kernel={image},initrd={}", initrd.display());
-    let mut args = ["--cpus", "2", "--memory", "512", "--bootloader"]
+    let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
+    let mut args = ["--cpus", "2", "--memory", &ram, "--bootloader"]
         .iter()
         .map(|arg| (*arg).to_owned())
         .collect::<Vec<_>>();
