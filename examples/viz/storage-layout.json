@@ -1,7 +1,7 @@
 {
   "schema": "sw-ml-study.system-layout",
   "version": 1,
-  "provenance": { "producer": "mlos", "revision": "65d10a467849-dirty" },
+  "provenance": { "producer": "mlos", "revision": "807adb290086" },
 
   "spaces": ["disk", "dram", "sysram"],
   "space_name": ["virtio-blk model image", "object arena", "guest RAM"],
