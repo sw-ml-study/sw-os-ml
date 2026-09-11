@@ -286,6 +286,23 @@ create the sibling crate FIRST and put the new code there.
 Commits that hold or grow the count must carry `sw-checklist: exception`
 on its own line with a justification.
 
+### When a split stops helping
+
+Function-LOC warnings get fixed. A function over 25 lines is a real
+readability signal and splitting one has never made this codebase worse.
+
+Module- and crate-count warnings get **one** restructuring attempt. If
+that attempt trades a function-count warning for a module-count warning
+(or the reverse), stop and take a documented exception. That oscillation
+happened repeatedly across M1 and M2, cost more time than any other
+single thing, and produced modules holding one function and crates
+existing to hold one module -- both of which were reverted.
+
+The gate earns its keep where it finds duplication. It does not where it
+merely counts. A crate whose job is assembly -- a CLI, a demo harness --
+naturally has one module per thing it assembles, and that is not a design
+problem to be refactored away.
+
 ## Toolchain and targets
 
 - Host tooling and simulators: the default host triple.

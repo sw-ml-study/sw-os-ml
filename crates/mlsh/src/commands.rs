@@ -12,7 +12,7 @@ use crate::Facts;
 /// Runs one line.
 pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
     let (verb, args) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
-    if NEEDS_MODEL.contains(&verb) && mlos_synth::with(|_| ()).is_none() {
+    if NEEDS_MODEL.contains(&verb) && mlos_lab::with(|_| ()).is_none() {
         let _ = writeln!(out, "  no model registered (try `model`)");
         return;
     }

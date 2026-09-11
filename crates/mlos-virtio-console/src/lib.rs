@@ -1,16 +1,23 @@
 //! A virtio console.
 //!
+//! Its own crate, like every other virtio device. `mlos-virtio` is the
+//! transport and the virtqueue; what rides on them is a driver, and
+//! keeping the two apart is what stops the transport crate growing a
+//! module every time a device is added.
+//!
 //! Transmit only, for now. That is what closes requirement N2: MLOS needs
 //! to be able to *say* something under Virtualization.framework before
 //! being able to listen there is worth anything.
+
+#![no_std]
 
 use core::{cell::UnsafeCell, fmt};
 
 use mlos_device::Console as ConsoleTrait;
 
-use crate::{
+use mlos_virtio::{
     Device,
-    queue::{self, Available, Descriptor, SIZE, UsedRing},
+    queue::{self, Available, Descriptor, SIZE, Used, UsedRing},
 };
 
 /// Queue 1 is the transmit queue of port 0. Queue 0 is its receive queue.
@@ -51,7 +58,7 @@ static RINGS: Rings = Rings {
     used: UnsafeCell::new(UsedRing {
         flags: 0,
         index: 0,
-        ring: [crate::queue::Used { id: 0, length: 0 }; SIZE],
+        ring: [Used { id: 0, length: 0 }; SIZE],
     }),
     buffer: UnsafeCell::new([0; 256]),
 };

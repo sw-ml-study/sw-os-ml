@@ -39,6 +39,7 @@ fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
     args.extend(owned(&["-m", "512", "-display", "none", "-kernel", image]));
+    args.extend(disk());
     match log {
         Some(log) => args.extend(owned(&[
             "-serial",
@@ -64,6 +65,7 @@ fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<Str
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
     args.extend(owned(&["-m", "512", "-display", "none", "-kernel", image]));
+    args.extend(disk());
     args.extend(owned(&["-global", "virtio-mmio.force-legacy=false"]));
     args.extend(owned(&[
         "-append",
@@ -101,4 +103,30 @@ fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {
         .collect::<Vec<_>>();
     args.extend([boot, "--device".to_owned(), serial]);
     args
+}
+
+/// The model disk, attached read-only.
+///
+/// `force-legacy=false` again, and for the same reason as the console:
+/// QEMU defaults virtio-mmio to version 1, MLOS speaks only version 2, and
+/// without it the device is present and probes as absent.
+///
+/// Read-only because weights are immutable, which is the property that
+/// lets one copy serve every session. A writable model disk would be a
+/// tier that has to be invalidated.
+fn disk() -> Vec<String> {
+    let Ok(path) = crate::image::disk() else {
+        return Vec::new();
+    };
+    vec![
+        "-global".to_owned(),
+        "virtio-mmio.force-legacy=false".to_owned(),
+        "-drive".to_owned(),
+        format!(
+            "file={},format=raw,if=none,id=model,readonly=on",
+            path.display()
+        ),
+        "-device".to_owned(),
+        "virtio-blk-device,drive=model".to_owned(),
+    ]
 }

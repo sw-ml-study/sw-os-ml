@@ -18,6 +18,7 @@ dependencies = [
  "mlos-machine",
  "mlos-pl011",
  "mlos-virtio",
+ "mlos-virtio-console",
 ]
 
 [[package]]
@@ -58,11 +59,24 @@ dependencies = [
  "mlos-gic-aarch64",
  "mlos-hal",
  "mlos-hal-aarch64",
+ "mlos-lab",
  "mlos-machine",
  "mlos-mmu-aarch64",
  "mlos-trap-aarch64",
  "mlos-virtio",
  "mlsh",
+]
+
+[[package]]
+name = "mlos-lab"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objman",
+ "mlos-objtab",
+ "mlos-synth",
+ "mlos-virtio",
+ "mlos-virtio-blk",
 ]
 
 [[package]]
@@ -141,10 +155,10 @@ name = "mlos-synth"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
- "mlos-metrics",
- "mlos-objman",
  "mlos-objtab",
  "mlos-provider",
+ "mlos-virtio",
+ "mlos-virtio-blk",
 ]
 
 [[package]]
@@ -159,11 +173,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-virtio-blk"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-virtio",
+]
+
+[[package]]
+name = "mlos-virtio-console"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+ "mlos-virtio",
+]
+
+[[package]]
 name = "mlsh"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
  "mlos-hal",
+ "mlos-lab",
  "mlos-line",
  "mlos-metrics",
  "mlos-objman",

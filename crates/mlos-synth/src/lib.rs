@@ -1,120 +1,16 @@
-//! A synthetic model, and the manager that holds it.
+//! What a synthetic model *is*: its shape, and the tiers it comes from.
 //!
-//! This is what makes `docs/PRD.md` gates G2 and G3 observable rather
-//! than merely tested: a model registered across three tiers, a sweep
-//! that faults its way through, and counters that say what it cost.
-//!
-//! The arena is deliberately smaller than the model. That is not a
-//! limitation to apologise for -- it is the entire premise. RAM is the
-//! scarce resource, the model does not fit, and what the system does
-//! about that is the subject.
+//! Definition only. The one live instance -- the manager holding it, the
+//! arena it faults into, the device it reads from -- is `mlos-lab`. The
+//! split is the difference between "a transformer has eight layers of
+//! sixteen tiles" and "this machine currently has seven of them
+//! resident", and keeping them apart means the shape can be described
+//! without a running kernel to describe it on.
 
 #![no_std]
 
+pub mod disk;
 pub mod model;
-mod state;
-mod tiers;
-
-use mlos_abi::Result;
-use mlos_objman::{Arena, Lease, Manager};
-
-use mlos_objtab::SessionId;
-use state::{arena, manager};
+pub mod tiers;
 
 pub use model::{ACTIVATION_BYTES, LAYERS, TILE_BYTES, TILES};
-
-/// Objects the table can hold. Comfortably more than the model needs, so
-/// a full table is never what a sweep runs into first.
-pub(crate) const CAPACITY: usize = 512;
-
-/// Bytes the static arena holds; the ceiling on any budget.
-///
-/// A quarter of the model's weights, chosen so a sweep runs out. A
-/// demonstration where everything fits demonstrates nothing: the
-/// interesting number is how far it got.
-pub(crate) const ARENA_BYTES: usize = 32 * 1024;
-
-/// How a sweep ended.
-pub struct Swept {
-    /// Tiles acquired before something stopped it.
-    pub acquired: u32,
-    /// Tiles the model has in total.
-    pub total: u32,
-    /// Why it stopped, if it did.
-    pub stopped: Option<mlos_abi::Error>,
-}
-
-/// Registers the model, replacing whatever was there.
-///
-/// Returns how many objects were registered and how many bytes they are.
-pub fn register(budget: usize) -> Result<(u32, u64)> {
-    let manager = manager();
-    let bytes = arena();
-    // Clamped: a budget below one tile can hold nothing, and one above
-    // the static buffer does not exist. Both are user input.
-    let limit = budget.clamp(TILE_BYTES as usize, bytes.len());
-    *manager = Some(Manager::new(Arena::new(&mut bytes[..limit])));
-    let held = manager.as_mut().ok_or(mlos_abi::Error::NoProvider)?;
-    held.attach(&tiers::BACKING)?;
-    held.attach(&tiers::RECOMPUTE)?;
-
-    let mut objects = 0;
-    for layer in 0..LAYERS {
-        for tensor in 0..TILES {
-            held.register(model::tile(layer, tensor), model::weights())?;
-            objects += 1;
-        }
-        held.register(model::activation(layer), model::activations())?;
-        objects += 1;
-    }
-    Ok((objects, held.counters.report().registered))
-}
-
-/// Walks every tile in order, acquiring each one.
-///
-/// In order, because that is what a dense transformer does, and the whole
-/// argument of `docs/PRD.md` is that the order is knowable in advance.
-/// Nothing here exploits that yet -- exploiting it is M3 -- but this is
-/// the sweep whose numbers M3 has to improve on.
-pub fn sweep(session: u16) -> Swept {
-    let total = u32::from(LAYERS) * u32::from(TILES);
-    let Some(held) = manager().as_mut() else {
-        return Swept {
-            acquired: 0,
-            total,
-            stopped: Some(mlos_abi::Error::NoProvider),
-        };
-    };
-    let (acquired, stopped) = walk(held, session);
-    Swept {
-        acquired,
-        total,
-        stopped,
-    }
-}
-
-/// Acquires tiles in order until one refuses.
-fn walk(held: &mut Manager<'static, CAPACITY>, session: u16) -> (u32, Option<mlos_abi::Error>) {
-    let mut acquired = 0;
-    for layer in 0..LAYERS {
-        for tensor in 0..TILES {
-            let id = model::tile(layer, tensor);
-            if let Err(error) = held.acquire(id, Lease::Streaming, SessionId(session)) {
-                return (acquired, Some(error));
-            }
-            acquired += 1;
-        }
-    }
-    (acquired, None)
-}
-
-/// Runs `visit` against the manager, if there is one.
-///
-/// One accessor rather than a wrapper for every question. The shell wants
-/// to ask things nobody has thought of yet -- what tier is this in, how
-/// often has it been used, what would evicting it save -- and a crate
-/// that answers only the questions it anticipated is one the shell has to
-/// be extended through every time it wants a new one.
-pub fn with<T>(visit: impl FnOnce(&mut Manager<'static, CAPACITY>) -> T) -> Option<T> {
-    manager().as_mut().map(visit)
-}

@@ -11,15 +11,15 @@
 
 #![no_std]
 
-mod console;
-mod queue;
+pub mod queue;
 mod regs;
 
-pub use console::Console;
 pub use regs::{MAGIC, VERSION};
 
 /// The device id a console reports.
 pub const CONSOLE_ID: u32 = 3;
+/// The device id a block device reports.
+pub const BLOCK_ID: u32 = 2;
 
 /// `VIRTIO_F_VERSION_1`: the device speaks the non-legacy interface.
 ///

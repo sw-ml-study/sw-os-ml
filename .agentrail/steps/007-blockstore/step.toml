@@ -1,6 +1,6 @@
 number = 7
 slug = "blockstore"
-status = "pending"
+status = "in-progress"
 description = "A virtio-blk provider so a tier is real storage rather than simulated."
 role = "production"
 context_files = []

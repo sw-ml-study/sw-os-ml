@@ -1,0 +1,16 @@
+[package]
+name        = "mlos-virtio-console"
+version     = "0.0.1"
+description = "A virtio console: transmit over a virtqueue."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-device = { path = "../mlos-device", version = "0.0.1" }
+mlos-virtio = { path = "../mlos-virtio", version = "0.0.1" }
+
+[lints]
+workspace = true

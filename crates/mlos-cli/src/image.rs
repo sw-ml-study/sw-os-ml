@@ -40,8 +40,16 @@ pub fn build() -> io::Result<PathBuf> {
 /// to match the LLVM that produced the object files, and a mismatched
 /// system objcopy fails in ways that look like a linker bug.
 pub fn objcopy() -> io::Result<PathBuf> {
-    let sysroot = output("rustc", &["--print", "sysroot"])?;
-    let host = output("rustc", &["-vV"])?
+    let ask = |args: &[&str]| -> io::Result<String> {
+        let out = Command::new("rustc").args(args).output()?;
+        // Trimmed: `rustc --print sysroot` ends in a newline, and a path
+        // with one in it silently does not exist.
+        String::from_utf8(out.stdout)
+            .map(|text| text.trim().to_owned())
+            .map_err(io::Error::other)
+    };
+    let sysroot = ask(&["--print", "sysroot"])?;
+    let host = ask(&["-vV"])?
         .lines()
         .find_map(|line| line.strip_prefix("host: ").map(str::to_owned))
         .ok_or_else(|| io::Error::other("rustc -vV did not report a host triple"))?;
@@ -61,12 +69,30 @@ fn run(program: &str, args: &[&str]) -> io::Result<()> {
     Err(io::Error::other(format!("{program} failed: {status}")))
 }
 
-/// Runs a command and captures its stdout.
-fn output(program: &str, args: &[&str]) -> io::Result<String> {
-    let out = Command::new(program).args(args).output()?;
-    // Trimmed: `rustc --print sysroot` ends in a newline, and a path with
-    // one in it silently does not exist.
-    String::from_utf8(out.stdout)
-        .map(|text| text.trim().to_owned())
-        .map_err(io::Error::other)
+/// Writes a disk image holding the synthetic model's weights.
+///
+/// Laid out by id: tile `(layer, tensor)` at sector
+/// `(layer * TILES + tensor) * TILE_BYTES / 512`, filled with
+/// `layer ^ tensor`. The same pattern the stub provider fabricates, on
+/// purpose -- so when the guest reads it back from a real device, the
+/// bytes being *right* is not the news. The news is where they came from.
+pub fn disk() -> io::Result<PathBuf> {
+    /// Layers, tiles per layer and bytes per tile, mirroring `mlos-synth`.
+    const SHAPE: (u16, u16, usize) = (8, 16, 1024);
+
+    let path = PathBuf::from("target").join(TARGET).join("debug/model.img");
+    let mut bytes = Vec::with_capacity(SHAPE.0 as usize * SHAPE.1 as usize * SHAPE.2);
+    for layer in 0..SHAPE.0 {
+        for tensor in 0..SHAPE.1 {
+            // 0xA0 | (layer ^ tensor). The high nibble is the point: the
+            // stub provider fills with `layer ^ tensor` alone, so a byte
+            // with 0xA0 in it can only have come off the disk. "The right
+            // bytes arrived" is then a statement about provenance rather
+            // than about arithmetic.
+            let fill = 0xA0 | ((layer as u8) ^ (tensor as u8));
+            bytes.extend(std::iter::repeat_n(fill, SHAPE.2));
+        }
+    }
+    std::fs::write(&path, &bytes)?;
+    Ok(path)
 }

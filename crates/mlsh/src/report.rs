@@ -6,7 +6,8 @@
 use core::fmt::Write;
 
 use mlos_abi::ObjectClass;
-use mlos_synth::{LAYERS, TILES, model};
+use mlos_lab::{LAYERS, TILES};
+use mlos_synth::model;
 
 /// Lists the model's objects and what the table knows about each.
 ///
@@ -16,7 +17,7 @@ use mlos_synth::{LAYERS, TILES, model};
 /// state every policy in `docs/PRD.md` reads.
 pub fn objs(out: &mut impl Write, args: &str) {
     let all = args.split_whitespace().next() == Some("all");
-    match mlos_synth::with(|manager| list(out, manager, all)) {
+    match mlos_lab::with(|manager| list(out, manager, all)) {
         Some(0) => {
             let _ = writeln!(out, "  nothing resident (try `sweep`, or `objs all`)");
         }
@@ -58,20 +59,20 @@ fn list<const N: usize>(
 
 /// The arena: what is in it, and what would still fit.
 pub fn arena(out: &mut impl Write) {
-    let Some((used, size)) = mlos_synth::with(|manager| manager.arena.occupancy()) else {
+    let Some((used, size)) = mlos_lab::with(|manager| manager.arena.occupancy()) else {
         return; // dispatch already said so
     };
     let _ = writeln!(out, "  arena    {} of {} KiB used", used >> 10, size >> 10);
     let _ = writeln!(
         out,
         "  room for {} more tiles of {} B",
-        (size - used) / u64::from(mlos_synth::TILE_BYTES),
-        mlos_synth::TILE_BYTES
+        (size - used) / u64::from(mlos_lab::TILE_BYTES),
+        mlos_lab::TILE_BYTES
     );
     // Rm: the same fact against the model rather than the buffer, and the
     // ratio docs/PRD.md s.5.2 says the whole system optimises. A small
     // fraction of a large model resident is the good case, not a failure.
-    if let Some((report, _)) = mlos_synth::with(|m| (m.counters.report(), ())) {
+    if let Some((report, _)) = mlos_lab::with(|m| (m.counters.report(), ())) {
         let rm = report.residency_per_mille().unwrap_or(0);
         let _ = writeln!(
             out,
@@ -84,7 +85,7 @@ pub fn arena(out: &mut impl Write) {
 
 /// What it all cost.
 pub fn faults(out: &mut impl Write) {
-    let Some((report, last)) = mlos_synth::with(|m| (m.counters.report(), m.last_fault)) else {
+    let Some((report, last)) = mlos_lab::with(|m| (m.counters.report(), m.last_fault)) else {
         return; // dispatch already said so
     };
     let _ = writeln!(out, "  faults   {} total", report.total_faults());

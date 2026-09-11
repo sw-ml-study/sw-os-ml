@@ -30,7 +30,7 @@ pub enum Terminal {
     /// An Arm PrimeCell UART.
     Pl011(Pl011),
     /// A virtio console.
-    Virtio(mlos_virtio::Console),
+    Virtio(mlos_virtio_console::Console),
 }
 
 impl Terminal {
@@ -76,7 +76,7 @@ impl Terminal {
             let found = unsafe { Device::probe(base + slot * size) };
             if let Some((device, CONSOLE_ID)) = found {
                 // SAFETY: a probed console, brought up once.
-                if let Some(console) = unsafe { mlos_virtio::Console::new(device) } {
+                if let Some(console) = unsafe { mlos_virtio_console::Console::new(device) } {
                     return Some(Self::Virtio(console));
                 }
             }

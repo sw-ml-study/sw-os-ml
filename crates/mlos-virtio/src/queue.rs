@@ -26,13 +26,23 @@ pub struct Descriptor {
     pub address: u64,
     /// Length in bytes.
     pub length: u32,
-    /// Zero when the device reads the buffer, which is every buffer this
-    /// driver submits. The device-writable flag arrives with receive.
+    /// [`NEXT`] to continue a chain, [`WRITE`] if the device fills this
+    /// buffer rather than reading it, or zero.
     pub flags: u16,
     /// Next descriptor in a chain. Unused: every buffer here is one
     /// descriptor.
     pub next: u16,
 }
+
+/// Descriptor flag: another descriptor follows in `next`.
+///
+/// Chaining is what a block request needs and a console does not: a read
+/// is a header the device reads, a buffer it writes, and a status byte it
+/// writes, which is three descriptors describing one operation.
+pub const NEXT: u16 = 1;
+
+/// Descriptor flag: the device writes this buffer rather than reading it.
+pub const WRITE: u16 = 2;
 
 /// The ring the driver fills with descriptor indices.
 #[repr(C, align(2))]
@@ -89,7 +99,11 @@ pub unsafe fn configure(base: usize, queue: u32, rings: (u64, u64, u64)) -> bool
     true
 }
 
-/// Publishes descriptor 0 and waits for the device to return it.
+/// Publishes the chain beginning at descriptor 0 and waits for it back.
+///
+/// Always descriptor 0, because every driver here submits one operation
+/// at a time and waits for it. The device follows `next` from there, so a
+/// chain of three is submitted exactly like a chain of one.
 ///
 /// The fence before the notify is the load-bearing part: the device reads
 /// the descriptor and the ring from memory, so both must be visible

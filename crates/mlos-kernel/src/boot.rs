@@ -107,6 +107,13 @@ unsafe fn route(console: &Terminal, machine: &Machine) -> Option<(Gic, u32)> {
 
 /// Everything the shell can report on, gathered once.
 fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
+    // Where the virtio slots are, so the object manager can find a disk.
+    // Here because this is where the shell's dependencies are gathered,
+    // and because the device tree is the kernel's to read -- nothing above
+    // it should be parsing one.
+    if let Some((base, size)) = machine.virtio {
+        mlos_lab::set_slots(base, size, machine.virtio_count);
+    }
     Facts {
         info: BootInfo::new(machine.regions.as_slice(), machine.cpu_count),
         total: machine.regions.as_slice().iter().map(|r| r.len).sum(),

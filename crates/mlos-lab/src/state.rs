@@ -9,6 +9,7 @@
 use core::cell::UnsafeCell;
 
 use mlos_objman::Manager;
+use mlos_synth::disk::Disk;
 
 use crate::{ARENA_BYTES, CAPACITY};
 
@@ -16,6 +17,7 @@ use crate::{ARENA_BYTES, CAPACITY};
 struct Statics {
     arena: UnsafeCell<[u8; ARENA_BYTES]>,
     manager: UnsafeCell<Option<Manager<'static, CAPACITY>>>,
+    disk: UnsafeCell<Option<Disk>>,
 }
 
 // SAFETY: touched only from the shell loop, on the boot core, with
@@ -27,6 +29,7 @@ unsafe impl Sync for Statics {}
 static STATE: Statics = Statics {
     arena: UnsafeCell::new([0; ARENA_BYTES]),
     manager: UnsafeCell::new(None),
+    disk: UnsafeCell::new(None),
 };
 
 /// The manager, whether or not it has been built.
@@ -40,4 +43,14 @@ pub fn arena() -> &'static mut [u8] {
     // SAFETY: as above, and handed to exactly one manager at a time --
     // `register` replaces the manager that held it in the same breath.
     unsafe { &mut *STATE.arena.get() }
+}
+
+/// Finds the disk once, keeping whatever `probe` answers.
+pub fn remember_disk(probe: impl FnOnce() -> Option<Disk>) -> Option<&'static Disk> {
+    // SAFETY: single-threaded access from the shell loop; see `Statics`.
+    let held = unsafe { &mut *STATE.disk.get() };
+    if held.is_none() {
+        *held = probe();
+    }
+    held.as_ref()
 }

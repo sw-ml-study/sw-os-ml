@@ -13,6 +13,7 @@ mlos-device  = { path = "../mlos-device",  version = "0.0.1" }
 mlos-machine = { path = "../mlos-machine", version = "0.0.1" }
 mlos-pl011   = { path = "../mlos-pl011",   version = "0.0.1" }
 mlos-virtio  = { path = "../mlos-virtio",  version = "0.0.1" }
+mlos-virtio-console = { path = "../mlos-virtio-console", version = "0.0.1" }
 
 [lints]
 workspace = true

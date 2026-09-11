@@ -26,24 +26,33 @@ pub fn model(out: &mut impl Write, args: &str) {
         .and_then(|kib| kib.parse::<usize>().ok())
         .map_or(DEFAULT_BUDGET, |kib| kib * 1024);
 
-    match mlos_synth::register(budget) {
-        Ok((objects, bytes)) => {
-            let _ = writeln!(
-                out,
-                "  registered {objects} objects, {} KiB across 3 tiers",
-                bytes >> 10
-            );
-            let _ = writeln!(out, "  budget     {} KiB of arena", budget >> 10);
-        }
+    match mlos_lab::register(budget) {
+        Ok((objects, bytes)) => registered(out, objects, bytes, budget),
         Err(error) => {
             let _ = writeln!(out, "  could not register: {error:?}");
         }
     }
 }
 
+/// What was registered, and where its bytes will come from.
+fn registered(out: &mut impl Write, objects: u32, bytes: u64, budget: usize) {
+    let _ = writeln!(
+        out,
+        "  registered {objects} objects, {} KiB across 3 tiers",
+        bytes >> 10
+    );
+    let _ = writeln!(out, "  budget     {} KiB of arena", budget >> 10);
+    let source = if mlos_lab::on_disk() {
+        "virtio-blk"
+    } else {
+        "a pattern (no disk attached)"
+    };
+    let _ = writeln!(out, "  weights    from {source}");
+}
+
 /// Sweeps the model, faulting every tile in.
 pub fn sweep(out: &mut impl Write) {
-    let swept = mlos_synth::sweep(1);
+    let swept = mlos_lab::sweep(1);
     let _ = writeln!(
         out,
         "  acquired {} of {} tiles",
@@ -80,13 +89,32 @@ pub fn get(out: &mut impl Write, args: &str) {
         Some((_, Err(error), _)) => {
             let _ = writeln!(out, "  refused: {error:?}");
         }
-        Some((resident, Ok(handle), fault)) => {
-            let how = if resident { "hit" } else { "faulted" };
-            let _ = writeln!(out, "  {how}: {} B at {:#x}", handle.size, handle.address);
-            if let (false, Some(fault)) = (resident, fault) {
-                let _ = writeln!(out, "  cost {} us", fault.cost.0 / 1000);
-            }
-        }
+        Some((resident, Ok(handle), fault)) => outcome(out, resident, &handle, fault),
+    }
+}
+
+/// Whether it hit or faulted, where it landed, and what it holds.
+///
+/// The first byte is printed because it is the cheapest possible proof of
+/// provenance: the stub tier fills with `layer ^ tensor`, and the disk
+/// image sets a high nibble the stub never writes.
+fn outcome(
+    out: &mut impl Write,
+    resident: bool,
+    handle: &mlos_objman::Handle,
+    fault: Option<mlos_objman::ModelFault>,
+) {
+    let how = if resident { "hit" } else { "faulted" };
+    // SAFETY: the handle names memory the arena owns and the lease is
+    // still held, which is exactly when an address from a handle is valid.
+    let first = unsafe { core::ptr::read_volatile(handle.address as *const u8) };
+    let _ = writeln!(
+        out,
+        "  {how}: {} B at {:#x}, first byte {first:#04x}",
+        handle.size, handle.address
+    );
+    if let (false, Some(fault)) = (resident, fault) {
+        let _ = writeln!(out, "  cost {} us", fault.cost.0 / 1000);
     }
 }
 
@@ -102,7 +130,7 @@ type Acquired = (
 );
 fn acquire(layer: u16, tensor: u16) -> Option<Acquired> {
     let id = model::tile(layer, tensor);
-    mlos_synth::with(|manager| {
+    mlos_lab::with(|manager| {
         let resident = manager
             .table
             .get(id)
