@@ -1,0 +1,9 @@
+number = 11
+slug = "layout-coordinate"
+status = "pending"
+description = "Close the loop with the other three repos, and leave behind an artifact they ..."
+role = "meta"
+context_files = []
+created_at = "2026-09-11T11:31:36"
+task_type = "coordination"
+commits = []

@@ -3,18 +3,18 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-06, during saga `mlos-boot` step 016.
+Last updated: 2026-09-11, during saga `mlos-objects`, after step 007.
 
 ---
 
 ## Where we are
 
-**M0 complete. No code exists.**
+**M1 complete, M2 well under way. Three of eight gates met.**
 
-The architecture is written and the conformance discipline is in place.
-The kernel has not been started. There is no `Cargo.toml` in this repo
-yet, which is why `sw-checklist` reports "No Cargo.toml files found"
-rather than a passing score.
+The kernel boots to a shell as a native aarch64 guest, holds an object
+table, and services a model fault from a real block device. What it does
+not have is a policy: nothing in it yet decides what to keep. That is
+M3, and M3 is where the thesis in [PRD.md](PRD.md) is actually tested.
 
 ## PoC gates
 
@@ -23,8 +23,8 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | Gate | State | Milestone |
 | --- | --- | --- |
 | G1 -- it boots, reaches a shell | **done** | M1 |
-| G2 -- it holds an object table | not started | M2 |
-| G3 -- it faults | not started | M2 |
+| G2 -- it holds an object table | **done** | M2 |
+| G3 -- it faults | **done** | M2 |
 | G4 -- known-next-use beats LRU | not started | M3 |
 | G5 -- one read serves N sessions | not started | M4 |
 | G6 -- degrades instead of dying | not started | M5 |
@@ -37,15 +37,17 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | --- | --- |
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
-| M2 it holds objects | not started -- **this is where the ML content begins** |
+| M2 it holds objects | **7 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Steps 008--011 add the layout emitters |
 | M3 it knows better | not started |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
 
-Read that honestly: M1 is the part any small operating system has to do.
-Nothing in `docs/PRD.md`'s thesis is tested until M3, and no ML object
-exists until M2. One gate of eight is met.
+Read that honestly: M1 is the part any small operating system has to do,
+and M2 so far is mechanism -- a table, a fault, three tiers, a shell that
+can poke at them. Nothing in `docs/PRD.md`'s thesis is tested until M3,
+because the thesis is a claim about *decisions* and no decision has been
+made yet. Three gates of eight are met.
 
 ## What works today
 
@@ -62,15 +64,26 @@ x86-64 anywhere in this repo.
 | Interrupts | GICv3 + generic timer at 2 Hz, tracking wall clock; PL011 receive on a shared interrupt |
 | Shell | `mlsh` with `help`, `mem`, `dev`, `ticks`, line editing |
 | Consoles | PL011, or a virtio console over virtio-mmio, chosen from `/chosen/bootargs` |
-| Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` |
-| Tests | 25 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
+| Objects | `ObjectId` (class/model/layer/tensor/tile), an open-addressed table, `ObjectMeta` carrying tier, cost, reuse and next-use |
+| Faults | `ml_acquire` -> miss -> `MODEL_FAULT` -> provider read -> arena placement -> resident. Counted per class |
+| Tiers | Three, with genuinely different costs: a virtio-blk disk, a recompute tier, and DRAM |
+| Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
+| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `list` |
+| Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `image disk` |
+| Tests | 29 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
 
 ## What does not exist yet
 
-No `ML_OBJECT`, no object table, no provider, no model fault, no
-residency policy, no scheduler beyond a single kernel thread. The kernel
-manages memory the way any small OS does; it does not yet manage anything
-the PRD is about. That work starts at M2.
+No residency policy: the arena is a bump allocator and eviction is
+unimplemented, so a full arena reports `NoBudget` rather than choosing a
+victim. No userspace, no scheduler beyond a single kernel thread, no
+leases, no sessions, no sharing, no degradation ladder, no GPU and no
+ML-MMU. `next_use` is recorded and read by nothing -- which is exactly
+the gap M3 closes, and the reason M3 is the milestone that matters.
+
+No layout emitter yet either: steps 008--011 make MLOS a producer of
+sw-mlpl's columnar `system-layout` contract, so the object table can be
+looked at rather than only printed.
 
 ## Environment as verified on this machine
 
@@ -133,9 +146,9 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-`agentrail init --name mlos-boot`, with the plan from
-[plan.md](plan.md#saga-mlos-boot-m1). First step is `workspace`: a
-Cargo workspace on Rust 2024 that builds an empty kernel for both bare
-targets with `sw-checklist` green.
+Saga `mlos-objects` step 008 `layout-static`: emit
+`build/storage-layout.json` in the columnar contract pinned by
+`../sw-mlpl/docs/storage-layout-viz.md`, making MLOS the second producer
+of a format sw-tos already emits and sw-mlpl already parses.
 
 Install QEMU before starting it.

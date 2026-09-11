@@ -1,0 +1,9 @@
+number = 10
+slug = "layout-events"
+status = "pending"
+description = "Stream residency events as they happen, so the viewer can animate rather than..."
+role = "production"
+context_files = []
+created_at = "2026-09-11T11:31:36"
+task_type = "tooling"
+commits = []

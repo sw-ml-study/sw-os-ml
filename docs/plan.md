@@ -211,6 +211,27 @@ the next session can `agentrail init` without redesigning:
 9. `synthetic-model` -- 8 layers x 16 tiles registered and swept.
    Gates G2 and G3.
 
+Then, added 2026-09-11, the layout emitters -- MLOS as the second
+producer of the cross-repo visualization contract:
+
+10. `layout-static` -- `build/storage-layout.json`: the disk image, the
+    arena reservation and the physical map, in the columnar contract.
+11. `layout-runtime` -- `build/runtime-layout.json`: the same contract
+    for the running system, so residency is visible rather than
+    asserted.
+12. `layout-events` -- residency transitions streamed as they happen,
+    so a viewer can animate churn instead of diffing snapshots.
+13. `layout-coordinate` -- sample artifacts, checksums, and the
+    vocabulary handed to the three sibling repos.
+
+The contract is sw-mlpl's
+(`../sw-mlpl/docs/storage-layout-viz.md`), already emitted by sw-tos
+and already parsed by sw-mlpl's interpreter. MLOS adopts it unchanged
+and extends it only through columns the contract permits -- tier,
+class, residency state, next-use -- which is the whole argument for a
+shared format: the things an ML object store knows that a flash image
+does not show up as *columns*, not as a fork.
+
 ### Saga `mlos-nextuse` (M3)
 
 > Vision: prove the thesis. A transformer hands the OS its own future;
@@ -259,6 +280,9 @@ Steps: `x86-64-hal`, `acpi`, `pci-ecam`, `bar-mapping`, `vfio-host-setup`,
 | `emufpga` | ML-MMU gateware, Gen 1+ | after M6 |
 | `demo-memory` | Eviction and retrieval policy candidates | M3, M5 |
 | `sw-mlpl` | Array language as eventual userspace | after M6 |
+| `sw-mlpl` | The columnar layout contract + the viz library | M2 layout steps |
+| `demo-extensions` | native3d: boxes, picking, labels, camera | M2 layout steps |
+| `sw-tos` | First producer of the same contract; vocabulary precedent | M2 layout steps |
 
 MLOS owes emufpga the ML-MMU register contract
 ([design.md](design.md#8-the-ml-mmu-register-contract)); that is the
