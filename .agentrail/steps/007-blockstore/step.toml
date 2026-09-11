@@ -1,8 +1,9 @@
 number = 7
 slug = "blockstore"
-status = "in-progress"
+status = "completed"
 description = "A virtio-blk provider so a tier is real storage rather than simulated."
 role = "production"
 context_files = []
 created_at = "2026-09-06T18:37:35"
-commits = []
+completed_at = "2026-09-11T10:33:06"
+commits = ["60a9f1fbe115e2e80d67f61ddacdd01088bd3eb0"]
