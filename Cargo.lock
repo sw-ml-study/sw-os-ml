@@ -71,6 +71,7 @@ dependencies = [
  "mlos-objtab",
  "mlos-spaces",
  "mlos-synth",
+ "mlos-trace",
  "mlos-virtio-blk",
 ]
 
@@ -141,6 +142,7 @@ dependencies = [
  "mlos-metrics",
  "mlos-objtab",
  "mlos-provider",
+ "mlos-trace",
 ]
 
 [[package]]
@@ -190,6 +192,7 @@ dependencies = [
  "mlos-objtab",
  "mlos-spaces",
  "mlos-synth",
+ "mlos-trace",
  "mlos-virtio-blk",
 ]
 
@@ -210,6 +213,15 @@ dependencies = [
  "mlos-provider",
  "mlos-virtio",
  "mlos-virtio-blk",
+]
+
+[[package]]
+name = "mlos-trace"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+ "mlos-spaces",
 ]
 
 [[package]]
@@ -254,4 +266,5 @@ dependencies = [
  "mlos-queue",
  "mlos-snapshot",
  "mlos-synth",
+ "mlos-trace",
 ]

@@ -6,6 +6,10 @@
 //! `Arena` wants: the memory lives as long as the process, which is
 //! exactly the lifetime the kernel's arena has anyway.
 
+// Shared by every test binary in this directory, each of which uses a
+// different part of it -- so what is unused HERE is used next door.
+#![allow(dead_code)]
+
 use mlos_objman::{Arena, Lease, Manager};
 use mlos_objtab::SessionId;
 use mlos_synth::{LAYERS, TILES, model, tiers};
@@ -46,9 +50,31 @@ pub fn with(budget: usize, acquired: u32) -> Manager<'static, CAPACITY> {
     manager
 }
 
+/// Walks every tile in order, stopping where the arena runs out.
+///
+/// The same order `mlos-lab`'s sweep uses, because that is the access
+/// pattern a dense transformer has and the one the whole design is about.
+pub fn sweep(manager: &mut Manager<'static, CAPACITY>) {
+    for layer in 0..LAYERS {
+        for tensor in 0..TILES {
+            let id = model::tile(layer, tensor);
+            if manager.acquire(id, Lease::Streaming, SessionId(1)).is_err() {
+                return;
+            }
+        }
+    }
+}
+
 /// The document this manager produces.
 pub fn document(manager: &Manager<'static, CAPACITY>) -> String {
     let mut text = String::new();
     mlos_snapshot::of(&mut text, manager, "testrev");
+    text.replace("\r\n", "\n")
+}
+
+/// The event stream this manager has recorded.
+pub fn events(manager: &Manager<'static, CAPACITY>) -> String {
+    let mut text = String::new();
+    mlos_trace::write(&mut text, &manager.trace);
     text.replace("\r\n", "\n")
 }

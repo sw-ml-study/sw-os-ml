@@ -46,12 +46,22 @@ SECTIONS
 
     /* Boot stack. The entry point sets SP to __stack_top before it does
      * anything else, because the loader leaves SP undefined -- see step
-     * 001, where a compiler-emitted prologue faulted on that. 64 KiB is
-     * generous for bring-up and shrinks once there is anything to measure.
-     * In .bss, so it costs image bytes but not file bytes. */
+     * 001, where a compiler-emitted prologue faulted on that. In .bss, so
+     * it costs image bytes but not file bytes.
+     *
+     * 256 KiB, raised from 64 KiB in step 010. `Manager` is built on the
+     * stack and then moved into a static, and it is large: a 512-entry
+     * object table plus a 256-event trace ring is over 40 KiB in a debug
+     * build, which the old stack could not hold. The failure had no
+     * symptom worth the name -- memory is identity-mapped in 1 GiB blocks,
+     * so running off the bottom of the stack corrupts .bss silently
+     * instead of faulting, and the guest simply stopped after `model`.
+     *
+     * The real fix is to stop building a 40 KiB value on the stack at all;
+     * until then this is sized with room rather than to fit. */
     . = ALIGN(4096);
     __stack_bottom = .;
-    . += 0x10000;
+    . += 0x40000;
     __stack_top = .;
 
     . = ALIGN(4096);

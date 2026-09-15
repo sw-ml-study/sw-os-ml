@@ -223,6 +223,8 @@ producer of the cross-repo visualization contract:
     capture can drive the shell at all.
 12. `layout-events` -- residency transitions streamed as they happen,
     so a viewer can animate churn instead of diffing snapshots.
+    Recording costs 4.3 ns an event on native hardware against 42 us a
+    fault, which is why it is left on.
 13. `layout-coordinate` -- sample artifacts, checksums, and the
     vocabulary handed to the three sibling repos.
 

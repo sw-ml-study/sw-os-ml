@@ -21,6 +21,7 @@ use mlos_abi::{Error, ObjectId, Result};
 use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
 use mlos_provider::Provider;
+use mlos_trace::{Event, Ring};
 
 pub use arena::Arena;
 pub use fault::ModelFault;
@@ -39,6 +40,13 @@ pub struct Manager<'a, const N: usize> {
     providers: [Option<&'a dyn Provider>; MAX_PROVIDERS],
     /// The most recent fault, for a caller to report on.
     pub last_fault: Option<ModelFault>,
+    /// What has happened, in order.
+    ///
+    /// Counters say how much; this says what, and when relative to
+    /// everything else. A viewer animating residency needs the sequence,
+    /// not the totals -- and the totals can be rebuilt from the sequence
+    /// where the reverse is not true.
+    pub trace: Ring,
     /// What has happened, counted.
     ///
     /// Kept here rather than by a caller because this is where the events
@@ -56,6 +64,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
+            trace: Ring::EMPTY,
             counters: Counters::EMPTY,
         }
     }
@@ -82,6 +91,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             let claim = self.table.get_mut(id).ok_or(Error::BadObject)?;
             claim.share_count = claim.share_count.saturating_add(1);
             claim.reuse_count = claim.reuse_count.saturating_add(1);
+            self.trace.record(Event::hit(id, size));
             return Ok(Handle { id, address, size });
         }
         self.service(id, lease, by)

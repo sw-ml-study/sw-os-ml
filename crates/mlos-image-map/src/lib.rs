@@ -23,7 +23,7 @@ mod objects;
 pub mod runtime;
 
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -51,12 +51,7 @@ pub const OUT: &str = "build/storage-layout.json";
 pub fn emit(image: &Path, disk: &Path) -> io::Result<PathBuf> {
     let text = document(image, disk)?.render(mlos_spaces::PRODUCER, &revision());
     mlos_layout::validate(&text).map_err(io::Error::other)?;
-    let out = PathBuf::from(OUT);
-    if let Some(parent) = out.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&out, text)?;
-    Ok(out)
+    runtime::save(OUT, &text)
 }
 
 /// A space, named -- the host side of [`Where`], which cannot name a

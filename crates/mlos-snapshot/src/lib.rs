@@ -52,7 +52,9 @@ pub fn write(out: &mut impl Write, revision: &str) -> bool {
 /// two crates means two places to look when a snapshot comes back stamped
 /// `unknown`.
 pub fn write_for(out: &mut impl Write, bootargs: &str) -> bool {
-    write(out, mlos_machine::setting(bootargs, "mlos.rev="))
+    // One token: a revision has no spaces, and `mlsh.run=` may follow.
+    let revision = mlos_machine::rest(bootargs, "mlos.rev=");
+    write(out, revision.split_whitespace().next().unwrap_or_default())
 }
 
 /// The layout of any manager, not only the live one.

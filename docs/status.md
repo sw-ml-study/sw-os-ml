@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-15, during saga `mlos-objects`, after step 009.
+Last updated: 2026-09-15, during saga `mlos-objects`, after step 010.
 
 ---
 
@@ -37,7 +37,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | --- | --- |
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
-| M2 it holds objects | **9 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Steps 010--011 finish the layout work |
+| M2 it holds objects | **10 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Step 011 hands the layout work to the sibling repos |
 | M3 it knows better | not started |
 | M4 it shares | not started |
 | M5 it degrades | not started |
@@ -68,11 +68,13 @@ x86-64 anywhere in this repo.
 | Faults | `ml_acquire` -> miss -> `MODEL_FAULT` -> provider read -> arena placement -> resident. Counted per class |
 | Tiers | Three, with genuinely different costs: a virtio-blk disk, a recompute tier, and DRAM |
 | Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
-| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout` |
+| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace` |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
+| Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
+| Timing | `sweep` reports elapsed nanoseconds from the generic timer (62.5 MHz), not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable |
 | Tests | 29 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
 
 ## What does not exist yet
@@ -84,10 +86,11 @@ leases, no sessions, no sharing, no degradation ladder, no GPU and no
 ML-MMU. `next_use` is recorded and read by nothing -- which is exactly
 the gap M3 closes, and the reason M3 is the milestone that matters.
 
-The runtime snapshot is a still, not a film. `mlos runtime` reports the
-system at one instant; what changed to get there -- which tile faulted,
-what it cost, what had to go -- is step 010's event stream. Until then a
-viewer can diff two snapshots but cannot animate one.
+No eviction, so no `evicted` event. `Kind::Evicted` exists in the event
+vocabulary and nothing emits it: until M3 has a policy, running out of
+arena produces a `refused` and the object that would have been thrown away
+stays. The most interesting line in a residency film is the one that is
+not there yet.
 
 The runtime document has no `sysram` space. A running kernel has no symbol
 table and cannot say where its own `.text` ended, so guest RAM appears only
@@ -99,6 +102,14 @@ them.
 table has carried the field since step 001, but nothing writes it: streams
 and known-next-use are M3, and that is the whole thesis. A viewer colouring
 by next-use today would show one colour.
+
+Events carry no wall clock. The only clock the shell had when they were
+designed is the 2 Hz tick, which cannot resolve a fault, and elapsed time
+under TCG is not the timing of any real machine. Ordering comes from `seq`,
+which is exact; duration comes from `cost`, the modelled figure a provider
+charges -- the same axis M3's comparison is measured on. A real timestamp
+per event is now possible (the generic timer is wired up for `sweep`) and
+has not been done.
 
 ## Environment as verified on this machine
 
@@ -118,6 +129,24 @@ Checked 2026-09-06 on the primary development Mac:
 
 The first three rows are what `mlos doctor` will check once it exists.
 QEMU is the immediate prerequisite for M1.
+
+## What tracing costs
+
+Measured, not asserted. Two identical sweeps, one with `trace off` and one
+with `trace on`, repeated six times each in both orders with a warm-up
+first, on sweeps that only HIT -- no virtio round trips, so what is left is
+the table lookup and the ring store.
+
+| | per sweep (33 events) | per event | a fault, for scale |
+| --- | --- | --- | --- |
+| QEMU/HVF, native | +0.14 us | **4.3 ns** | 42 us |
+| QEMU/TCG | +4.3 us | 129 ns | 91 us |
+
+Recording costs about one ten-thousandth of a fault on native hardware, so
+it is on by default. The first attempt to measure it used sweeps that
+faulted, and found nothing: 32 virtio transactions per sweep swamped the
+signal and the run-to-run spread was larger than the effect. The number
+above is from the sweeps where residency is already established.
 
 ## Known gaps
 
@@ -161,10 +190,10 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-Saga `mlos-objects` step 010 `layout-events`: stream residency
-transitions as they happen -- fault, fetch, place, hit, refuse -- so a
-viewer can animate churn rather than diff two snapshots. Replaying the
-stream onto the snapshot taken before a sweep must reproduce the one taken
-after it; that is what keeps the two emitters telling the same story.
+Saga `mlos-objects` step 011 `layout-coordinate`: hand sw-mlpl,
+demo-extensions and sw-tos what MLOS provides and needs -- the region
+vocabulary as a closed set, the palette rows they must add, the event
+shape, and the one thing the data wants that a storage map does not (two
+spaces side by side with edges between them, and a time axis).
 
 Install QEMU before starting it.

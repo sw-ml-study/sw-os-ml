@@ -45,6 +45,14 @@ pub struct Facts<'a> {
     pub virtio: Option<(usize, usize)>,
     /// How many virtio-mmio slots the device tree describes.
     pub virtio_count: u32,
+    /// Reads a free-running counter, and how fast it runs.
+    ///
+    /// The 2 Hz timer tick cannot resolve anything the object manager
+    /// does -- a whole sweep happens between two of them. This is the
+    /// ARM generic timer's counter at 62.5 MHz on QEMU `virt`, which is
+    /// what makes "how much does recording an event cost" a question the
+    /// shell can answer rather than assert.
+    pub clock: (fn() -> u64, u32),
     /// `/chosen/bootargs`, verbatim.
     ///
     /// The shell reads two settings out of it. `mlsh.run=a;b;c` runs those
@@ -53,6 +61,9 @@ pub struct Facts<'a> {
     /// reaches the guest. `mlos.rev=<sha>` is the commit the host built
     /// from, stamped into a layout document's provenance, because the
     /// kernel has no other way to know what produced it.
+    ///
+    /// `mlsh.run=` takes the REST of the string, so it must come last.
+    /// Its commands take arguments, and arguments have spaces in them.
     pub bootargs: &'a str,
     /// Ticks so far. Borrowed rather than copied, because it keeps
     /// changing and the shell should report the count at the moment it
@@ -82,7 +93,7 @@ impl Shell {
         // `mlsh.run=model;sweep;layout` before the prompt. Echoed as if
         // typed, so a captured console reads the same as a session
         // somebody sat through.
-        for verb in mlos_machine::setting(facts.bootargs, "mlsh.run=").split(';') {
+        for verb in mlos_machine::rest(facts.bootargs, "mlsh.run=").split(';') {
             if verb.is_empty() {
                 continue;
             }

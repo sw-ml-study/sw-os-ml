@@ -151,6 +151,51 @@ fn the_runtime_sample_has_edges_and_the_static_one_does_not() {
 }
 
 #[test]
+fn the_event_sample_is_json_lines_with_every_kind_in_it() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/viz/runtime-events.jsonl");
+    let events = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+
+    for line in events.lines() {
+        // Self-delimited: a consumer reading a truncated capture keeps
+        // every complete line before the cut, which a single JSON array
+        // would not give it.
+        assert!(line.starts_with('{') && line.ends_with('}'), "{line:?}");
+        for key in [
+            "seq", "event", "region", "object", "bytes", "cost", "tier", "why",
+        ] {
+            assert!(line.contains(&format!("\"{key}\":")), "{line} has no {key}");
+        }
+    }
+    for kind in ["\"placed\"", "\"hit\"", "\"refused\"", "\"dropped\""] {
+        assert!(events.contains(kind), "no {kind} in the sample");
+    }
+}
+
+#[test]
+fn every_sampled_event_names_a_region_in_the_sampled_snapshot() {
+    // The samples are published as a set; an event naming a region the
+    // snapshot beside it does not have would be a broken set.
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/viz/runtime-events.jsonl");
+    let events = fs::read_to_string(&path).expect("an event sample");
+    let ids = Columns::read(&sample("runtime-layout.json"))
+        .numbers("region_id")
+        .expect("an id column");
+
+    for line in events.lines().filter(|line| !line.contains("\"dropped\"")) {
+        let region: u64 = line
+            .split("\"region\":")
+            .nth(1)
+            .and_then(|rest| rest.split(',').next())
+            .and_then(|value| value.parse().ok())
+            .expect("a region id");
+        let stored = region & 0x0fff_ffff | (1 << 28);
+        assert!(ids.contains(&region) || ids.contains(&stored), "{line}");
+    }
+}
+
+#[test]
 fn padding_is_not_folded_into_free() {
     // Alignment cost is usually the number a memory map is read to find.
     // SWTOS's emitter keeps the same distinction.

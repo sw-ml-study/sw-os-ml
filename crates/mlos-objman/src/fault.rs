@@ -14,6 +14,7 @@
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
 use mlos_objtab::{CostNs, SessionId, Tier};
 use mlos_provider::Located;
+use mlos_trace::Event;
 
 use mlos_objtab::ObjectMeta;
 use mlos_provider::Provider;
@@ -83,7 +84,20 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.last_fault = Some(fault);
         self.counters.fault(fault.class, meta.size);
 
-        self.place(id, located, provider, lease)
+        // Recorded after the outcome, so one event says what actually
+        // happened rather than a hope amended later.
+        //
+        // The offset is arena-relative, not the absolute address the lease
+        // carries. That is what the layout document's dram regions use,
+        // and an event has to be replayable onto one -- an absolute
+        // address would put every placement outside the space it is in.
+        let base = self.arena.base();
+        let placed = self.place(id, located, provider, lease);
+        self.trace.record(match &placed {
+            Ok(handle) => Event::placed(id, &meta, cost, handle.address - base),
+            Err(why) => Event::refused(id, &meta, cost, *why),
+        });
+        placed
     }
 
     /// The provider that can produce an object, or `NoProvider`.

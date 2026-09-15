@@ -21,10 +21,11 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "help" | "?" => _ = out.write_str(HELP),
         "mem" => mem(out, facts),
         "dev" => dev(out, facts),
-        "sweep" => crate::objects::sweep(out),
+        "sweep" => crate::objects::sweep(out, facts.clock),
         "arena" => crate::report::arena(out),
         "faults" => crate::report::faults(out),
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
+        "trace" => _ = mlos_lab::with(|held| mlos_trace::verb(out, &mut held.trace, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::objects::get(out, args),
         "objs" => crate::report::objs(out, args),
@@ -43,7 +44,7 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 ///
 /// A constant, so the check is one line in `dispatch` and the apology
 /// lives in one place -- three copies of it is three places to change.
-const NEEDS_MODEL: [&str; 6] = ["sweep", "get", "objs", "arena", "faults", "layout"];
+const NEEDS_MODEL: [&str; 7] = ["sweep", "get", "objs", "arena", "faults", "layout", "trace"];
 
 /// What `help` prints.
 const HELP: &str = concat!(
@@ -54,6 +55,7 @@ const HELP: &str = concat!(
     "arena         how full memory is, and what would still fit\r\n",
     "faults        what it all cost, per object class\r\n",
     "layout        the running layout as JSON, for the visualizer\r\n",
+    "trace [on|off] residency events as they happened, one per line\r\n",
     "mem           physical memory map, and what is left\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",

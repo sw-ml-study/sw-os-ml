@@ -1,0 +1,17 @@
+[package]
+name        = "mlos-trace"
+version     = "0.0.1"
+description = "Residency transitions, recorded as they happen."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
+mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
+mlos-spaces = { path = "../mlos-spaces", version = "0.0.1" }
+
+[lints]
+workspace = true

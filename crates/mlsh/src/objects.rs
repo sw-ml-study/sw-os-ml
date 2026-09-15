@@ -48,17 +48,37 @@ fn registered(out: &mut impl Write, objects: u32, bytes: u64, budget: usize) {
 }
 
 /// Sweeps the model, faulting every tile in.
-pub fn sweep(out: &mut impl Write) {
+///
+/// Timed, because a sweep is the only workload MLOS has and the elapsed
+/// figure is how every later claim about overhead gets checked. The
+/// generic timer runs at tens of megahertz, so a sweep is thousands of
+/// counts rather than the zero the 2 Hz tick would report.
+///
+/// Fixed point to the nanosecond, not rounded microseconds. A sweep that
+/// faults is milliseconds and a sweep that only hits is a few
+/// microseconds, and a unit that reads the first one well throws the
+/// second one away -- which is exactly the sweep that can measure what
+/// anything on the fault path costs.
+///
+/// Stopping early is not a failure. The arena is smaller than the model,
+/// nothing evicts yet, and running out is the honest outcome -- it is the
+/// problem M3 exists to solve, and how far the sweep got is the number
+/// that will be compared.
+pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
+    let (now, hz) = clock;
+    let started = now();
     let swept = mlos_lab::sweep(1);
+    let ticks = now().saturating_sub(started);
+    let ns = ticks.saturating_mul(1_000_000_000) / u64::from(hz).max(1);
     let _ = writeln!(
         out,
-        "  acquired {} of {} tiles",
-        swept.acquired, swept.total
+        "  acquired {} of {} tiles in {}.{:03} us",
+        swept.acquired,
+        swept.total,
+        ns / 1000,
+        ns % 1000
     );
     match swept.stopped {
-        // Not a failure. The arena is smaller than the model, nothing
-        // evicts yet, and running out is the honest outcome -- it is the
-        // problem M3 exists to solve.
         Some(error) => {
             let _ = writeln!(out, "  stopped: {error:?} -- no eviction policy yet");
         }

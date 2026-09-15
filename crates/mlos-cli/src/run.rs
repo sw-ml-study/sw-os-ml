@@ -81,10 +81,12 @@ pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result
 /// deterministic, which is the property that matters here and the same
 /// reason the boot tests use it.
 pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
+    // `mlsh.run=` last: it takes the rest of the string, because its
+    // commands take arguments and arguments have spaces in them.
     let script = format!(
-        "mlsh.run={} mlos.rev={}",
+        "mlos.rev={} mlsh.run={}",
+        mlos_image_map::revision(),
         mlos_image_map::runtime::SCRIPT,
-        mlos_image_map::revision()
     );
     let console = capture("tcg", seconds, false, &script)?;
     let document = mlos_image_map::runtime::extract(&console)?;
@@ -94,11 +96,12 @@ pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
     // with, and the file is what other repositories read.
     mlos_layout::validate(&document).map_err(io::Error::other)?;
 
-    let out = PathBuf::from(mlos_image_map::runtime::OUT);
-    if let Some(parent) = out.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&out, document)?;
+    // Both from the one boot, so the snapshot and the events that led to
+    // it describe the same run. Two boots would not be the same run, and
+    // nothing downstream could tell.
+    use mlos_image_map::runtime::{EVENTS, OUT, events, save};
+    let out = save(OUT, &document)?;
+    save(EVENTS, &events(&console))?;
     Ok(out)
 }
 

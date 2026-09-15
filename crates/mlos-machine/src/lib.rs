@@ -21,18 +21,28 @@ use mlos_hal::MemoryKind;
 
 pub use regions::{MAX_REGIONS, Regions};
 
-/// One `key=value` from a boot-args string, or the empty string.
+/// Everything after `key` in a boot-args string, to the end of it.
 ///
-/// Whitespace-separated, like every `/chosen/bootargs` setting, so
-/// `console=hvc0 mlsh.run=model;sweep` works and neither setting has to
-/// know about the other. Here rather than in the shell because boot
-/// arguments are a device-tree property and this crate is what reads one.
+/// Here rather than in the shell because boot arguments are a device-tree
+/// property and this crate is what reads one.
+///
+/// To the END, not to the next space, because the values differ in what
+/// they need: `mlos.rev=abc123` is one token, while
+/// `mlsh.run=model;trace off;sweep` is three commands and two of them take
+/// an argument. Whitespace-splitting here would keep `model;trace` and
+/// throw the rest away. So the rule is the permissive one and the caller
+/// narrows it -- `split_whitespace().next()` for a setting that is a
+/// single token.
+///
+/// The cost is that a setting whose value has spaces in it must come LAST.
+/// That is a real constraint, and it is stated wherever such a setting is
+/// written rather than only here.
 #[must_use]
-pub fn setting<'a>(bootargs: &'a str, key: &str) -> &'a str {
-    bootargs
-        .split_whitespace()
-        .find_map(|arg| arg.strip_prefix(key))
-        .unwrap_or_default()
+pub fn rest<'a>(bootargs: &'a str, key: &str) -> &'a str {
+    match bootargs.split_once(key) {
+        Some((_, rest)) => rest,
+        None => "",
+    }
 }
 pub use reserve::reserve;
 

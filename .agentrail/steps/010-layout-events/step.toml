@@ -1,6 +1,6 @@
 number = 10
 slug = "layout-events"
-status = "pending"
+status = "in-progress"
 description = "Stream residency events as they happen, so the viewer can animate rather than..."
 role = "production"
 context_files = []
