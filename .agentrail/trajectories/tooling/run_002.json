@@ -1,0 +1,11 @@
+{
+  "task_type": "tooling",
+  "state": {
+    "number": 9,
+    "step": "layout-runtime"
+  },
+  "action": "Read the pinned contract and step 008's own summary before starting, and took its prediction (that the shared contract would need factoring out for a no_std emitter) as the design. Built the runtime emitter around a flat resolved Row so no column needed a match. Diagnosed the NUL by dumping control characters per line of the emitted file rather than guessing. Mutation-checked the validator part by part -- neutering each of validate/aligned/refs/tiles in turn and recording which tests fell -- not just the whole thing. Retired every sw-checklist warning the step introduced except one documented exception. Ran the full gate including the ignored TCG boot tests, which now include three new end-to-end layout tests.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-15T11:46:04"
+}
