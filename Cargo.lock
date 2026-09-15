@@ -11,6 +11,7 @@ name = "mlos-cli"
 version = "0.0.1"
 dependencies = [
  "mlos-image-map",
+ "mlos-layout",
  "mlos-synth",
 ]
 
@@ -68,6 +69,7 @@ dependencies = [
  "mlos-layout",
  "mlos-objman",
  "mlos-objtab",
+ "mlos-spaces",
  "mlos-synth",
  "mlos-virtio-blk",
 ]
@@ -177,6 +179,29 @@ name = "mlos-queue"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-snapshot"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-lab",
+ "mlos-layout",
+ "mlos-machine",
+ "mlos-objman",
+ "mlos-objtab",
+ "mlos-spaces",
+ "mlos-synth",
+ "mlos-virtio-blk",
+]
+
+[[package]]
+name = "mlos-spaces"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+]
+
+[[package]]
 name = "mlos-synth"
 version = "0.0.1"
 dependencies = [
@@ -222,9 +247,11 @@ dependencies = [
  "mlos-hal",
  "mlos-lab",
  "mlos-line",
+ "mlos-machine",
  "mlos-metrics",
  "mlos-objman",
  "mlos-objtab",
  "mlos-queue",
+ "mlos-snapshot",
  "mlos-synth",
 ]

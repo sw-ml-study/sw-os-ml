@@ -8,20 +8,21 @@
 
 use std::{fs, io, path::Path};
 
-use mlos_abi::{ObjectClass, ObjectId};
+use mlos_abi::ObjectId;
 use mlos_layout::{Region, Space, fill};
-use mlos_objtab::{ObjectMeta, Tier};
+use mlos_objtab::ObjectMeta;
+use mlos_spaces::{NextUseText, Where, kind, object, state, tier};
 use mlos_synth::{LAYERS, TILES, disk::Disk, model};
 use mlos_virtio_blk::SECTOR;
 
-use crate::ids::{self, Where};
+use crate::space;
 
 /// The disk image as a space, with one region per stored tile.
 ///
 /// Capacity is the image file's real size, not the model's: if they
 /// disagree, the difference shows up as free space or as an error from
 /// `fill`, and either is better than an emitter that assumes.
-pub fn space(path: &Path) -> io::Result<(Space, Vec<Region>)> {
+pub fn disk(path: &Path) -> io::Result<(Space, Vec<Region>)> {
     let capacity = fs::metadata(path)?.len();
     let meta = model::weights();
     let mut regions = Vec::with_capacity(usize::from(LAYERS) * usize::from(TILES));
@@ -31,24 +32,33 @@ pub fn space(path: &Path) -> io::Result<(Space, Vec<Region>)> {
         }
     }
 
-    fill("disk", capacity, &mut Where::Disk.ids(), &mut regions)?;
-    Ok((
-        Space {
-            key: Where::Disk.key().to_owned(),
-            name: "virtio-blk model image".to_owned(),
-            block: SECTOR as u64,
-            capacity,
-        },
-        regions,
-    ))
+    fill(
+        Where::Disk.key(),
+        capacity,
+        &mut Where::Disk.ids(),
+        &mut regions,
+    )?;
+    let named = space(
+        Where::Disk,
+        "virtio-blk model image",
+        SECTOR as u64,
+        capacity,
+    );
+    Ok((named, regions))
 }
 
 /// One stored object, placed where `Disk::sector_of` puts it.
+///
+/// `state` comes from the same function the runtime emitter uses, rather
+/// than being written as the constant it happens to be here. Nothing has
+/// run, so every object reads `never` -- and that is the difference the
+/// two documents exist to show, which makes it worth deriving rather than
+/// asserting.
 fn region(id: ObjectId, meta: &ObjectMeta) -> io::Result<Region> {
     let named = |what: &str| io::Error::other(format!("{what} for object {:#018x}", id.0));
     let fields = id.fields();
     Ok(Region {
-        id: ids::object(Where::Disk, id).ok_or_else(|| named("no stable region id"))?,
+        id: object(Where::Disk, id).ok_or_else(|| named("no stable region id"))?,
         space: Where::Disk.key().to_owned(),
         kind: kind(id.class().ok_or_else(|| named("no class"))?).to_owned(),
         name: format!("layer {} tile {}", fields.layer, fields.tensor),
@@ -57,34 +67,9 @@ fn region(id: ObjectId, meta: &ObjectMeta) -> io::Result<Region> {
         length: u64::from(meta.size),
         tier: tier(meta.tier).to_owned(),
         object: id.0.to_string(),
-        // Nothing has run. The static file describes what exists; the
-        // runtime file describes what is resident, and the difference
-        // between the two is the whole subject.
-        state: "never".to_owned(),
+        state: state(meta).to_owned(),
+        reuse: u64::from(meta.reuse_count),
+        cost: u64::from(meta.reload_cost.0),
+        next_use: NextUseText(meta.next_use).to_string(),
     })
-}
-
-/// What a viewer colours an object by.
-fn kind(class: ObjectClass) -> &'static str {
-    match class {
-        ObjectClass::WeightTile => "weight-tile",
-        ObjectClass::Scale => "scale",
-        ObjectClass::Expert => "expert",
-        ObjectClass::KvBlock => "kv-block",
-        ObjectClass::Activation => "activation",
-        ObjectClass::EmbedBlock => "embed-block",
-        ObjectClass::RagBlock => "rag-block",
-        ObjectClass::Adapter => "adapter",
-    }
-}
-
-/// Where an object currently lives, as a word.
-fn tier(tier: Tier) -> &'static str {
-    match tier {
-        Tier::Hot => "hot",
-        Tier::Warm => "warm",
-        Tier::Cold => "cold",
-        Tier::Stream => "stream",
-        Tier::Archive => "archive",
-    }
 }

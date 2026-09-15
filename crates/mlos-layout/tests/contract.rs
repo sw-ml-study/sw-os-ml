@@ -1,15 +1,19 @@
 //! The contract, mutation-checked.
 //!
-//! Every test here builds a document that passes and then breaks it one
-//! way. A checker that has only ever been shown valid input proves
-//! nothing: the reason to write this down is that a dropped column, a
-//! one-region gap and a reused id are all invisible until something
-//! downstream draws the wrong picture, and each of them must fail HERE.
+//! Every test builds a document that passes and then breaks it one way. A
+//! validator that has only ever been shown valid input proves nothing: a
+//! dropped column, a one-region gap and a reused id are all invisible
+//! until something downstream draws the wrong picture, and each of them
+//! must fail HERE.
+//!
+//! The mutations are applied to the rendered TEXT, because that is what
+//! the validator reads and what a consumer parses. Mutating the types
+//! instead would test a code path no other repository ever sees.
 
-use mlos_layout::{Doc, Edge, Region, Space, fill};
+use mlos_layout::{Columns, Doc, Edge, Region, Space, fill, validate};
 
 /// A two-space document that satisfies the contract.
-fn good() -> Doc {
+fn good() -> String {
     let mut regions = vec![region(1, "flash", 0, 64), region(2, "flash", 128, 64)];
     let mut ids = 100..;
     fill("flash", 256, &mut ids, &mut regions).expect("the fixture tiles");
@@ -21,8 +25,13 @@ fn good() -> Doc {
     Doc {
         spaces: vec![space("flash", 256), space("arena", 512)],
         regions,
-        edges: Vec::new(),
+        edges: vec![Edge {
+            kind: "backs".to_owned(),
+            from: 1,
+            to: 2,
+        }],
     }
+    .render("test", "abc123")
 }
 
 fn space(key: &str, capacity: u64) -> Space {
@@ -46,121 +55,115 @@ fn region(id: u32, space: &str, start: u64, length: u64) -> Region {
         tier: String::new(),
         object: String::new(),
         state: "never".to_owned(),
+        reuse: 0,
+        cost: 0,
+        next_use: String::new(),
     }
+}
+
+/// Rewrites one column's items, leaving the rest of the text alone.
+///
+/// Textual rather than a re-render, so the mutation cannot be tidied up by
+/// the emitter on its way out.
+fn put(text: &str, name: &str, items: &[String]) -> String {
+    let line = |line: &str| match line.trim().starts_with(&format!("\"{name}\": [")) {
+        true => format!("  \"{name}\": [{}],", items.join(", ")),
+        false => line.to_owned(),
+    };
+    text.lines().map(line).collect::<Vec<_>>().join("\n") + "\n"
+}
+
+/// One column's items.
+fn get(text: &str, name: &str) -> Vec<String> {
+    Columns::read(text)
+        .0
+        .into_iter()
+        .find(|(key, _)| key == name)
+        .expect("a column that is there")
+        .1
 }
 
 #[test]
 fn a_well_formed_document_passes() {
-    good().check().expect("the fixture satisfies the contract");
+    validate(&good()).expect("the fixture satisfies the contract");
 }
 
 #[test]
 fn fill_keeps_padding_distinct_from_free() {
-    let doc = good();
-    let kinds: Vec<&str> = doc
-        .regions
-        .iter()
-        .filter(|region| region.space == "flash")
-        .map(|region| region.kind.as_str())
-        .collect();
     // The gap between two placed regions is alignment cost; the gap at the
-    // end is headroom. Folding them together would hide the first.
-    assert!(kinds.contains(&"padding"), "got {kinds:?}");
-    assert!(kinds.contains(&"free"), "got {kinds:?}");
+    // end is headroom. Folding them together hides the first, which is
+    // usually the number a memory map is being read to find.
+    let kinds = get(&good(), "region_kind");
+    assert!(kinds.iter().any(|kind| kind == "\"padding\""), "{kinds:?}");
+    assert!(kinds.iter().any(|kind| kind == "\"free\""));
+}
+
+#[test]
+fn a_dropped_column_fails() {
+    let text = good();
+    let without: String = text
+        .lines()
+        .filter(|line| !line.contains("\"region_owner\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    validate(&without).expect_err("a missing column must not pass");
+}
+
+#[test]
+fn a_short_column_fails() {
+    let text = good();
+    let mut owners = get(&text, "region_owner");
+    owners.pop();
+    validate(&put(&text, "region_owner", &owners)).expect_err("columns must be index-aligned");
 }
 
 #[test]
 fn a_gap_fails() {
-    let mut doc = good();
-    doc.regions.retain(|region| region.kind != "padding");
-    doc.check().expect_err("a hole in a space must not pass");
+    let text = good();
+    let mut lengths = get(&text, "region_length");
+    lengths[0] = "8".to_owned();
+    validate(&put(&text, "region_length", &lengths)).expect_err("a hole must not pass");
 }
 
 #[test]
 fn an_overlap_fails() {
-    let mut doc = good();
-    doc.regions.push(region(9, "flash", 0, 8));
-    doc.check()
-        .expect_err("two regions on one byte must not pass");
+    let text = good();
+    let mut starts = get(&text, "region_start");
+    starts[1] = "0".to_owned();
+    validate(&put(&text, "region_start", &starts)).expect_err("two regions on one byte");
 }
 
 #[test]
 fn a_stretched_capacity_fails() {
-    let mut doc = good();
-    doc.spaces[0].capacity *= 2;
-    doc.check()
-        .expect_err("regions that stop short must not pass");
+    let text = good();
+    let mut capacity = get(&text, "space_capacity");
+    capacity[0] = "999999".to_owned();
+    validate(&put(&text, "space_capacity", &capacity)).expect_err("regions stopping short");
 }
 
 #[test]
 fn a_reused_id_fails() {
-    let mut doc = good();
-    let taken = doc.regions[0].id;
-    doc.regions[1].id = taken;
-    doc.check().expect_err("picking needs ids to be unique");
+    let text = good();
+    let mut ids = get(&text, "region_id");
+    ids[1] = ids[0].clone();
+    validate(&put(&text, "region_id", &ids)).expect_err("picking needs unique ids");
 }
 
 #[test]
-fn a_region_in_no_space_fails() {
-    let mut doc = good();
-    doc.regions[0].space = "nowhere".to_owned();
-    doc.check().expect_err("region_space must join to a space");
+fn a_zero_id_fails() {
+    let text = good();
+    let mut ids = get(&text, "region_id");
+    ids[0] = "0".to_owned();
+    validate(&put(&text, "region_id", &ids)).expect_err("zero means 'no region'");
 }
 
 #[test]
 fn a_dangling_edge_fails() {
-    let mut doc = good();
-    doc.edges.push(Edge {
-        kind: "backs".to_owned(),
-        from: 1,
-        to: 4242,
-    });
-    doc.check()
-        .expect_err("an edge must name regions that exist");
+    let text = good();
+    validate(&put(&text, "rel_to", &["4242".to_owned()])).expect_err("an edge to nowhere");
 }
 
 #[test]
-fn every_column_is_index_aligned() {
-    let doc = good();
-    let text = doc.render("test", "abc123");
-    let regions = doc.regions.len();
-    for (name, values) in columns(&text) {
-        let want = match name.split('_').next() {
-            Some("region") => regions,
-            Some("space") | Some("spaces") => doc.spaces.len(),
-            _ => doc.edges.len(),
-        };
-        assert_eq!(values.len(), want, "column {name} is the wrong length");
-    }
-    // A column the contract names but the emitter forgot is the failure
-    // this exists to catch, so check presence as well as length.
-    let names: Vec<&str> = columns(&text).into_iter().map(|(name, _)| name).collect();
-    for required in [
-        "spaces",
-        "space_block",
-        "region_id",
-        "region_start",
-        "rel_kind",
-    ] {
-        assert!(
-            names.contains(&required),
-            "{required} is missing from {names:?}"
-        );
-    }
-}
-
-/// Every `"name": [...]` column in a rendered document, as raw text.
-fn columns(text: &str) -> Vec<(&str, Vec<&str>)> {
-    text.lines()
-        .filter_map(|line| {
-            let (name, rest) = line.trim().split_once("\": [")?;
-            let items = rest.trim_end_matches(&[',', ']'][..]);
-            let values = if items.is_empty() {
-                Vec::new()
-            } else {
-                items.split(", ").collect()
-            };
-            Some((name.trim_start_matches('"'), values))
-        })
-        .collect()
+fn a_document_that_is_not_this_format_fails() {
+    validate("{ \"schema\": \"something.else\" }").expect_err("wrong schema");
 }

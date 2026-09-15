@@ -19,11 +19,14 @@
 
 #![forbid(unsafe_code)]
 
-mod check;
 mod fill;
+mod read;
 mod render;
+mod valid;
 
 pub use fill::fill;
+pub use read::Columns;
+pub use valid::validate;
 
 /// The constant every consumer identifies the format by.
 pub const SCHEMA: &str = "sw-ml-study.system-layout";
@@ -72,6 +75,12 @@ pub struct Region {
     pub object: String,
     /// Residency state, for the State colour mode.
     pub state: String,
+    /// How many times this object has been wanted.
+    pub reuse: u64,
+    /// What getting it back would cost, in nanoseconds.
+    pub cost: u64,
+    /// When it will next be wanted: `never`, `distance N`, `probability P`.
+    pub next_use: String,
 }
 
 /// A relationship between two regions, by [`Region::id`].
@@ -100,13 +109,5 @@ impl Doc {
     #[must_use]
     pub fn render(&self, producer: &str, revision: &str) -> String {
         render::document(self, producer, revision)
-    }
-
-    /// Whether this satisfies the contract, and what is wrong if not.
-    ///
-    /// Called by the emitter before it writes, so a malformed document is
-    /// caught here rather than in somebody else's repository.
-    pub fn check(&self) -> Result<(), String> {
-        check::check(self)
     }
 }

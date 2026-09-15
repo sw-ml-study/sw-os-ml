@@ -1,0 +1,27 @@
+[package]
+name        = "mlos-snapshot"
+version     = "0.0.1"
+description = "The running object store, as a system-layout document."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
+mlos-lab    = { path = "../mlos-lab",    version = "0.0.1" }
+mlos-machine = { path = "../mlos-machine", version = "0.0.1" }
+mlos-objman = { path = "../mlos-objman", version = "0.0.1" }
+mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
+mlos-spaces = { path = "../mlos-spaces", version = "0.0.1" }
+mlos-synth  = { path = "../mlos-synth",  version = "0.0.1" }
+mlos-virtio-blk = { path = "../mlos-virtio-blk", version = "0.0.1" }
+
+[dev-dependencies]
+# The shared validator and column reader, for tests only. The crate itself
+# must stay `no_std`, and `mlos-layout` is not.
+mlos-layout = { path = "../mlos-layout", version = "0.0.1" }
+
+[lints]
+workspace = true

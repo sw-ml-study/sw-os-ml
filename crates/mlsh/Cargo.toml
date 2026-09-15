@@ -19,5 +19,10 @@ mlos-queue = { path = "../mlos-queue", version = "0.0.1" }
 mlos-lab   = { path = "../mlos-lab",   version = "0.0.1" }
 mlos-synth = { path = "../mlos-synth", version = "0.0.1" }
 
+mlos-snapshot = { path = "../mlos-snapshot", version = "0.0.1" }
+
+
+mlos-machine  = { path = "../mlos-machine",  version = "0.0.1" }
+
 [lints]
 workspace = true

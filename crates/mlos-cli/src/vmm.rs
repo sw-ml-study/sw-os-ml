@@ -26,26 +26,30 @@ pub fn command(
     image: &str,
     log: Option<&str>,
     virtio: bool,
+    boot: &str,
 ) -> (&'static str, Vec<String>) {
     if host == "vz" {
         return ("vfkit", vfkit(image, log));
     }
     let cpu = if host == "hvf" { "host" } else { "cortex-a72" };
     let args = if virtio {
-        qemu_virtio(cpu, host, image, log)
+        qemu_virtio(cpu, host, image, log, boot)
     } else {
-        qemu(cpu, host, image, log)
+        qemu(cpu, host, image, log, boot)
     };
     ("qemu-system-aarch64", args)
 }
 
 /// QEMU with the console on the PL011.
-fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
+fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>, boot: &str) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
     let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
     args.extend(owned(&["-m", &ram, "-display", "none", "-kernel", image]));
     args.extend(disk());
+    if !boot.is_empty() {
+        args.extend(owned(&["-append", boot]));
+    }
     match log {
         Some(log) => args.extend(owned(&[
             "-serial",
@@ -67,21 +71,16 @@ fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
 ///
 /// `console=hvc0` is what tells MLOS to prefer it -- the same `console=`
 /// convention Linux uses.
-fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<String> {
+fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>, boot: &str) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
     let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut args = owned(&["-M", "virt,gic-version=3", "-cpu", cpu, "-accel", host]);
     args.extend(owned(&["-m", &ram, "-display", "none", "-kernel", image]));
     args.extend(disk());
     args.extend(owned(&["-global", "virtio-mmio.force-legacy=false"]));
-    args.extend(owned(&[
-        "-append",
-        "console=hvc0",
-        "-serial",
-        "none",
-        "-monitor",
-        "none",
-    ]));
+    let append = format!("console=hvc0 {boot}");
+    args.extend(["-append".to_owned(), append]);
+    args.extend(owned(&["-serial", "none", "-monitor", "none"]));
     args.extend(owned(&["-device", "virtio-serial-device,id=vs0"]));
     let chardev = log.map_or_else(
         || "stdio,id=c0".to_owned(),
@@ -92,6 +91,9 @@ fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>) -> Vec<Str
     args
 }
 
+/// vfkit takes no boot arguments here: `VZLinuxBootLoader` has a command
+/// line, but vfkit does not expose it, so `mlos runtime` uses QEMU.
+///
 /// vfkit's arguments: Apple's Virtualization.framework, via
 /// `VZLinuxBootLoader`, which takes the raw arm64 image directly.
 fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {

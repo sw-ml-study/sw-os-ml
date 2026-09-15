@@ -20,6 +20,20 @@ use mlos_fdt::{Fdt, Header};
 use mlos_hal::MemoryKind;
 
 pub use regions::{MAX_REGIONS, Regions};
+
+/// One `key=value` from a boot-args string, or the empty string.
+///
+/// Whitespace-separated, like every `/chosen/bootargs` setting, so
+/// `console=hvc0 mlsh.run=model;sweep` works and neither setting has to
+/// know about the other. Here rather than in the shell because boot
+/// arguments are a device-tree property and this crate is what reads one.
+#[must_use]
+pub fn setting<'a>(bootargs: &'a str, key: &str) -> &'a str {
+    bootargs
+        .split_whitespace()
+        .find_map(|arg| arg.strip_prefix(key))
+        .unwrap_or_default()
+}
 pub use reserve::reserve;
 
 /// What the device tree said, plus where the tree itself sits.

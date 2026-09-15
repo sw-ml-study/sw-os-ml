@@ -42,9 +42,20 @@ pub fn reg_pair(
 /// Property strings are NUL-terminated, and the terminator is inside the
 /// value's declared length -- so a caller that compares the raw bytes to a
 /// string literal is comparing against a trailing zero and always losing.
+///
+/// The terminator is stripped HERE rather than trusted to
+/// `trim_ascii_end`, which trims whitespace and leaves a NUL exactly where
+/// it was. That was a real bug and an invisible one: `/chosen/bootargs`
+/// came back as `console=hvc0\0`, every `contains` and `starts_with`
+/// still matched, and nothing noticed until a NUL was written into a JSON
+/// document and somebody else's parser refused it.
 #[must_use]
 pub const fn string(value: &[u8]) -> Option<&str> {
-    match core::str::from_utf8(value) {
+    let mut end = value.len();
+    while end > 0 && value[end - 1] == 0 {
+        end -= 1;
+    }
+    match core::str::from_utf8(value.split_at(end).0) {
         Ok(text) => Some(text.trim_ascii_end()),
         Err(_) => None,
     }

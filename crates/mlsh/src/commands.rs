@@ -18,21 +18,18 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
     }
     match verb {
         "" => {}
-        "help" | "?" => {
-            let _ = out.write_str(HELP);
-        }
+        "help" | "?" => _ = out.write_str(HELP),
         "mem" => mem(out, facts),
         "dev" => dev(out, facts),
         "sweep" => crate::objects::sweep(out),
         "arena" => crate::report::arena(out),
         "faults" => crate::report::faults(out),
+        "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
         "model" => crate::objects::model(out, args),
         "get" => crate::objects::get(out, args),
         "objs" => crate::report::objs(out, args),
         "ticks" => ticks(out, facts),
-        other => {
-            let _ = writeln!(out, "no such command: {other}   (try `help`)");
-        }
+        other => _ = writeln!(out, "no such command: {other}   (try `help`)"),
     }
 }
 
@@ -46,7 +43,7 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 ///
 /// A constant, so the check is one line in `dispatch` and the apology
 /// lives in one place -- three copies of it is three places to change.
-const NEEDS_MODEL: [&str; 5] = ["sweep", "get", "objs", "arena", "faults"];
+const NEEDS_MODEL: [&str; 6] = ["sweep", "get", "objs", "arena", "faults", "layout"];
 
 /// What `help` prints.
 const HELP: &str = concat!(
@@ -56,6 +53,7 @@ const HELP: &str = concat!(
     "objs [all]    what the table knows: tier, residency, use count\r\n",
     "arena         how full memory is, and what would still fit\r\n",
     "faults        what it all cost, per object class\r\n",
+    "layout        the running layout as JSON, for the visualizer\r\n",
     "mem           physical memory map, and what is left\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",

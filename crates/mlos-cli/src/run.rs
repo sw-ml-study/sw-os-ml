@@ -1,6 +1,6 @@
 //! Launching MLOS under a hypervisor.
 
-use std::{fs, io, process::Command, thread, time::Duration};
+use std::{fs, io, path::PathBuf, process::Command, thread, time::Duration};
 
 use crate::{image, vmm::command};
 
@@ -24,7 +24,7 @@ pub const HOSTS: [&str; 3] = ["hvf", "tcg", "vz"];
 /// driver lands.
 pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
     let image = image::build()?;
-    let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio);
+    let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio, "");
     if debug {
         // Halted, with the stub open. `target remote :1234` in gdb, then
         // load the ELF for symbols -- the image has none.
@@ -39,13 +39,15 @@ pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
     Err(io::Error::other(format!("{program} exited: {status}")))
 }
 
-/// Boots headless for `seconds`, then prints whatever the console said.
+/// Boots headless for `seconds` and returns whatever the console said.
 ///
 /// The non-interactive counterpart of [`run`], for tests and for checking
-/// a change still boots. It cannot exercise the shell -- a file is not a
-/// terminal, so no keystroke ever reaches the guest -- which is why
-/// `demos/*.tape` exists and drives a real pty instead.
-pub fn capture(host: &str, seconds: u64, virtio: bool) -> io::Result<()> {
+/// a change still boots. No keystroke reaches the guest -- a file is not a
+/// terminal -- so a shell session is driven through `boot`, which becomes
+/// `/chosen/bootargs` and can carry `mlsh.run=model;sweep;layout`. That is
+/// what makes a runtime snapshot reproducible instead of something a
+/// person has to sit and type.
+pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result<String> {
     let image = image::build()?;
     // Unique per invocation. A fixed name means two captures running at
     // once overwrite each other's console -- which is exactly what three
@@ -59,15 +61,45 @@ pub fn capture(host: &str, seconds: u64, virtio: bool) -> io::Result<()> {
         &image.to_string_lossy(),
         Some(&log.to_string_lossy()),
         virtio,
+        boot,
     );
     let mut child = Command::new(program).args(args).spawn()?;
     thread::sleep(Duration::from_secs(seconds));
     child.kill()?;
     child.wait()?;
 
-    print!("{}", fs::read_to_string(&log).unwrap_or_default());
+    let console = fs::read_to_string(&log).unwrap_or_default();
     let _ = fs::remove_file(&log);
-    Ok(())
+    Ok(console)
+}
+
+/// Boots, drives the shell, and writes the runtime layout it printed.
+///
+/// TCG rather than the default accelerator: this produces a file other
+/// repositories render, and a snapshot that came out differently on
+/// somebody else's machine would be worse than no snapshot. TCG is
+/// deterministic, which is the property that matters here and the same
+/// reason the boot tests use it.
+pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
+    let script = format!(
+        "mlsh.run={} mlos.rev={}",
+        mlos_image_map::runtime::SCRIPT,
+        mlos_image_map::revision()
+    );
+    let console = capture("tcg", seconds, false, &script)?;
+    let document = mlos_image_map::runtime::extract(&console)?;
+    // The same validator the static emitter runs. Two emitters that share
+    // no code still have to produce the same format, and this is the only
+    // place that can tell -- the guest has no allocator to check itself
+    // with, and the file is what other repositories read.
+    mlos_layout::validate(&document).map_err(io::Error::other)?;
+
+    let out = PathBuf::from(mlos_image_map::runtime::OUT);
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&out, document)?;
+    Ok(out)
 }
 
 /// Boots, headless or interactive, according to the arguments.
@@ -76,7 +108,10 @@ pub fn boot(args: &[String]) -> io::Result<()> {
     // `--console virtio`; the parser in main.rs accepts the pair.
     let virtio = args.iter().any(|arg| arg == "virtio");
     match seconds {
-        Some(seconds) => capture(host, seconds, virtio),
+        Some(seconds) => {
+            print!("{}", capture(host, seconds, virtio, "")?);
+            Ok(())
+        }
         None => run(host, debug, virtio),
     }
 }

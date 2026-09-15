@@ -123,3 +123,38 @@ fn malformed_blobs_are_rejected_not_trusted() {
         assert!(fdt.walk(|_| {}).is_none(), "truncated walk must fail");
     }
 }
+
+/// A NUL-terminated property string comes back without its terminator.
+///
+/// Regression. `trim_ascii_end` trims whitespace and leaves a NUL exactly
+/// where it was, so `/chosen/bootargs` read back as `console=hvc0\0`.
+/// Every `contains` and `starts_with` still matched, which is why it
+/// survived: it only became visible when a boot argument was written into
+/// a JSON document and the consumer's parser refused the control
+/// character. A string property is the shape almost every consumer of this
+/// crate reads, so it is worth pinning directly.
+#[test]
+fn a_property_string_loses_its_terminator() {
+    assert_eq!(mlos_fdt::string(b"console=hvc0\0"), Some("console=hvc0"));
+    assert_eq!(mlos_fdt::string(b"a\0\0"), Some("a"));
+    assert_eq!(
+        mlos_fdt::string(b"trailing space \0"),
+        Some("trailing space")
+    );
+    assert_eq!(mlos_fdt::string(b"\0"), Some(""));
+    assert_eq!(mlos_fdt::string(b""), Some(""));
+    assert_eq!(mlos_fdt::string(&[0xff, 0x00]), None);
+}
+
+/// The one this broke: a boot-args string with the setting last.
+///
+/// `split_whitespace` does not treat NUL as whitespace, so a terminator on
+/// the final setting became part of its value rather than being dropped.
+#[test]
+fn the_last_boot_setting_is_not_stuck_to_the_terminator() {
+    let bootargs = mlos_fdt::string(b"console=hvc0 mlos.rev=abc123\0").expect("valid utf8");
+    let last = bootargs
+        .split_whitespace()
+        .find_map(|arg| arg.strip_prefix("mlos.rev="));
+    assert_eq!(last, Some("abc123"));
+}

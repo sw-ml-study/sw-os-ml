@@ -25,7 +25,7 @@ const SPACE_NUMS: [Nums<Space>; 2] = [
 ];
 
 /// The region columns that are lists of strings, contract first.
-const REGION_TEXT: [Text<Region>; 7] = [
+const REGION_TEXT: [Text<Region>; 8] = [
     ("region_space", |r| &r.space),
     ("region_kind", |r| &r.kind),
     ("region_name", |r| &r.name),
@@ -33,6 +33,7 @@ const REGION_TEXT: [Text<Region>; 7] = [
     ("region_tier", |r| &r.tier),
     ("region_object_id", |r| &r.object),
     ("region_state", |r| &r.state),
+    ("region_next_use", |r| &r.next_use),
 ];
 
 /// The region columns that are numbers, contract first.
@@ -41,13 +42,15 @@ const REGION_TEXT: [Text<Region>; 7] = [
 /// they are emitted as zeros rather than omitted, because a consumer
 /// written against SWTOS reads them unconditionally and a missing column
 /// is a crash where a zero is a fact.
-const REGION_NUMS: [Nums<Region>; 6] = [
+const REGION_NUMS: [Nums<Region>; 8] = [
     ("region_id", |r| u64::from(r.id)),
     ("region_start", |r| r.start),
     ("region_length", |r| r.length),
     ("region_text_words", |_| 0),
     ("region_data_words", |_| 0),
     ("region_bss_words", |_| 0),
+    ("region_reuse", |r| r.reuse),
+    ("region_cost", |r| r.cost),
 ];
 
 /// The whole document.

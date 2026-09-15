@@ -14,6 +14,7 @@ mlos-elf        = { path = "../mlos-elf",        version = "0.0.1" }
 mlos-layout     = { path = "../mlos-layout",     version = "0.0.1" }
 mlos-objman     = { path = "../mlos-objman",     version = "0.0.1" }
 mlos-objtab     = { path = "../mlos-objtab",     version = "0.0.1" }
+mlos-spaces     = { path = "../mlos-spaces",     version = "0.0.1" }
 mlos-lab        = { path = "../mlos-lab",        version = "0.0.1" }
 mlos-synth      = { path = "../mlos-synth",      version = "0.0.1" }
 mlos-virtio-blk = { path = "../mlos-virtio-blk", version = "0.0.1" }

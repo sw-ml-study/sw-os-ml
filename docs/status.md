@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-11, during saga `mlos-objects`, after step 008.
+Last updated: 2026-09-15, during saga `mlos-objects`, after step 009.
 
 ---
 
@@ -37,7 +37,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | --- | --- |
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
-| M2 it holds objects | **8 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Steps 009--011 finish the layout emitters |
+| M2 it holds objects | **9 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Steps 010--011 finish the layout work |
 | M3 it knows better | not started |
 | M4 it shares | not started |
 | M5 it degrades | not started |
@@ -68,9 +68,11 @@ x86-64 anywhere in this repo.
 | Faults | `ml_acquire` -> miss -> `MODEL_FAULT` -> provider read -> arena placement -> resident. Counted per class |
 | Tiers | Three, with genuinely different costs: a virtio-blk disk, a recompute tier, and DRAM |
 | Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
-| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `list` |
+| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout` |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
-| Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `image disk` / `layout` |
+| Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
+| Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
+| Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Tests | 29 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
 
 ## What does not exist yet
@@ -82,13 +84,21 @@ leases, no sessions, no sharing, no degradation ladder, no GPU and no
 ML-MMU. `next_use` is recorded and read by nothing -- which is exactly
 the gap M3 closes, and the reason M3 is the milestone that matters.
 
-The layout emitter is static only. `mlos layout` describes what the build
-produced -- where each weight tile sits on disk, how the kernel image
-divides RAM, how big the arena is -- and every object in it reads
-`"state": "never"`, because nothing has run. What is actually resident
-needs step 009, and the disk-to-arena edges that make an "explain this
-object" view possible arrive with it. A picture drawn from today's file is
-a picture of a build, not of a running system.
+The runtime snapshot is a still, not a film. `mlos runtime` reports the
+system at one instant; what changed to get there -- which tile faulted,
+what it cost, what had to go -- is step 010's event stream. Until then a
+viewer can diff two snapshots but cannot animate one.
+
+The runtime document has no `sysram` space. A running kernel has no symbol
+table and cannot say where its own `.text` ended, so guest RAM appears only
+in the static document, drawn from the linked image. The two share `disk`
+and `dram`, with the same region ids, which is what lets a consumer join
+them.
+
+`region_next_use` is always `never`. The column is emitted, and the object
+table has carried the field since step 001, but nothing writes it: streams
+and known-next-use are M3, and that is the whole thesis. A viewer colouring
+by next-use today would show one colour.
 
 ## Environment as verified on this machine
 
@@ -151,9 +161,10 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-Saga `mlos-objects` step 009 `layout-runtime`: the same contract emitted
-from the running system, through an `mlsh layout` verb and
-`mlos run --capture`, so the arena shows what is resident and the edge
-table can join a stored tile to the bytes it became.
+Saga `mlos-objects` step 010 `layout-events`: stream residency
+transitions as they happen -- fault, fetch, place, hit, refuse -- so a
+viewer can animate churn rather than diff two snapshots. Replaying the
+stream onto the snapshot taken before a sweep must reproduce the one taken
+after it; that is what keeps the two emitters telling the same story.
 
 Install QEMU before starting it.

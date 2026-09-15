@@ -18,9 +18,9 @@
 
 #![forbid(unsafe_code)]
 
-mod ids;
 mod memory;
 mod objects;
+pub mod runtime;
 
 use std::{
     fs, io,
@@ -28,7 +28,8 @@ use std::{
     process::Command,
 };
 
-use mlos_layout::Doc;
+use mlos_layout::{Doc, Space};
+use mlos_spaces::Where;
 
 /// Where QEMU's `virt` machine puts DRAM.
 pub const RAM_BASE: u64 = 0x4000_0000;
@@ -41,9 +42,6 @@ pub const RAM_BASE: u64 = 0x4000_0000;
 /// nothing would report the discrepancy. `mlos-cli` reads this.
 pub const RAM_BYTES: u64 = 512 << 20;
 
-/// The name this producer goes by in `provenance`.
-pub const PRODUCER: &str = "mlos";
-
 /// Where `mlos layout` writes.
 pub const OUT: &str = "build/storage-layout.json";
 
@@ -51,20 +49,31 @@ pub const OUT: &str = "build/storage-layout.json";
 ///
 /// The kernel ELF is the file `image` was objcopied from, beside it.
 pub fn emit(image: &Path, disk: &Path) -> io::Result<PathBuf> {
-    let document = document(image, disk)?;
-    document.check().map_err(io::Error::other)?;
+    let text = document(image, disk)?.render(mlos_spaces::PRODUCER, &revision());
+    mlos_layout::validate(&text).map_err(io::Error::other)?;
     let out = PathBuf::from(OUT);
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&out, document.render(PRODUCER, &revision()))?;
+    fs::write(&out, text)?;
     Ok(out)
+}
+
+/// A space, named -- the host side of [`Where`], which cannot name a
+/// `Space` itself because the contract's types are host-only.
+fn space(place: Where, name: &str, block: u64, capacity: u64) -> Space {
+    Space {
+        key: place.key().to_owned(),
+        name: name.to_owned(),
+        block,
+        capacity,
+    }
 }
 
 /// Every space and region, assembled.
 fn document(image: &Path, disk: &Path) -> io::Result<Doc> {
     let built = [
-        objects::space(disk)?,
+        objects::disk(disk)?,
         memory::dram()?,
         memory::sysram(&image.with_file_name("mlos-kernel"), image)?,
     ];
@@ -84,10 +93,15 @@ fn document(image: &Path, disk: &Path) -> io::Result<Doc> {
 
 /// What to stamp into `provenance`, so a rendered picture is traceable.
 ///
+/// Public because the runtime emitter runs inside the guest, which has no
+/// git and no way to know what built it; `mlos runtime` passes this in
+/// through the boot arguments.
+///
 /// `--dirty` matters more than the sha: a layout emitted from an
 /// uncommitted tree is one nobody else can reproduce, and saying so is
 /// cheaper than discovering it later.
-fn revision() -> String {
+#[must_use]
+pub fn revision() -> String {
     Command::new("git")
         .args(["describe", "--always", "--dirty", "--abbrev=12"])
         .output()

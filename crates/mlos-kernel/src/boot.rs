@@ -125,6 +125,7 @@ fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
         console: kind,
         virtio: machine.virtio,
         virtio_count: machine.virtio_count,
+        bootargs: machine.bootargs.unwrap_or_default(),
         ticks: &handlers::TICKS,
     }
 }

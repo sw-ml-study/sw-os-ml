@@ -95,5 +95,8 @@ fn gap(
         tier: String::new(),
         object: String::new(),
         state: "fixed".to_owned(),
+        reuse: 0,
+        cost: 0,
+        next_use: String::new(),
     }
 }

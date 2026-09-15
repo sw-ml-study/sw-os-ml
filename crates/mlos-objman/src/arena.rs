@@ -61,6 +61,16 @@ impl Arena {
         Ok((at, &mut room[..size as usize]))
     }
 
+    /// Where the arena's bytes begin.
+    ///
+    /// Needed to turn a `resident_at` -- an absolute address, because that
+    /// is what a lease hands out -- back into an offset within the arena,
+    /// which is what a layout region is measured in.
+    #[must_use]
+    pub const fn base(&self) -> u64 {
+        self.base
+    }
+
     /// How many bytes are resident, and how many the arena holds.
     ///
     /// The numerator of `Rm` in `docs/PRD.md` s.5.2 -- resident bytes over

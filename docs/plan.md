@@ -218,7 +218,9 @@ producer of the cross-repo visualization contract:
     arena reservation and the physical map, in the columnar contract.
 11. `layout-runtime` -- `build/runtime-layout.json`: the same contract
     for the running system, so residency is visible rather than
-    asserted.
+    asserted. Brought with it the boot-script channel
+    (`mlsh.run=` in `/chosen/bootargs`), without which no headless
+    capture can drive the shell at all.
 12. `layout-events` -- residency transitions streamed as they happen,
     so a viewer can animate churn instead of diffing snapshots.
 13. `layout-coordinate` -- sample artifacts, checksums, and the

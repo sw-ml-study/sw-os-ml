@@ -45,6 +45,15 @@ pub struct Facts<'a> {
     pub virtio: Option<(usize, usize)>,
     /// How many virtio-mmio slots the device tree describes.
     pub virtio_count: u32,
+    /// `/chosen/bootargs`, verbatim.
+    ///
+    /// The shell reads two settings out of it. `mlsh.run=a;b;c` runs those
+    /// verbs at boot, which is what lets a headless capture drive the
+    /// shell at all: a log file is not a terminal, so no keystroke ever
+    /// reaches the guest. `mlos.rev=<sha>` is the commit the host built
+    /// from, stamped into a layout document's provenance, because the
+    /// kernel has no other way to know what produced it.
+    pub bootargs: &'a str,
     /// Ticks so far. Borrowed rather than copied, because it keeps
     /// changing and the shell should report the count at the moment it
     /// was asked, not at the moment boot handed these over.
@@ -70,6 +79,16 @@ impl Shell {
     /// burn a core doing it.
     pub fn run(mut self, out: &mut impl Write, facts: &Facts<'_>, idle: fn()) -> ! {
         let _ = out.write_str("\r\n");
+        // `mlsh.run=model;sweep;layout` before the prompt. Echoed as if
+        // typed, so a captured console reads the same as a session
+        // somebody sat through.
+        for verb in mlos_machine::setting(facts.bootargs, "mlsh.run=").split(';') {
+            if verb.is_empty() {
+                continue;
+            }
+            let _ = writeln!(out, "mlsh> {verb}\r");
+            commands::dispatch(verb, out, facts);
+        }
         self.prompt(out);
         loop {
             self.pump(out, facts);

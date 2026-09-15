@@ -10,7 +10,9 @@ use std::{fs, io, path::Path};
 
 use mlos_layout::{Region, Space, fill};
 
-use crate::{RAM_BASE, RAM_BYTES, ids::Where};
+use mlos_spaces::Where;
+
+use crate::{RAM_BASE, RAM_BYTES, space};
 
 /// Page size, and the block a RAM map is drawn in.
 const PAGE: u64 = 4096;
@@ -53,7 +55,7 @@ pub fn sysram(elf: &Path, image: &Path) -> io::Result<(Space, Vec<Region>)> {
     let (top, stack) = (offset + size, end.next_multiple_of(PAGE));
     regions.push(region(ids, "stack", "boot stack", stack, top - stack));
     fill(Where::Sysram.key(), RAM_BYTES, ids, &mut regions)?;
-    Ok((Where::Sysram.space("guest RAM", PAGE, RAM_BYTES), regions))
+    Ok((space(Where::Sysram, "guest RAM", PAGE, RAM_BYTES), regions))
 }
 
 /// The object arena, as a space of its own.
@@ -73,7 +75,7 @@ pub fn dram() -> io::Result<(Space, Vec<Region>)> {
         &mut regions,
     )?;
     let block = u64::from(mlos_objman::Arena::ALIGN);
-    Ok((Where::Dram.space("object arena", block, capacity), regions))
+    Ok((space(Where::Dram, "object arena", block, capacity), regions))
 }
 
 /// One structural region -- something the kernel put there, not an object.
@@ -95,6 +97,9 @@ fn region(
         tier: String::new(),
         object: String::new(),
         state: "fixed".to_owned(),
+        reuse: 0,
+        cost: 0,
+        next_use: String::new(),
     }
 }
 

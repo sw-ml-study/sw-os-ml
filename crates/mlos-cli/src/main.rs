@@ -25,21 +25,21 @@ fn main() -> ExitCode {
 
 /// Runs one command.
 fn dispatch(args: &[String]) -> io::Result<()> {
-    match args.first().map(String::as_str) {
-        Some("build") => {
-            options(args, false)?;
-            println!("{}", image::build()?.display());
-        }
+    let verb = args.first().map(String::as_str);
+    // Every verb but `run` takes no positional argument, so they are all
+    // validated in one place rather than each remembering to.
+    if matches!(verb, Some("build" | "layout" | "runtime" | "doctor")) {
+        options(args, false)?;
+    }
+    match verb {
+        Some("build") => println!("{}", image::build()?.display()),
         Some("run") => run::boot(args)?,
+        Some("runtime") => println!("{}", run::runtime(RUNTIME_SECONDS)?.display()),
         Some("layout") => {
-            options(args, false)?;
             let written = mlos_image_map::emit(&image::build()?, &image::disk()?)?;
             println!("{}", written.display());
         }
-        Some("doctor") => {
-            options(args, false)?;
-            doctor::doctor();
-        }
+        Some("doctor") => doctor::doctor(),
         Some("--version" | "-V") => println!("mlos {}", env!("CARGO_PKG_VERSION")),
         Some("--help" | "-h" | "help") | None => println!("{USAGE}"),
         Some(other) => {
@@ -103,6 +103,14 @@ fn accelerator(name: &str) -> io::Result<&str> {
     )))
 }
 
+/// How long to let the guest run before reading its console.
+///
+/// Generous, and TCG is slow: a sweep faults thirty-odd tiles off a
+/// virtio-blk device before the layout is printed, and a snapshot that
+/// timed out half way through would be a valid document describing a
+/// system that never existed.
+const RUNTIME_SECONDS: u64 = 12;
+
 /// What `mlos --help` prints.
 const USAGE: &str = "\
 mlos -- build, run and diagnose MLOS
@@ -110,7 +118,8 @@ mlos -- build, run and diagnose MLOS
 Usage:
   mlos build              build the kernel and its bootable image
   mlos run [HOST]         boot it with the console on this terminal
-  mlos layout             write build/storage-layout.json for the visualizer
+  mlos layout             write build/storage-layout.json from the build
+  mlos runtime            boot, sweep, and write build/runtime-layout.json
   mlos doctor             report what is installed and what is missing
 
 Arguments:
