@@ -1,0 +1,11 @@
+{
+  "task_type": "tooling",
+  "state": {
+    "number": 10,
+    "step": "layout-events"
+  },
+  "action": "Designed the ring so the fault path never formats, then proved it with a measurement rather than an argument. When the first measurement found nothing, diagnosed why (device I/O swamping the signal) and changed the experiment to hit-only sweeps instead of reporting a null result. Added nanosecond resolution to sweep because the existing clock could not see the effect. Mutation-checked the replay test by breaking the emitter three ways. Ran the ignored boot tests and investigated a parallel-only failure rather than re-running until green.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-15T13:39:24"
+}
