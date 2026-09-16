@@ -299,6 +299,9 @@ Steps: `x86-64-hal`, `acpi`, `pci-ecam`, `bar-mapping`, `vfio-host-setup`,
 
 ## 4. Cross-repo dependencies
 
+Each of these is written up as an ask -- what, where, why, and what MLOS
+does if the answer is no -- in [external-asks.md](external-asks.md).
+
 | Needed from | What | Needed by |
 | --- | --- | --- |
 | `emufpga` | The `.spm` sidecar: real tensor inventory, and which streams rotate per operation | M3 step 4 |
