@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-15, during saga `mlos-objects`, after step 010.
+Last updated: 2026-09-15, during saga `mlos-objects`, after step 011. Saga complete.
 
 ---
 
@@ -37,7 +37,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | --- | --- |
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
-| M2 it holds objects | **10 of 11 steps** -- saga `mlos-objects`. Gates G2 and G3 met. Step 011 hands the layout work to the sibling repos |
+| M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
 | M3 it knows better | not started |
 | M4 it shares | not started |
 | M5 it degrades | not started |
@@ -130,6 +130,22 @@ Checked 2026-09-06 on the primary development Mac:
 The first three rows are what `mlos doctor` will check once it exists.
 QEMU is the immediate prerequisite for M1.
 
+## Is this picture of a real system?
+
+A fair question to ask of any rendering drawn from
+[layout-handoff.md](layout-handoff.md)'s data, and the answer differs by
+file.
+
+- `storage-layout.json` describes a **build**. Every object in it reads
+  `"state": "never"`, because nothing has run.
+- `runtime-layout.json` and `runtime-events.jsonl` describe a **running
+  system** -- a real kernel, a real virtio-blk device, real residency --
+  **managing a synthetic model**. The eight layers of sixteen tiles have
+  no arithmetic in them, and the tier costs are NVMe-shaped figures rather
+  than measurements. The access pattern and the residency pressure are the
+  subject; a demonstration of an ML operating system needs no neural
+  network in it.
+
 ## What tracing costs
 
 Measured, not asserted. Two identical sweeps, one with `trace off` and one
@@ -190,10 +206,14 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-Saga `mlos-objects` step 011 `layout-coordinate`: hand sw-mlpl,
-demo-extensions and sw-tos what MLOS provides and needs -- the region
-vocabulary as a closed set, the palette rows they must add, the event
-shape, and the one thing the data wants that a storage map does not (two
-spaces side by side with edges between them, and a time axis).
+`agentrail init --name mlos-nextuse`, with the plan from
+[plan.md](plan.md#saga-mlos-nextuse-m3). M3 is the milestone the project
+exists for: a transformer hands the operating system its own future, and
+the claim is that an OS which accepts the gift beats one that guesses.
+Everything built so far is mechanism -- a table, a fault, three tiers, two
+emitters. Nothing has decided anything yet.
+
+First step is `trace-format`: record and replay an access trace, so a
+policy can be run against the same workload twice.
 
 Install QEMU before starting it.

@@ -15,8 +15,14 @@ This is not a Linux or BSD derivative. It is a new kernel.
 
 ## Status
 
-Pre-implementation. The architecture is written; the kernel is not.
-See [docs/status.md](docs/status.md) for what actually exists today.
+Three of eight proof-of-concept gates met. MLOS boots to a shell as a
+native aarch64 guest, holds an object table across three tiers, and
+services a model fault from a real virtio-blk device. What it does not
+have is a policy: nothing in it yet decides what to keep, and that is
+milestone M3 -- the one the whole argument turns on.
+
+See [docs/status.md](docs/status.md) for what actually exists today. If it
+is not in that file, it does not work.
 
 ## Documents
 
@@ -27,6 +33,7 @@ See [docs/status.md](docs/status.md) for what actually exists today.
 | [docs/design.md](docs/design.md) | Crates, syscalls, object table, device contracts |
 | [docs/plan.md](docs/plan.md) | Milestones and the implementation sagas |
 | [docs/status.md](docs/status.md) | Ground truth |
+| [docs/layout-handoff.md](docs/layout-handoff.md) | What MLOS emits for the cross-repo visualization, and what it needs back |
 | docs/research.txt | Raw source material the architecture was distilled from |
 
 ## Try it
@@ -52,6 +59,25 @@ second time costs nothing.
 (Do not paste a trailing `# comment` after these: interactive zsh does not
 treat `#` as a comment, so it arrives as an argument. `mlos` will now say
 so rather than passing it to QEMU.)
+
+## Looking at it
+
+```sh
+cargo run -p mlos-cli -- layout
+cargo run -p mlos-cli -- runtime
+```
+
+`layout` describes what the build produced; `runtime` boots MLOS, sweeps
+the model and describes what the running system holds. Both write the
+columnar `sw-ml-study.system-layout` contract that `sw-tos`
+also emits and `sw-mlpl` renders: where every weight tile sits on disk,
+how the kernel image divides RAM, what is resident in the arena, and --
+from `runtime` -- a stream of residency events saying how it got that way.
+
+Conforming samples are committed under `examples/viz/` so the sibling
+repositories can develop against them without running MLOS. The contract,
+the vocabulary and the open questions are in
+[docs/layout-handoff.md](docs/layout-handoff.md).
 
 ## Development
 

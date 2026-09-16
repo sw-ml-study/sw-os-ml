@@ -1,6 +1,6 @@
 number = 11
 slug = "layout-coordinate"
-status = "pending"
+status = "in-progress"
 description = "Close the loop with the other three repos, and leave behind an artifact they ..."
 role = "meta"
 context_files = []
