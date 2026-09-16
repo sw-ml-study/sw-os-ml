@@ -206,14 +206,21 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-`agentrail init --name mlos-nextuse`, with the plan from
+Saga `mlos-nextuse` is open, nine steps, plan in
 [plan.md](plan.md#saga-mlos-nextuse-m3). M3 is the milestone the project
 exists for: a transformer hands the operating system its own future, and
 the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
-emitters. Nothing has decided anything yet.
+emitters, an event stream. Nothing has decided anything yet.
 
-First step is `trace-format`: record and replay an access trace, so a
-policy can be run against the same workload twice.
+First step is `trace-format`: an access trace with record and replay, so a
+policy can be run against the same workload twice. It also renames M2's
+`mlos-trace` to `mlos-events` and takes the name back -- that crate
+records what the manager DID, and an access trace is what the workload
+ASKED FOR.
+
+One blocker is already known and is not on the critical path until step 4:
+a real checkpoint to extract a `.spm` from. emufpga has the importer and
+the format; the only `.spm` in that tree is a `tiny.spm` test fixture.
 
 Install QEMU before starting it.

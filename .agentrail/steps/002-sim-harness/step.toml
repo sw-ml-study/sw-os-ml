@@ -1,0 +1,9 @@
+number = 2
+slug = "sim-harness"
+status = "pending"
+description = "`mlos-sim`: replay a trace against a policy under a fixed residency budget, a..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "rust"
+commits = []

@@ -1,0 +1,11 @@
+number = 1
+slug = "trace-format"
+status = "pending"
+description = """
+`mlos-trace`: a recorded access sequence, with record and replay, host-side.
+..."""
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "rust"
+commits = []

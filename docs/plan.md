@@ -238,19 +238,40 @@ does not show up as *columns*, not as a fork.
 
 ### Saga `mlos-nextuse` (M3)
 
-> Vision: prove the thesis. A transformer hands the OS its own future;
-> show that an OS which accepts the gift beats one that guesses.
+> Vision: prove the thesis, or find out it is wrong. A transformer hands
+> the OS its own future; show that an OS which accepts the gift beats one
+> that guesses.
 
-1. `trace-format` -- `mlos-trace`, record and replay.
-2. `real-traces` -- import from emufpga's model importers. No
-   hand-written traces.
-3. `sim-harness` -- `mlos-sim`, identical budget across policies.
-4. `baselines` -- demand, FIFO, LRU.
-5. `stream-syscalls` -- `ml_stream_declare` / `advance`.
-6. `nextuse-policy` -- known-next-use, host-simulated first.
-7. `in-kernel` -- same policy in-kernel under TCG; numbers match the
-   simulator.
-8. `g4-report` -- the measured comparison table. Gate G4.
+1. `trace-format` -- `mlos-trace`, record and replay. Renames M2's
+   `mlos-trace` (residency events) to `mlos-events` and takes the name
+   back for what the plan always meant by it: an access trace.
+2. `sim-harness` -- `mlos-sim`, identical budget across policies,
+   enforced rather than intended.
+3. `baselines` -- demand, FIFO, LRU. Also the harness's own test: LRU
+   must beat FIFO on a workload with reuse, or the harness is wrong.
+4. `generative-trace` -- weights re-swept per token and KV blocks
+   accumulating, so LRU has a fair chance to be right. Shape from
+   emufpga's `.spm` sidecar. **Blocked on a real checkpoint.**
+5. `stream-syscalls` -- `ml_stream_declare` / `advance`. The first thing
+   ever to write `ObjectMeta::next_use`.
+6. `nextuse-policy` -- known-next-use, host-simulated first. Distance
+   acted on with certainty, probability only as a hint.
+7. `evictable-arena` -- the arena stops being a bump allocator. Nothing
+   can run a policy in the kernel until it can give memory back.
+8. `in-kernel` -- same policy crates in-kernel under TCG; the numbers
+   match the simulator exactly, not approximately.
+9. `g4-report` -- the measured comparison table, at more than one
+   budget, written so it can be disputed. Gate G4.
+
+Three things this saga must not do, restated from its own plan because
+they are the ways it would fail without noticing: do not make the
+workload easy (a dense sweep guarantees the answer before any code is
+written), do not hand-write a trace ([architecture.md](architecture.md)
+s.12), and do not let the kernel and the simulator drift.
+
+If the separation is not there on a real generative trace, say so and
+stop before M4. `docs/PRD.md` s.9 Q1 and Q2 are answered by the
+measurement whichever way it comes out.
 
 ### Saga `mlos-parameter-major` (M4)
 
@@ -280,7 +301,8 @@ Steps: `x86-64-hal`, `acpi`, `pci-ecam`, `bar-mapping`, `vfio-host-setup`,
 
 | Needed from | What | Needed by |
 | --- | --- | --- |
-| `emufpga` | Model importers producing real access traces | M3 |
+| `emufpga` | The `.spm` sidecar: real tensor inventory, and which streams rotate per operation | M3 step 4 |
+| a real checkpoint | Nobody has extracted one; only `tiny.spm` exists | M3 step 4, **blocked** |
 | `emufpga` | ML-MMU gateware, Gen 1+ | after M6 |
 | `demo-memory` | Eviction and retrieval policy candidates | M3, M5 |
 | `sw-mlpl` | Array language as eventual userspace | after M6 |

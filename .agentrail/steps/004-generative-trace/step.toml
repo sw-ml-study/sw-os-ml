@@ -1,0 +1,12 @@
+number = 4
+slug = "generative-trace"
+status = "pending"
+description = """
+A trace with the reuse structure a decode loop actually has.
+
+This is the ste..."""
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "tooling"
+commits = []

@@ -1,0 +1,1 @@
+mlos-objects complete: 11 steps, gates G2 and G3 met, the layout emitters shipped and handed to the sibling repos. Archived to make room for mlos-nextuse (M3).

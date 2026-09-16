@@ -1,0 +1,9 @@
+number = 5
+slug = "stream-syscalls"
+status = "pending"
+description = "`ml_stream_declare` and `ml_stream_advance`: the calls by which userspace han..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "rust"
+commits = []

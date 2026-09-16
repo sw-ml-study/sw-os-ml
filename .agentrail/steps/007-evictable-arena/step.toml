@@ -1,0 +1,12 @@
+number = 7
+slug = "evictable-arena"
+status = "pending"
+description = """
+The arena stops being a bump allocator.
+
+Until it can choose a victim and giv..."""
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "rust"
+commits = []

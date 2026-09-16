@@ -1,0 +1,12 @@
+number = 6
+slug = "nextuse-policy"
+status = "pending"
+description = """
+Known-next-use replacement, in the simulator.
+
+The policy the project exists ..."""
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:53:24"
+task_type = "rust"
+commits = []
