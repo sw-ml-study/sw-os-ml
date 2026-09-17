@@ -1,6 +1,6 @@
 number = 3
 slug = "baselines"
-status = "in-progress"
+status = "completed"
 description = """
 `mlos-policy`: demand, FIFO and LRU. The numbers next-use has to beat.
 
@@ -8,5 +8,6 @@ Three..."""
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:53:24"
+completed_at = "2026-09-16T20:17:54"
 task_type = "rust"
-commits = []
+commits = ["d54e922d3c1993508fab957433d347d816955c1f"]

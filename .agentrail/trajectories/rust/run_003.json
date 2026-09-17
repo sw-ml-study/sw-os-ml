@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 3,
+    "step": "baselines"
+  },
+  "action": "Ran the baselines against the real recorded trace rather than only against hand-made test patterns, which is what surfaced that demand beats both -- a result I would not have predicted and would not have seen from unit tests alone. Wrote FIFO and LRU as one type because they are one policy with two clocks. Pinned the counterintuitive finding in an assertion so it cannot silently change.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-16T20:17:54"
+}
