@@ -1,6 +1,6 @@
 number = 5
 slug = "nextuse-policy"
-status = "in-progress"
+status = "completed"
 description = """
 Known-next-use replacement, in the simulator.
 
@@ -8,5 +8,6 @@ The policy the project exists ..."""
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:53:24"
+completed_at = "2026-09-17T16:57:21"
 task_type = "rust"
-commits = []
+commits = ["10d26073ca779fdf6831f32adc3a4ab71fbbf765"]

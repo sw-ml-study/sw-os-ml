@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 5,
+    "step": "nextuse-policy"
+  },
+  "action": "Treated 'next-use is losing' as a bug report rather than a finding, because a policy with strictly more information cannot lose -- that rule is what made both bugs findable. Isolated the cost term from the foresight by running pure Belady alongside, which exonerated one and convicted the other in a single measurement. Turned each bug into a regression test that fails for the original reason. Corrected a conclusion from the previous step rather than leaving it standing.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-17T16:57:21"
+}
