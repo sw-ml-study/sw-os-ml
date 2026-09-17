@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 003.
+Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 004.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **3 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
+| M3 it knows better | **4 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -175,6 +175,49 @@ file.
   subject; a demonstration of an ML operating system needs no neural
   network in it.
 
+## A workload that can come out either way
+
+`mlos-workload` generates a decode loop: several sessions sharing one
+model, round-robin, each sweeping every weight tile per token and
+re-reading its own KV prefix. Four sessions over forty rounds is 25,200
+accesses, 12,800 of them weights and 12,400 KV -- neither half dominating.
+
+Two things were measured rather than assumed, and the first guess was
+wrong both times.
+
+**Re-reading a KV prefix is itself a cyclic sweep.** The plan expected
+KV to be where recency pays: recently-written blocks are about to be
+wanted again. It is not. Reading blocks `0..t` every round touches every
+block once per round in order, so after one pass LRU's recency order IS
+insertion order and it evicts exactly what FIFO evicts. They tied at 192
+reads each. **A purely cyclic workload can never distinguish FIFO from
+LRU**, which is a property worth knowing rather than an accident.
+
+**What makes recency informative is sessions finishing.** A session that
+has stopped holds KV nobody will read again; an active one holds early
+blocks it reads every round. Measured at a 192 KiB budget:
+
+| sessions | FIFO reads | LRU reads |
+| --- | --- | --- |
+| 1 | 1,100 | 3,696 |
+| 4 (finishing at different times) | 12,067 | **11,942** |
+
+One session is a pure cycle and LRU is structurally pessimal on it. Add
+sessions that finish at different times and recency starts to mean
+something. That is the knob this workload has, and the answer moves with
+it -- which step 006 must report rather than pick a column from.
+
+**Policy only matters inside a band.** Below about 128 KiB the cyclic
+weight sweep misses everything whatever is evicted; above about 384 KiB
+the working set fits and nothing is ever evicted. Every policy is
+identical outside those bounds. `cargo test -p mlos-workload --test sweep
+-- --ignored --nocapture` prints the shape.
+
+**Demand paging's read count is not comparable.** At 192 KiB it does 384
+reads against LRU's 11,942 -- and refuses 6,896 of 25,200 accesses to get
+there, where LRU refuses none. Reporting those two numbers side by side
+without the refusals would be the most misleading row in any table.
+
 ## The first policy table, and why it proves nothing
 
 Three baselines replayed against `examples/viz/runtime.trace` -- a real
@@ -274,10 +317,10 @@ the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
 emitters, an event stream. Nothing has decided anything yet.
 
-Step 004 `reuse-trace`: a workload with the reuse a decode loop actually
-has -- weights re-swept cyclically and KV blocks accumulating -- so LRU
-has a fair chance to be right and beating it means something. Needs
-`KvBlock` objects in the synthetic model, which nothing registers yet.
+Step 005 `nextuse-policy`: known-next-use in the simulator. Evict what is
+wanted furthest away -- Belady's rule, which a declared stream hands over
+for free. Distance acted on with certainty, probability only as a hint,
+and cost part of the decision rather than distance alone.
 
 The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
 to 005 build the harness, the baselines, a workload with real reuse in

@@ -280,6 +280,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-workload"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+ "mlos-policy",
+ "mlos-sim",
+ "mlos-synth",
+ "mlos-trace",
+]
+
+[[package]]
 name = "mlsh"
 version = "0.0.1"
 dependencies = [

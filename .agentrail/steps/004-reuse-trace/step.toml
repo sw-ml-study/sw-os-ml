@@ -1,6 +1,6 @@
 number = 4
 slug = "reuse-trace"
-status = "pending"
+status = "in-progress"
 description = """
 A workload with reuse in it, so the comparison can come out either way.
 

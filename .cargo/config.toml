@@ -27,7 +27,7 @@ target-dir = "target"
 # target, so `--all-targets` tries to build the test binaries and fails.
 # Tests are a host-side concern and run under `cargo test`.
 [alias]
-kbuild-arm  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --target aarch64-unknown-none-softfloat"
-kbuild-x86  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --target x86_64-unknown-none"
-kclippy-arm = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --target aarch64-unknown-none-softfloat --lib --bins"
-kclippy-x86 = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --target x86_64-unknown-none --lib --bins"
+kbuild-arm  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target aarch64-unknown-none-softfloat"
+kbuild-x86  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target x86_64-unknown-none"
+kclippy-arm = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target aarch64-unknown-none-softfloat --lib --bins"
+kclippy-x86 = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target x86_64-unknown-none --lib --bins"
