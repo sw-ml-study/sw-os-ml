@@ -19,14 +19,14 @@ emitted from a clean tree and can be reproduced.
 `examples/viz/storage-layout.json` -- the build: 3 spaces, 140 regions, 0 edges.
 
 ```
-2f60a8368d2b4b70876abd4dbb485abbd57acd7451339972f6b330257a227f8f
+e5eea424e85254417d4c05821717b0efb46f0dd3cf2a9d206d356b867ce0b4a6
 ```
 
 `examples/viz/runtime-layout.json` -- a running system: 2 spaces, 160
 regions, 32 `backs` edges.
 
 ```
-eaf309cf83d980e7c8ac2def2a4af156d3e9bef0af9b37744ff0216afcb92653
+5fbd4c850c04ab796458ac031b5cfea6d0e011a4973a2411202db2dceacaff7a
 ```
 
 `examples/viz/runtime-events.jsonl` -- 67 lines saying what happened to
@@ -36,6 +36,16 @@ that exists today.
 
 ```
 084a7ba6ea0b75523d121fca8ab835302921afe3e8fe18b8fee9679b8f3a4471
+```
+
+`examples/viz/runtime.trace` -- the access trace those events record: 66
+acquires, session and `ObjectId` each, and nothing about what the system
+did about them. Not part of the visualization contract; published because
+it is the same run and somebody may want the workload rather than the
+picture.
+
+```
+7fd954b8bf0b63ff02118401e85d70407f33d1807dc22af323bfe9b80f709fa1
 ```
 
 Full digests rather than abbreviations: these are pinned by three other
