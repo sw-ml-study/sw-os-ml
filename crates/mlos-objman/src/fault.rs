@@ -12,9 +12,9 @@
 //! possible and an address does not.
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
+use mlos_events::Event;
 use mlos_objtab::{CostNs, SessionId, Tier};
 use mlos_provider::Located;
-use mlos_trace::Event;
 
 use mlos_objtab::ObjectMeta;
 use mlos_provider::Provider;
@@ -93,9 +93,9 @@ impl<'a, const N: usize> Manager<'a, N> {
         // address would put every placement outside the space it is in.
         let base = self.arena.base();
         let placed = self.place(id, located, provider, lease);
-        self.trace.record(match &placed {
-            Ok(handle) => Event::placed(id, &meta, cost, handle.address - base),
-            Err(why) => Event::refused(id, &meta, cost, *why),
+        self.events.record(match &placed {
+            Ok(handle) => Event::placed(id, by, &meta, cost, handle.address - base),
+            Err(why) => Event::refused(id, by, &meta, cost, *why),
         });
         placed
     }

@@ -14,13 +14,17 @@
 
 use std::{fs, io, path::PathBuf};
 
-use mlos_trace::MARKER;
+use mlos_events::MARKER;
+use mlos_trace::{Access, Header};
 
 /// Where `mlos runtime` writes the snapshot.
 pub const OUT: &str = "build/runtime-layout.json";
 
 /// Where it writes the event stream.
 pub const EVENTS: &str = "build/runtime-events.jsonl";
+
+/// Where it writes the access trace derived from that stream.
+pub const TRACE: &str = "build/runtime.trace";
 
 /// The boot script that produces one: register, fill memory, then emit.
 ///
@@ -36,6 +40,26 @@ pub const EVENTS: &str = "build/runtime-events.jsonl";
 /// two, and a consumer can tell a re-use from a fetch without having to
 /// be told that the missing kind exists.
 pub const SCRIPT: &str = "model;sweep;sweep;layout;trace";
+
+/// The access trace an event stream records.
+///
+/// What the workload ASKED FOR, which is what a policy is replayed
+/// against -- as opposed to what this particular run's object manager did
+/// about it, which is what the stream itself says. `mlos-trace` explains
+/// why the two must not be the same file.
+pub fn trace(events: &str) -> io::Result<String> {
+    let mut into = vec![Access::EMPTY; events.lines().count()];
+    let filled = mlos_trace::from_events(events, &mut into)
+        .map_err(|why| io::Error::other(format!("cannot read the event stream: {why:?}")))?;
+
+    let mut text = String::new();
+    let header = Header {
+        model: mlos_synth::MODEL,
+        source: EVENTS,
+    };
+    mlos_trace::render(&mut text, header, &into[..filled]).map_err(io::Error::other)?;
+    Ok(text)
+}
 
 /// Writes `text` to `path`, making its directory if need be.
 ///
@@ -68,24 +92,20 @@ pub fn events(console: &str) -> String {
 
 /// The JSON document in `console`, with host line endings.
 pub fn extract(console: &str) -> io::Result<String> {
+    // The console text goes in the error, not just a summary of it. A
+    // guest that did not print a layout usually did not get as far as the
+    // shell, and the reason is somewhere in what it did print -- so
+    // putting it in front of whoever ran the command saves them running
+    // it again to look.
+    let missing = |what: &str| io::Error::other(format!("the guest {what}. Said:\n{console}"));
     let lines: Vec<&str> = console.lines().map(str::trim_end).collect();
     let open = lines
         .iter()
         .position(|line| *line == "{")
-        .ok_or_else(|| missing("never printed a layout", console))?;
+        .ok_or_else(|| missing("never printed a layout"))?;
     let close = lines[open..]
         .iter()
         .position(|line| *line == "}")
-        .ok_or_else(|| missing("printed a layout that never ended", console))?;
+        .ok_or_else(|| missing("printed a layout that never ended"))?;
     Ok(lines[open..=open + close].join("\n") + "\n")
-}
-
-/// Why no document came back, with the console attached.
-///
-/// The console text is the error, not decoration. A guest that did not
-/// print a layout usually did not get as far as the shell, and the reason
-/// is somewhere in what it did print -- so putting it in front of whoever
-/// ran the command saves them running it again to look.
-fn missing(what: &str, console: &str) -> io::Error {
-    io::Error::other(format!("the guest {what}. Console said:\n{console}"))
 }

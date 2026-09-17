@@ -22,7 +22,7 @@ mlos-virtio-blk = { path = "../mlos-virtio-blk", version = "0.0.1" }
 # The shared validator and column reader, for tests only. The crate itself
 # must stay `no_std`, and `mlos-layout` is not.
 mlos-layout = { path = "../mlos-layout", version = "0.0.1" }
-mlos-trace  = { path = "../mlos-trace",  version = "0.0.1" }
+mlos-events  = { path = "../mlos-events",  version = "0.0.1" }
 
 [lints]
 workspace = true

@@ -80,28 +80,32 @@ pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result
 /// somebody else's machine would be worse than no snapshot. TCG is
 /// deterministic, which is the property that matters here and the same
 /// reason the boot tests use it.
+/// Three artifacts from one boot: the snapshot, the events that led to it,
+/// and the access trace those events record. Two boots would not be the
+/// same run and nothing downstream could tell.
+///
+/// The trace is DERIVED from the events rather than recorded separately,
+/// because every acquire is already in the stream and a second recorder
+/// is a second thing to disagree with the first.
+///
+/// `mlsh.run=` goes last in the boot arguments: it takes the rest of the
+/// string, because its commands take arguments and arguments have spaces.
+///
+/// The document goes through the same validator the static emitter uses.
+/// Two emitters that share no code still have to produce one format, and
+/// this is the only place that can tell -- the guest has no allocator to
+/// check itself with, and the file is what other repositories read.
 pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
-    // `mlsh.run=` last: it takes the rest of the string, because its
-    // commands take arguments and arguments have spaces in them.
-    let script = format!(
-        "mlos.rev={} mlsh.run={}",
-        mlos_image_map::revision(),
-        mlos_image_map::runtime::SCRIPT,
-    );
+    use mlos_image_map::runtime::{EVENTS, OUT, SCRIPT, TRACE, events, save, trace};
+    let script = format!("mlos.rev={} mlsh.run={SCRIPT}", mlos_image_map::revision());
     let console = capture("tcg", seconds, false, &script)?;
     let document = mlos_image_map::runtime::extract(&console)?;
-    // The same validator the static emitter runs. Two emitters that share
-    // no code still have to produce the same format, and this is the only
-    // place that can tell -- the guest has no allocator to check itself
-    // with, and the file is what other repositories read.
     mlos_layout::validate(&document).map_err(io::Error::other)?;
 
-    // Both from the one boot, so the snapshot and the events that led to
-    // it describe the same run. Two boots would not be the same run, and
-    // nothing downstream could tell.
-    use mlos_image_map::runtime::{EVENTS, OUT, events, save};
     let out = save(OUT, &document)?;
-    save(EVENTS, &events(&console))?;
+    let stream = events(&console);
+    save(EVENTS, &stream)?;
+    save(TRACE, &trace(&stream)?)?;
     Ok(out)
 }
 

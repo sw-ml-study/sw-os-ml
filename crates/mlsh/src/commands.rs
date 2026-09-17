@@ -25,7 +25,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "arena" => crate::report::arena(out),
         "faults" => crate::report::faults(out),
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
-        "trace" => _ = mlos_lab::with(|held| mlos_trace::verb(out, &mut held.trace, args)),
+        "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::objects::get(out, args),
         "objs" => crate::report::objs(out, args),

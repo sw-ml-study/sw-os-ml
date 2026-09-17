@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-15, during saga `mlos-objects`, after step 011. Saga complete.
+Last updated: 2026-09-16, during saga `mlos-nextuse`, after step 001.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | not started |
+| M3 it knows better | **1 of 9 steps** -- saga `mlos-nextuse`. The milestone the project exists for |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -72,6 +72,7 @@ x86-64 anywhere in this repo.
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
+| Traces | And `build/runtime.trace`: the access sequence those events record -- session and `ObjectId` per acquire, and nothing about what the system did. What M3 replays policies against |
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the generic timer (62.5 MHz), not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable |
@@ -85,6 +86,12 @@ victim. No userspace, no scheduler beyond a single kernel thread, no
 leases, no sessions, no sharing, no degradation ladder, no GPU and no
 ML-MMU. `next_use` is recorded and read by nothing -- which is exactly
 the gap M3 closes, and the reason M3 is the milestone that matters.
+
+The only trace that exists is a dense sweep, and it is the EASY case. LRU
+is pessimal on it by construction and known-next-use is optimal by
+construction, so any comparison run against it proves nothing. Step 004
+brings the trace with real reuse structure in it, and until then no
+number from this saga should be quoted.
 
 No eviction, so no `evicted` event. `Kind::Evicted` exists in the event
 vocabulary and nothing emits it: until M3 has a policy, running out of
@@ -213,14 +220,14 @@ the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
 emitters, an event stream. Nothing has decided anything yet.
 
-First step is `trace-format`: an access trace with record and replay, so a
-policy can be run against the same workload twice. It also renames M2's
-`mlos-trace` to `mlos-events` and takes the name back -- that crate
-records what the manager DID, and an access trace is what the workload
-ASKED FOR.
+Step 002 `sim-harness`: `mlos-sim`, replaying a trace against a policy
+under a fixed residency budget and counting provider reads and bytes
+moved. Identical budget across policies, enforced rather than intended --
+a comparison where one policy got more memory is not a comparison.
 
-One blocker is already known and is not on the critical path until step 4:
-a real checkpoint to extract a `.spm` from. emufpga has the importer and
-the format; the only `.spm` in that tree is a `tiny.spm` test fixture.
+The blocker for step 004 is recorded in
+[external-asks.md](external-asks.md) as emufpga A1: a real model's order
+file and sidecar. Kilobytes of text, not the weights. Steps 002, 003 and
+005-009 do not depend on it.
 
 Install QEMU before starting it.

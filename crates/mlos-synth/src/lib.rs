@@ -14,3 +14,11 @@ pub mod model;
 pub mod tiers;
 
 pub use model::{ACTIVATION_BYTES, LAYERS, TILE_BYTES, TILES};
+
+/// What to call this model in anything that has to name it.
+///
+/// A trace carries an `ObjectId` per access and no sizes; the sizes come
+/// from the model the ids were taken against. Naming it in the trace is
+/// what makes replaying against the wrong one a caught error rather than
+/// a table of numbers about nothing.
+pub const MODEL: &str = "synth-8x16";

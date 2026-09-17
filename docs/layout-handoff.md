@@ -30,10 +30,12 @@ eaf309cf83d980e7c8ac2def2a4af156d3e9bef0af9b37744ff0216afcb92653
 ```
 
 `examples/viz/runtime-events.jsonl` -- 67 lines saying what happened to
-get there.
+get there. Each line now carries a `session`, so a trace derived from the
+stream reads who made each acquire rather than assuming the one session
+that exists today.
 
 ```
-69f4274c243445ce2763c4f0e1692a3cc051d27e8ba2ff7b3e5816fa0f44b581
+084a7ba6ea0b75523d121fca8ab835302921afe3e8fe18b8fee9679b8f3a4471
 ```
 
 Full digests rather than abbreviations: these are pinned by three other

@@ -35,6 +35,15 @@ name = "mlos-elf"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-events"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+ "mlos-spaces",
+]
+
+[[package]]
 name = "mlos-fdt"
 version = "0.0.1"
 
@@ -65,6 +74,7 @@ version = "0.0.1"
 dependencies = [
  "mlos-abi",
  "mlos-elf",
+ "mlos-events",
  "mlos-lab",
  "mlos-layout",
  "mlos-objman",
@@ -139,10 +149,10 @@ name = "mlos-objman"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-events",
  "mlos-metrics",
  "mlos-objtab",
  "mlos-provider",
- "mlos-trace",
 ]
 
 [[package]]
@@ -185,6 +195,7 @@ name = "mlos-snapshot"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-events",
  "mlos-lab",
  "mlos-layout",
  "mlos-machine",
@@ -192,7 +203,6 @@ dependencies = [
  "mlos-objtab",
  "mlos-spaces",
  "mlos-synth",
- "mlos-trace",
  "mlos-virtio-blk",
 ]
 
@@ -221,7 +231,6 @@ version = "0.0.1"
 dependencies = [
  "mlos-abi",
  "mlos-objtab",
- "mlos-spaces",
 ]
 
 [[package]]
@@ -256,6 +265,7 @@ name = "mlsh"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-events",
  "mlos-hal",
  "mlos-lab",
  "mlos-line",
@@ -266,5 +276,4 @@ dependencies = [
  "mlos-queue",
  "mlos-snapshot",
  "mlos-synth",
- "mlos-trace",
 ]

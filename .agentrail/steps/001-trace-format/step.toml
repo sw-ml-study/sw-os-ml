@@ -1,6 +1,6 @@
 number = 1
 slug = "trace-format"
-status = "pending"
+status = "in-progress"
 description = """
 `mlos-trace`: a recorded access sequence, with record and replay, host-side.
 ..."""

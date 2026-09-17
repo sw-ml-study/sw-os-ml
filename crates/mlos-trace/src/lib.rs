@@ -1,98 +1,90 @@
-//! Residency transitions, recorded as they happen.
+//! An access trace: what a workload asked for, in order.
 //!
-//! A snapshot says what is resident now. This says what happened to get
-//! there -- what came in, what it cost, and what had to be refused -- and
-//! it is the part of the shared visualization demo that is MLOS's alone:
-//! SWTOS's flash is static once built, whereas the whole subject of an ML
-//! object store is churn.
+//! Not what the system did about it. `mlos-events` records that -- placed,
+//! hit, refused -- and those are properties of the POLICY under test. A
+//! trace is the question; an event stream is one policy's answer to it.
+//! Keeping them apart is what lets the same workload be replayed against
+//! four policies and scored on the same question.
 //!
-//! **Recording does not format.** The fault path pushes a `Copy` struct
-//! into a ring and returns; turning it into JSON happens later, in the
-//! shell, off the path being measured. An emitter that writes to a
-//! console from inside `service` would be timing its own console driver
-//! and calling the result a fault cost.
+//! So a trace carries a session and an `ObjectId` per access and nothing
+//! else. No tiers, no sizes, no costs, no residency. Every one of those is
+//! a property of the system rather than of the workload, and baking one
+//! into the trace would mean each policy was being asked something
+//! slightly different.
 //!
-//! The ring is owned by the `Manager` rather than being a global, so a
-//! test can have one of its own. That matters here more than it usually
-//! would: the thing under test is a side effect, and a global would make
-//! every case in a test binary share it.
+//! `no_std` and allocation-free, because step 008 replays the same trace
+//! inside the kernel. Parsing fills a caller-provided slice; rendering
+//! writes to a `fmt::Write`. Reading the file off a disk is the host's
+//! business and is three lines wherever it is wanted.
 //!
-//! **There is no wall clock in an event, and that is deliberate.** The
-//! only clock the shell has is the 2 Hz timer, which cannot resolve a
-//! fault; and elapsed time under TCG is not the timing of any real
-//! machine. So ordering comes from `seq`, which is exact, and duration
-//! comes from `cost`, which is the modelled figure a provider charges --
-//! the same axis M3's policy comparison is measured on.
+//! ## The model is not in the trace, and that is a trap
+//!
+//! An `ObjectId` names an object but does not say how big it is, and a
+//! simulator cannot tell when a budget is full without knowing. Sizes come
+//! from the model the trace was taken against -- `mlos-synth` today, a
+//! `.spm` sidecar at M3 step 4. The header names that model so replaying a
+//! trace against the wrong one is caught rather than silently producing
+//! numbers about nothing.
 
 #![no_std]
 #![forbid(unsafe_code)]
 
-mod event;
-mod line;
+mod derive;
+mod read;
+mod write;
 
-pub use event::{Event, Kind};
-pub use line::{MARKER, verb, write};
+use mlos_abi::ObjectId;
+use mlos_objtab::SessionId;
 
-/// How many events a ring holds.
-///
-/// A sweep of the synthetic model is 128 acquires and so at most 128
-/// events, which leaves room to spare. Overflow drops the OLDEST and is
-/// counted, never silent: a consumer replaying a stream with a hole in it
-/// would rebuild the wrong picture and have no way to know.
-pub const CAPACITY: usize = 256;
+pub use derive::from_events;
+pub use read::{Error, parse};
+pub use write::render;
 
-/// A fixed ring of the most recent events.
-pub struct Ring {
-    /// Whether to record at all.
-    ///
-    /// Public so `trace off` is a field write. Recording costs a handful
-    /// of stores, so this exists to prove that rather than because the
-    /// cost is known to matter.
-    pub enabled: bool,
-    events: [Option<Event>; CAPACITY],
-    next: usize,
-    seq: u32,
-    dropped: u32,
+/// The format version, in the first line of every trace.
+pub const VERSION: u32 = 1;
+
+/// The word that starts a trace file, so a wrong file fails loudly.
+pub const MAGIC: &str = "mlos-trace";
+
+/// One thing a workload asked for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Access {
+    /// Who asked. Sessions are what M4 makes real; today there is one.
+    pub session: SessionId,
+    /// What they asked for.
+    pub object: ObjectId,
 }
 
-impl Ring {
-    /// An empty ring, recording.
-    pub const EMPTY: Self = Self {
-        enabled: true,
-        events: [None; CAPACITY],
-        next: 0,
-        seq: 0,
-        dropped: 0,
-    };
-
-    /// Records one transition, oldest-out when full.
+impl Access {
+    /// Somewhere to parse into, before anything has been parsed.
     ///
-    /// A handful of stores and a modulo. Nothing is formatted, nothing is
-    /// allocated, and nothing is written to a device -- which is what
-    /// makes it cheap enough to leave on while the thing being measured
-    /// is the fault path itself.
-    pub const fn record(&mut self, mut event: Event) {
-        if !self.enabled {
-            return;
-        }
-        if self.events[self.next].is_some() {
-            self.dropped = self.dropped.saturating_add(1);
-        }
-        self.seq = self.seq.saturating_add(1);
-        event.seq = self.seq;
-        self.events[self.next] = Some(event);
-        self.next = (self.next + 1) % CAPACITY;
-    }
+    /// Not `Default`: object zero does not decode to a class, on purpose,
+    /// so that an all-zero id is rejected rather than read as object 0 of
+    /// model 0. A constant named for what it is says "buffer fill" where
+    /// `Default` would imply "a reasonable access".
+    pub const EMPTY: Self = Self {
+        session: SessionId(0),
+        object: ObjectId(0),
+    };
+}
 
-    /// Every event held, oldest first.
-    pub fn events(&self) -> impl Iterator<Item = &Event> {
-        let (before, after) = self.events.split_at(self.next);
-        after.iter().chain(before).filter_map(Option::as_ref)
-    }
+/// What a trace is of, and where it came from.
+///
+/// Borrowed from the text it was parsed out of, so a header costs nothing
+/// and a trace can be parsed in a kernel with no allocator.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Header<'a> {
+    /// The model the ids name. A replay against a different one is wrong.
+    pub model: &'a str,
+    /// Where the trace came from, for whoever has to reproduce it.
+    pub source: &'a str,
+}
 
-    /// How many events were overwritten before anything read them.
-    #[must_use]
-    pub const fn dropped(&self) -> u32 {
-        self.dropped
-    }
+/// A parsed trace: what it is of, and what it asked for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Trace<'a> {
+    /// What it is a trace of.
+    pub header: Header<'a>,
+    /// Every access, in the order the workload made them.
+    pub accesses: &'a [Access],
 }

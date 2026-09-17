@@ -75,6 +75,6 @@ pub fn document(manager: &Manager<'static, CAPACITY>) -> String {
 /// The event stream this manager has recorded.
 pub fn events(manager: &Manager<'static, CAPACITY>) -> String {
     let mut text = String::new();
-    mlos_trace::write(&mut text, &manager.trace);
+    mlos_events::write(&mut text, &manager.events);
     text.replace("\r\n", "\n")
 }

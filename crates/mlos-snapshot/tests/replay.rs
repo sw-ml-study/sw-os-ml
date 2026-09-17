@@ -196,9 +196,12 @@ fn the_stream_accounts_for_every_object_that_became_resident() {
         .values()
         .filter(|region| region.0 == "dram" && region.3 == "resident");
     assert_eq!(placed, resident.count(), "in:\n{events}");
-    assert!(
-        events.contains(
-            "\"event\":\"dropped\",\"region\":0,\"object\":\"0\",\"offset\":0,\"bytes\":0"
-        )
-    );
+    // The count is always stated, and here it is zero: nothing was lost.
+    // Checked field by field rather than as one long substring, so adding
+    // a field to the line does not fail a test about dropped events.
+    let lost = events
+        .lines()
+        .find(|line| line.contains("\"dropped\""))
+        .expect("a dropped line, even when nothing was dropped");
+    assert!(lost.contains("\"bytes\":0"), "{lost}");
 }

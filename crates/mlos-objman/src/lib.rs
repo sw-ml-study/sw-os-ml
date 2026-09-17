@@ -18,10 +18,10 @@ mod fault;
 mod lease;
 
 use mlos_abi::{Error, ObjectId, Result};
+use mlos_events::{Event, Ring};
 use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
 use mlos_provider::Provider;
-use mlos_trace::{Event, Ring};
 
 pub use arena::Arena;
 pub use fault::ModelFault;
@@ -42,11 +42,17 @@ pub struct Manager<'a, const N: usize> {
     pub last_fault: Option<ModelFault>,
     /// What has happened, in order.
     ///
+    /// The field is `events` and the crate is `mlos-events`; the shell
+    /// verb that prints them is still `trace`, because that is what
+    /// someone types and it is still what it does. The name `mlos-trace`
+    /// now belongs to the M3 access trace, which is a different thing:
+    /// what the workload ASKED FOR, rather than what this did about it.
+    ///
     /// Counters say how much; this says what, and when relative to
     /// everything else. A viewer animating residency needs the sequence,
     /// not the totals -- and the totals can be rebuilt from the sequence
     /// where the reverse is not true.
-    pub trace: Ring,
+    pub events: Ring,
     /// What has happened, counted.
     ///
     /// Kept here rather than by a caller because this is where the events
@@ -64,7 +70,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
-            trace: Ring::EMPTY,
+            events: Ring::EMPTY,
             counters: Counters::EMPTY,
         }
     }
@@ -91,7 +97,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             let claim = self.table.get_mut(id).ok_or(Error::BadObject)?;
             claim.share_count = claim.share_count.saturating_add(1);
             claim.reuse_count = claim.reuse_count.saturating_add(1);
-            self.trace.record(Event::hit(id, size));
+            self.events.record(Event::hit(id, by, size));
             return Ok(Handle { id, address, size });
         }
         self.service(id, lease, by)

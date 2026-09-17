@@ -41,21 +41,18 @@ pub fn verb(out: &mut impl Write, ring: &mut Ring, args: &str) {
 }
 
 /// Writes every event in `ring`, then says how many were lost.
-///
-/// The loss line is an event like any other so that a consumer reading
-/// line by line does not need a second shape for it -- and it is never
-/// omitted when zero, because "no dropped line" and "a dropped line
-/// saying zero" are the same fact only if you already trust the emitter.
 pub fn write(out: &mut impl Write, ring: &Ring) {
     for event in ring.events() {
         let region = mlos_spaces::object(Where::Dram, event.object).unwrap_or_default();
         let _ = write!(
             out,
             "{MARKER} {{\"seq\":{},\"event\":\"{}\",\"region\":{region},\"object\":\"{}\",\
-             \"offset\":{},\"bytes\":{},\"cost\":{},\"tier\":\"{}\",\"why\":\"{}\"}}\r\n",
+             \"session\":{},\"offset\":{},\"bytes\":{},\"cost\":{},\"tier\":\"{}\",\
+             \"why\":\"{}\"}}\r\n",
             event.seq,
             event.kind.name(),
             event.object.0,
+            event.session.0,
             event.offset,
             event.bytes,
             event.cost,
@@ -63,11 +60,21 @@ pub fn write(out: &mut impl Write, ring: &Ring) {
             why(event.why),
         );
     }
+    lost(out, ring.dropped());
+}
+
+/// How many events were overwritten before anything read them.
+///
+/// An event like any other so a consumer reading line by line does not
+/// need a second shape for it, and never omitted when zero: "no dropped
+/// line" and "a dropped line saying zero" are the same fact only if you
+/// already trust the emitter.
+fn lost(out: &mut impl Write, dropped: u32) {
     let _ = write!(
         out,
         "{MARKER} {{\"seq\":0,\"event\":\"dropped\",\"region\":0,\"object\":\"0\",\
-         \"offset\":0,\"bytes\":{},\"cost\":0,\"tier\":\"\",\"why\":\"\"}}\r\n",
-        ring.dropped()
+         \"session\":0,\"offset\":0,\"bytes\":{dropped},\"cost\":0,\"tier\":\"\",\
+         \"why\":\"\"}}\r\n"
     );
 }
 

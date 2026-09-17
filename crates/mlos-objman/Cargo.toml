@@ -14,7 +14,7 @@ mlos-metrics  = { path = "../mlos-metrics",  version = "0.0.1" }
 mlos-objtab   = { path = "../mlos-objtab",   version = "0.0.1" }
 mlos-provider = { path = "../mlos-provider", version = "0.0.1" }
 
-mlos-trace    = { path = "../mlos-trace",    version = "0.0.1" }
+mlos-events    = { path = "../mlos-events",    version = "0.0.1" }
 
 [lints]
 workspace = true

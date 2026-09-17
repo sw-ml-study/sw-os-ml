@@ -64,6 +64,12 @@ the crate graph is deliberately wide and shallow. Design to <=4 modules
 per crate; a crate at 4 that needs a fifth concern gets a *sibling
 crate*, not a fifth module.
 
+This is the SHAPE, not an inventory. Several of these do not exist yet
+and a few that do are not listed; `Cargo.toml` is the record of what is
+built and [status.md](status.md) of what works. What the list is for is
+the boundaries -- which concern lives where, and which crates are
+`no_std` because the kernel links them.
+
 ```
 sw-os-ml/
   crates/
@@ -86,6 +92,7 @@ sw-os-ml/
     mlos-policy-cost/       reload vs recompute vs quantize
     mlos-policy-router/     MoE probability prefetch
     mlos-metrics/      the Rm/Ps/Bt/Rc/Pf/Ph/Ks/Ss counters
+    mlos-events/       residency transitions, recorded as they happen  [no_std]
     mlos-pci/          PCIe enumeration, BAR mapping, MSI-X
     mlos-sim/          host-side simulator: replay traces, run policies   [std]
     mlos-trace/        trace format, record/replay                        [std]

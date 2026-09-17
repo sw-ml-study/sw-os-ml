@@ -1,7 +1,7 @@
 [package]
-name        = "mlos-trace"
+name        = "mlos-events"
 version     = "0.0.1"
-description = "An access trace: what a workload asked for, in order."
+description = "Residency transitions, recorded as they happen."
 edition.workspace      = true
 rust-version.workspace = true
 license.workspace      = true
@@ -11,6 +11,7 @@ authors.workspace      = true
 [dependencies]
 mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
 mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
+mlos-spaces = { path = "../mlos-spaces", version = "0.0.1" }
 
 [lints]
 workspace = true
