@@ -1,0 +1,12 @@
+number = 6
+slug = "verdict"
+status = "pending"
+description = """
+Stop, run the comparison, and look at the table.
+
+Not the G4 report -- that c..."""
+role = "meta"
+context_files = []
+created_at = "2026-09-16T18:27:17"
+task_type = "report"
+commits = []

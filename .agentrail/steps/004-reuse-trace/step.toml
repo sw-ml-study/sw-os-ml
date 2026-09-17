@@ -1,0 +1,12 @@
+number = 4
+slug = "reuse-trace"
+status = "pending"
+description = """
+A workload with reuse in it, so the comparison can come out either way.
+
+**Th..."""
+role = "production"
+context_files = []
+created_at = "2026-09-16T18:27:17"
+task_type = "rust"
+commits = []

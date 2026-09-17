@@ -1,10 +1,10 @@
-number = 6
-slug = "nextuse-policy"
+number = 9
+slug = "in-kernel"
 status = "pending"
 description = """
-Known-next-use replacement, in the simulator.
+The same policies, in the kernel, producing the same numbers.
 
-The policy the project exists ..."""
+`mlos-sim` and..."""
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:53:24"

@@ -1,11 +1,12 @@
 number = 1
 slug = "trace-format"
-status = "in-progress"
+status = "completed"
 description = """
 `mlos-trace`: a recorded access sequence, with record and replay, host-side.
 ..."""
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:53:24"
+completed_at = "2026-09-16T18:33:28"
 task_type = "rust"
-commits = []
+commits = ["b8e0be90f8710f5c3931b7b10d5133df336e442c"]

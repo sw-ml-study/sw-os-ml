@@ -1,7 +1,10 @@
 number = 5
-slug = "stream-syscalls"
+slug = "nextuse-policy"
 status = "pending"
-description = "`ml_stream_declare` and `ml_stream_advance`: the calls by which userspace han..."
+description = """
+Known-next-use replacement, in the simulator.
+
+The policy the project exists ..."""
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:53:24"
