@@ -337,8 +337,29 @@ cargo test -p mlos-cli -- --ignored    # boots a VM under TCG; slow, so opt-in
 
 The last one is why `--ignored` exists: booting a VM takes seconds, which
 is too slow for the ordinary gate but exactly what CI should do before
-trusting a change. `.github/workflows/ci.yml` runs the whole list on an
-aarch64 Linux runner.
+trusting a change.
+
+**There is no CI.** This project builds and tests locally, on purpose:
+the gate above is stricter than a runner's (it includes `sw-checklist`,
+which no runner had) and it runs before every commit rather than after
+it. A GitHub Actions workflow existed from M1 step 018 until M3 step 003
+and was red for its entire life -- it installed QEMU with
+`--no-install-recommends`, which drops the ROM blobs, so the guest never
+started and every boot test reported `missing "MLOS aarch64" in:` with
+nothing after the colon. Ten days of a signal nobody could read, which is
+worse than no signal at all.
+
+What that runner uniquely offered was a machine that is not this Mac --
+portability -- and losing it is a real cost, recorded here rather than
+forgotten. Nothing now checks that MLOS builds and boots on Linux. The
+kernel is architecture-neutral and every `no_std` crate is built for
+`x86_64-unknown-none` on every run, so the code is unlikely to rot; what
+is unchecked is the TOOLING around it, which is where the runner's one
+genuine find lived.
+
+The mitigation is that `mlos run` now says why QEMU failed instead of
+handing back an empty console. That is what made the ten days possible,
+and it would have failed exactly as silently on a fresh Mac.
 
 The `k*` aliases are `--workspace --exclude mlos-cli`, not a list of
 crates. A list has to be updated by hand, and it will be wrong: the build

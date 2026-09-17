@@ -41,6 +41,22 @@ pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
 
 /// Boots headless for `seconds` and returns whatever the console said.
 ///
+/// The console log is named per process. A fixed name means two captures
+/// running at once overwrite each other's, which is exactly what parallel
+/// boot tests do, and it looks like a kernel that sometimes does not
+/// print.
+///
+/// The emulator's own complaints go to a file beside it, because when it
+/// refuses to START the console stays empty and the reason is the only
+/// thing that would help. That cost ten days once: a CI runner reported
+/// `missing "MLOS aarch64" in:` with nothing after the colon, while QEMU
+/// had been saying `failed to find romfile "efi-virtio.rom"` down a pipe
+/// nobody read.
+///
+/// HAVING EXITED is the signal, not having printed nothing. A guest with
+/// no console prints nothing and is fine -- `vz` is exactly that -- but a
+/// guest that had already exited never got as far as trying.
+///
 /// The non-interactive counterpart of [`run`], for tests and for checking
 /// a change still boots. No keystroke reaches the guest -- a file is not a
 /// terminal -- so a shell session is driven through `boot`, which becomes
@@ -49,28 +65,28 @@ pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
 /// person has to sit and type.
 pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result<String> {
     let image = image::build()?;
-    // Unique per invocation. A fixed name means two captures running at
-    // once overwrite each other's console -- which is exactly what three
-    // parallel boot tests do, and it looks like a kernel that sometimes
-    // does not print.
     let log = std::env::temp_dir().join(format!("mlos-console-{}.txt", std::process::id()));
-    let _ = fs::remove_file(&log);
+    let errors = log.with_extension("err");
+    let (path, kernel) = (log.to_string_lossy().into_owned(), image.to_string_lossy());
+    let (program, args) = command(host, &kernel, Some(&path), virtio, boot);
 
-    let (program, args) = command(
-        host,
-        &image.to_string_lossy(),
-        Some(&log.to_string_lossy()),
-        virtio,
-        boot,
-    );
-    let mut child = Command::new(program).args(args).spawn()?;
+    let sink = fs::File::create(&errors)?;
+    let mut child = Command::new(program).args(args).stderr(sink).spawn()?;
     thread::sleep(Duration::from_secs(seconds));
-    child.kill()?;
-    child.wait()?;
+    let finished = child.try_wait()?;
+    let _ = child.kill();
+    let _ = child.wait();
 
     let console = fs::read_to_string(&log).unwrap_or_default();
-    let _ = fs::remove_file(&log);
-    Ok(console)
+    let why = fs::read_to_string(&errors).unwrap_or_default();
+    let _ = (fs::remove_file(&log), fs::remove_file(&errors));
+    match finished {
+        Some(status) if console.is_empty() => Err(io::Error::other(format!(
+            "{program} exited before it could boot ({status}): {}",
+            why.trim()
+        ))),
+        _ => Ok(console),
+    }
 }
 
 /// Boots, drives the shell, and writes the runtime layout it printed.

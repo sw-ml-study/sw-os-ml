@@ -78,7 +78,7 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 29 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
+| Tests | 30 fast test binaries plus eight TCG boot tests (`cargo test -p mlos-cli -- --ignored`). Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 

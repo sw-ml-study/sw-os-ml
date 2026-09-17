@@ -1,0 +1,1057 @@
+Today 6:43 PM
+I have a bunch of quesitions:  update the README and make current status and measured results clear.
+
+  Ran 1 shell command
+
+Step 001 is still marked in-progress — I committed the work but never completed it. Closing that first.
+
+  Ran 1 shell command
+
+❯ how does this use Apple Silicon today?
+
+  Ran 1 shell command
+
+The timer reads 24 MHz under HVF and 62.5 MHz under TCG — that's the host's own counter passed through, and it means a claim in status.md is wrong. Fixing that while I rewrite the README.
+
+  Pushed to main, ran 2 shell commands
+
+Step 002 now. First checking the design rule the policy interface has to satisfy.
+
+  Ran 1 shell command
+
+❯ how real is this?  how practical?  uses GPU yet?  how soon before NVIDIA GPU can be used?
+
+  Ran 1 shell command
+
+Facts gathered. Building step 002 — the policy interface has to be one the kernel can implement, so it's no_std and pure per design.md.
+
+  Ran 4 shell commands
+
+❯ how does the OS boot here (Mac)?  Is it emulating Apple CPU or Intel CPU?  How will it boot on Linux (via VM there)?  How much work to make this OS build Mac and Linux versions?
+
+  Read 1 file, ran 7 shell commands
+
+❯ is the MMU emulated (or virtualized)?  I need a response to my queued up questions soon.
+Interrupted · What should Claude do instead?
+
+related to: 
+sw-ml-study/sw-os-ml
+
+You’re asking for the current reality of sw-os-ml, especially where the virtualization boundary really is, whether Apple Silicon is being used meaningfully, whether an MMU exists, what Linux will look like, and how far away NVIDIA GPU involvement is.
+
+Current status
+
+The README is substantially better now because it distinguishes mechanism demonstrated from the thesis still unproven. The current state is:
+
+Capability	Status
+Boots its own Rust kernel	Yes
+Runs an interactive shell	Yes
+ML object table	Yes
+Model-object fault path	Yes
+Real backing block device via virtio	Yes
+Synthetic model residency pressure	Yes
+Trace recording	Yes
+Host-side policy replay simulator	Yes, just added
+Eviction policy	Not yet
+Known-next-use vs LRU measurement	Not yet
+Userspace/processes	No
+General scheduler	No
+GPU	No
+ML-MMU	No
+
+The project says this explicitly: gates G1-G3 are complete, while G4—known-next-use actually beating LRU under equal memory pressure—is the first gate that tests the core hypothesis.
+
+The newly completed M3 step 002 adds mlos-sim: replay one access trace through different policies under exactly the same residency budget and count hits, provider reads, bytes moved, evictions, and refusals. That is an important architectural step because it means policy experiments don't have to be confounded by VM performance.
+
+1. How is Apple Silicon actually being used?
+
+Quite directly for the CPU, but not for the GPU.
+
+The guest kernel is AArch64. On an M-series Mac:
+
+MLOS AArch64 instructions
+        │
+        ▼
+QEMU "virt" machine
+        │
+        ▼
+HVF / Hypervisor.framework
+        │
+        ▼
+real Apple ARM cores
+
+So QEMU is not emulating an Intel CPU and it is not translating ARM instructions into something else.
+
+It is virtualizing the machine around those CPUs.
+
+The README describes this accurately: QEMU/HVF gives the AArch64 guest native execution on the real ARM cores. The kernel even observes Apple's 24 MHz architectural timer frequency through CNTFRQ_EL0; QEMU TCG instead exposes its virtual 62.5 MHz timer.
+
+This is quite a useful distinction:
+
+CPU execution is hardware-virtualized; peripherals are virtual hardware.
+
+MLOS therefore sees:
+
+ARMv8/AArch64 CPU
+ARM generic timer
+GICv3
+PL011 UART
+virtio block
+virtio-mmio
+
+It does not see:
+
+Apple AIC
+Apple NVMe controller
+Apple GPU
+Apple ANE
+Apple's physical UARTs
+
+That is desirable for this project because it avoids building an Apple-specific OS.
+
+2. Is the MMU emulated or virtualized?
+
+There are actually two different "MMUs" in this project and they should not be conflated.
+
+The ARM CPU MMU
+
+This one is real architectural hardware exposed through virtualization.
+
+MLOS constructs AArch64 page tables and programs the normal ARM system registers such as TTBR*, TCR_EL1, MAIR_EL1, and SCTLR_EL1.
+
+Under HVF, the guest ARM MMU semantics are hardware-assisted by Apple's virtualization facilities.
+
+MLOS currently uses a very simple map:
+
+VA 0 ------------------------+
+                             |
+                             | identity mapping
+                             v
+PA 0 ------------------------+
+
+1 GiB block mappings
+
+The status document says the kernel turns translation on and reads SCTLR_EL1.M back to prove it is enabled.
+
+So:
+
+yes, MLOS already uses a genuine ARM virtual-memory/MMU mechanism.
+
+But it is intentionally primitive.
+
+There is currently:
+
+an identity map,
+1 GiB mappings,
+no general page mapper,
+no userspace address spaces,
+no per-page permissions,
+effectively writable/executable RAM.
+
+That is enough for the kernel experiments but nowhere near Linux-style virtual memory.
+
+The "ML-MMU"
+
+This is something completely different.
+
+The proposed ML-MMU is an experimental accelerator/device abstraction for model-state movement, associated with your emufpga work.
+
+That does not exist yet.
+
+The status explicitly lists:
+
+G8 — ML-MMU emulated: not started.
+
+Eventually I would expect the conceptual arrangement to be:
+
+                  ARM CPU MMU
+                       │
+             normal loads/stores
+                       │
+                       ▼
+               MLOS kernel memory
+                       │
+                       │ ML object requests
+                       ▼
+                  Object manager
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+        DRAM          NVMe       ML-MMU device
+                                   │
+                            FPGA / emulator
+
+The ML-MMU therefore does not replace the ARM MMU.
+
+It is much closer to a smart DMA / memory-placement / streaming device.
+
+3. How does MLOS boot on the Mac?
+
+Today the primary route is roughly:
+
+cargo run -p mlos-cli -- run
+        │
+        ├─ build bare-metal AArch64 kernel
+        │
+        ├─ construct bootable ARM Image
+        │
+        ▼
+      QEMU
+   -machine virt
+   -accel hvf
+        │
+        ▼
+Hypervisor.framework
+        │
+        ▼
+Apple Silicon ARM CPU
+
+QEMU presents an ARM virt machine, not an emulated Mac.
+
+That distinction is important.
+
+You are not building:
+
+an OS for Apple Silicon.
+
+You are currently building:
+
+an AArch64 OS for a standardized virtual ARM computer.
+
+That's much more portable.
+
+The kernel consumes a device tree supplied at boot and learns RAM, CPUs, UART, GIC, etc. from it rather than hard-coding the machine layout.
+
+That was a good architectural choice.
+
+4. So how will it boot under Linux?
+
+Almost identically.
+
+On an ARM Linux system:
+
+MLOS AArch64
+    │
+    ▼
+QEMU virt
+    │
+    ▼
+KVM
+    │
+    ▼
+ARM CPU
+
+On your likely Linux development machines, though, the hosts are x86-64.
+
+Then you have two possibilities.
+
+AArch64 guest under TCG
+MLOS AArch64
+      │
+      ▼
+QEMU TCG
+      │
+ ARM → x86 translation
+      │
+      ▼
+x86 Linux CPU
+
+That works, but it is emulation.
+
+You already use the equivalent TCG path as the deterministic test environment.
+
+Native x86-64 MLOS guest
+
+The repo already has an x86_64-unknown-none build target in its architecture/testing plans. The README even notes that a second x86-64 target is built in CI.
+
+That gives:
+
+MLOS x86-64
+    │
+    ▼
+QEMU/KVM
+    │
+    ▼
+Xeon / Ryzen
+
+This is the path that becomes especially interesting for your older HP/Dell GPU servers.
+
+5. How much work is involved in "Mac and Linux versions"?
+
+I would avoid framing this as separate Mac and Linux versions.
+
+That's the wrong abstraction.
+
+You want:
+
+                 MLOS
+                  │
+          machine-independent
+          object-management core
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+     AArch64              x86-64
+       HAL                  HAL
+        │                    │
+     QEMU virt            QEMU PC/virt
+        │                    │
+       HVF                  KVM
+        │                    │
+      macOS                Linux
+
+Host OS differences should largely live in the development tooling, not in the guest kernel.
+
+So there are really three axes:
+
+Guest architecture
+AArch64
+x86-64
+Virtual machine
+QEMU ARM virt
+QEMU x86 machine
+Host accelerator
+HVF on macOS
+KVM on Linux
+TCG everywhere as fallback
+
+Most of MLOS ought to remain unchanged.
+
+The architecture is already moving in that direction because the object/policy layer is platform-independent and even no_std.
+
+The recent policy work is particularly healthy: mlos-policy is deliberately pure and carries no private policy state, allowing exactly the same policy implementation to run in the simulator and eventually inside the kernel. That's a strong testability property.
+
+6. How real is this today?
+
+There are three levels of "real."
+
+Level 1 — real OS mechanisms
+
+Very real.
+
+You have:
+
+a bare-metal Rust kernel,
+architectural MMU,
+interrupts,
+timer,
+device tree parsing,
+GIC,
+UART,
+virtio,
+block I/O,
+fault handling,
+object manager,
+object residency.
+
+This is not a mocked browser simulation.
+
+The guest actually boots and reads blocks from an actual QEMU virtio-blk device.
+
+Level 2 — real ML resource management
+
+Partially real.
+
+The kernel is managing real residency pressure and real I/O.
+
+For example, its synthetic model is:
+
+136 objects, 144 KiB across three tiers,
+
+and an 8 KiB arena only gets through seven of 128 tiles before refusing because eviction doesn't yet exist.
+
+That's a legitimate demonstration of the resource-management problem.
+
+But the model bytes aren't doing useful inference.
+
+Level 3 — useful ML workload
+
+Not yet.
+
+The status page is unusually clear about this:
+
+the synthetic transformer's tiles have no arithmetic in them.
+
+That is okay right now.
+
+You are testing:
+
+storage → residency → scheduling → eviction
+
+rather than:
+
+matmul → softmax → sampling
+
+Keeping those separate is sensible.
+
+7. How practical is the project?
+
+There are two answers.
+
+As a general-purpose OS replacement
+
+Not practical anytime soon.
+
+That would require enormous amounts of conventional OS functionality that have nothing to do with your experiment:
+
+processes,
+filesystems,
+networking,
+mature allocators,
+SMP scheduling,
+security,
+drivers,
+userspace ABI,
+debugging,
+libraries.
+
+Doing all of that would bury the research.
+
+As an experimental ML resource-control kernel
+
+Much more practical.
+
+And I think the current direction is increasingly coherent.
+
+You don't need to prove that MLOS can replace Linux.
+
+You need to prove something more constrained:
+
+Given the same storage, RAM, workload and compute hardware, can an ML-aware object manager make measurably better residency decisions than page-oriented mechanisms?
+
+That's testable.
+
+M3 is now set up properly to answer it.
+
+8. Does it use any GPU yet?
+
+No.
+
+Not Apple GPU.
+
+Not NVIDIA.
+
+Not ANE.
+
+Not CUDA.
+
+Nothing.
+
+The README now says this directly.
+
+That's appropriate at the current stage.
+
+Adding CUDA before proving the residency-policy hypothesis would introduce far too many variables.
+
+9. How soon can NVIDIA GPUs be used?
+
+There are several meanings of "use."
+
+This is the important distinction.
+
+Stage A — detect a passed-through GPU
+
+Relatively close once the Linux/x86 platform work starts.
+
+Likely path:
+
+Linux host
+   │
+ NVIDIA GPU
+   │
+ VFIO
+   │
+   ▼
+QEMU/KVM
+   │
+ PCIe passthrough
+   │
+   ▼
+MLOS
+
+For this you need:
+
+PCI enumeration,
+ECAM,
+BAR mapping,
+IOMMU/DMA infrastructure,
+interrupt handling,
+VFIO/QEMU configuration.
+
+This corresponds roughly to the planned M6 / G7 work.
+
+The architecture deliberately defines G7 as placement across a real PCIe boundary, not CUDA compute.
+
+That is a very sensible scope boundary.
+
+10. Could MLOS actually run CUDA on the GPU?
+
+That's substantially harder.
+
+Passing through the PCI device gets you:
+
+GPU hardware visible
+
+It does not get you:
+
+CUDA works
+
+Modern NVIDIA GPUs require:
+
+firmware,
+command submission,
+memory management,
+synchronization,
+GSP interaction on newer hardware,
+CUDA/runtime support.
+
+Writing an NVIDIA driver is emphatically not a reasonable side project.
+
+The architecture explicitly says native GPU-driver development is out of scope.
+
+I agree with that decision.
+
+11. So what is the realistic NVIDIA compute architecture?
+
+I would eventually aim for split control and compute.
+
+Something like:
+
+                     Linux host
+              ┌───────────────────────┐
+              │ NVIDIA driver + CUDA  │
+              │ llama.cpp / runtime   │
+              └──────────┬────────────┘
+                         │
+                 paravirtual queue
+                         │
+════════════════ VM boundary ════════════════
+                         │
+                         ▼
+                    MLOS guest
+                         │
+                ML object manager
+                         │
+                residency decision
+
+MLOS tells the host something like:
+
+Make expert E37 resident in device memory.
+
+The Linux side performs the actual CUDA call.
+
+That lets MLOS research:
+
+VRAM residency,
+GPU object allocation,
+expert swapping,
+host→GPU bandwidth,
+prefetch,
+admission,
+multi-session sharing,
+
+without reimplementing NVIDIA's software stack.
+
+That's likely much more valuable than proving you can execute a matmul from a homemade driver.
+
+12. And what about old GPUs like your M40/P40/P100s?
+
+Those are actually quite attractive for this research.
+
+Not because they're easy to write drivers for—they aren't—but because they give you interesting constrained environments:
+
+P40     24 GB
+M40     12/24 GB
+P100    12/16 GB
+3060    12 GB
+5060    16 GB
+3090    24 GB
+
+You can deliberately make:
+
+model state > VRAM
+
+and then test exactly what MLOS is about:
+
+expert placement,
+weight streaming,
+KV placement,
+eviction,
+hot/cold tiers,
+PCIe traffic,
+request batching.
+
+Older PCIe generations make bad residency decisions more expensive and therefore easier to measure.
+
+For an experimental OS, that's arguably beneficial.
+
+13. What do the existing measurements actually tell us?
+
+The README now reports:
+
+Operation	HVF	TCG
+model-object fault	~42 µs	~91 µs
+residency-event recording	~4 ns	~129 ns
+32-resident-tile sweep	~4.9 µs	~40 µs
+
+The most interesting number is actually the 42 µs fault, because it gives you a scale.
+
+A 42 µs software/device-management operation is tiny compared with:
+
+SSD page-in milliseconds in bad cases,
+loading tens of MB across storage,
+PCIe transfer of a large expert,
+executing a substantial transformer layer.
+
+That suggests the object abstraction itself has a reasonable chance of being cheap enough.
+
+But these are not yet evidence that MLOS wins.
+
+The README correctly says exactly that.
+
+14. What happens next?
+
+The recent reordering is a very good change.
+
+Instead of implementing half the OS before discovering whether its key idea matters, the next sequence is roughly:
+
+trace
+  ↓
+policy simulator          ← now exists
+  ↓
+FIFO / LRU baselines
+  ↓
+workload with genuine reuse
+  ↓
+known-next-use
+  ↓
+COMPARE
+  ↓
+verdict
+
+The current M3 work is only 2 of 11 steps, and the saga now deliberately reaches its verdict at step 006 rather than putting it at the end.
+
+The latest commit explains an especially important methodological point: the dense sweep trace currently available is unfair because LRU is almost guaranteed to look bad. A workload with genuine reuse is therefore being introduced before drawing conclusions.
+
+That's good experimental discipline.
+
+My architecture recommendation
+
+I would preserve the current sequence and resist pulling GPU work forward.
+
+The research stack should evolve approximately like this:
+
+M1   kernel boots
+ │
+M2   ML objects + faults
+ │
+M3   semantic residency policy        ← NOW
+ │
+ │   "Does ML knowledge beat LRU?"
+ │
+M4   multiple sessions / sharing
+ │
+ │   "Can one load serve N clients?"
+ │
+M5   degradation / KV pressure
+ │
+ │   "Can pressure reduce quality instead of OOM?"
+ │
+M6   PCIe / NVIDIA GPU
+ │
+ │   "Does the policy survive a real device boundary?"
+ │
+M7?  paravirtual compute service
+ │
+ │   "Can Linux CUDA execute what MLOS schedules?"
+ │
+M8?  FPGA / ML-MMU
+     "Can hardware accelerate the same abstraction?"
+
+That gives every hardware extension a measured baseline to beat.
+
+Most importantly, the Mac development environment isn't a dead end. It's doing exactly what you want for M1–M5: running an ARM OS kernel at near-native CPU speed while presenting deterministic virtual hardware. Then the Linux GPU machines become the hardware-integration environment rather than requiring a different operating-system design.
+
+The project has crossed the point where I'd call it merely an interesting kernel exercise. It now has enough instrumentation and separation between workload, policy, and mechanism that M3 can produce a result that is actually falsifiable. The next meaningful milestone isn't “more OS”; it's that LRU versus known-next-use table.
+
+the goal is not to write a full OS, the goal is to write a distributed virtualized guest "OS" that manages inference across GPU VRAM, CPU cores, system RAM, SSDs, HDs, and the network. The host OS provides the missing pieces?  This is a research project, not a PoC for a product.
+
+Yes. That clarification changes the architectural framing substantially. MLOS should not aspire to become a self-sufficient OS. It is better thought of as a distributed ML resource hypervisor/control OS running as a guest, while Linux/macOS remain responsible for commodity operating-system services.
+
+The architecture I'd target is:
+
+                     DISTRIBUTED MLOS FABRIC
+              semantic ML objects + global policy
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+     MLOS guest A       MLOS guest B      MLOS guest C
+       Mac/ARM          Linux/x86         Linux/x86
+          │                 │                 │
+    ┌─────┴─────┐     ┌─────┴────────┐   ┌────┴────────┐
+    │ Host OS   │     │ Host OS      │   │ Host OS     │
+    │ macOS     │     │ Linux        │   │ Linux       │
+    └─────┬─────┘     └─────┬────────┘   └────┬────────┘
+          │                 │                 │
+     CPU / RAM          CPU / RAM         CPU / RAM
+     SSD / Metal        SSD / HDD         SSD / HDD
+          │             NVIDIA GPU        NVIDIA GPU
+          └─────────────────┼─────────────────┘
+                            │
+                       10GbE / LAN
+
+The host OS supplies the ugly machinery. MLOS supplies the ML-specific semantics the host lacks.
+
+What the host should own
+
+Linux/macOS should continue doing things they already do extremely well:
+
+Resource/problem	Host responsibility	MLOS responsibility
+NVIDIA GPU	driver, firmware, CUDA	placement, residency, scheduling
+Apple GPU	Metal	decide what/when to execute
+SSD/HDD	filesystem, NVMe/SAS/SATA drivers	ML-object tiering
+Ethernet	NIC driver, TCP/UDP/RDMA eventually	remote ML-object provider
+CPU	physical CPU management	allocate ML work
+RAM	physical memory/hypervisor	semantic ML-object residency
+Security	devices, isolation	ML capabilities/leases
+Hardware failures	driver/device handling	retry/rehome ML work
+
+That means writing an NVIDIA driver would actually be contrary to the research goal. It spends research effort reproducing Linux rather than investigating ML resource management.
+
+Likewise, MLOS doesn't need an ext4 implementation, NVMe driver, sophisticated USB stack, Wi-Fi stack, etc.
+
+MLOS becomes a semantic control plane
+
+The interesting abstraction is no longer:
+
+"an operating system that runs an ML application."
+
+It's closer to:
+
+A distributed guest operating system that virtualizes model state and inference resources across heterogeneous physical resources supplied by host operating systems.
+
+An ML object might have placements like:
+
+EXPERT model=7 layer=12 expert=37
+
+representation:
+    Q4_K
+
+size:
+    38 MiB
+
+placements:
+    node0.ssd          backing
+    node0.ram          absent
+    node0.gpu0.vram    resident
+    node1.ram          resident
+    node2.hdd          backing
+
+next_use:
+    node0/session17: p=.73, ~1 token
+
+reload_cost:
+    SSD -> RAM          1.4 ms
+    RAM -> GPU          2.1 ms
+    node1 -> node0      4.8 ms
+
+Now the OS has information Linux fundamentally doesn't have.
+
+Linux sees pages, files, sockets and DMA buffers.
+
+MLOS sees:
+
+Expert E37 is likely to be needed next, exists on another node, costs X to transfer over Ethernet, costs Y to reload from local SSD, and evicting E12 is cheaper because it isn't expected for another 40 tokens.
+
+That's the research.
+
+The host/guest boundary becomes critical
+
+I'd therefore eventually introduce explicit host providers.
+
+Conceptually:
+
+                     MLOS object manager
+
+          acquire(EXPERT_E37, device=gpu0)
+                         │
+                         ▼
+                   provider graph
+
+      ┌────────────┬──────────┬─────────────┐
+      ▼            ▼          ▼             ▼
+    DRAM         SSD         NET          GPU
+      │            │          │             │
+      ▼            ▼          ▼             ▼
+  host-memory   host-file   host-net    host-CUDA
+   provider      provider    provider     provider
+
+Virtio is an excellent conceptual fit.
+
+Rather than MLOS having:
+
+nvme driver
+nvidia driver
+ethernet driver
+
+it could eventually have narrow interfaces such as:
+
+virtio-ml-storage
+virtio-ml-net
+virtio-ml-compute
+
+The host implementation can use whatever is appropriate:
+
+virtio-ml-storage
+       │
+       ├── mmap()
+       ├── io_uring
+       ├── NVMe
+       ├── SAS RAID
+       └── HDD
+
+virtio-ml-compute
+       │
+       ├── CUDA
+       ├── Metal
+       ├── Vulkan
+       ├── CPU/BLAS
+       └── NPU runtime
+
+MLOS doesn't have to know.
+
+That's an extremely useful virtualization boundary for your research.
+
+CPU compute should work the same way
+
+Even CPU inference doesn't necessarily need to execute inside the guest.
+
+You could experiment with both approaches.
+
+Native guest execution
+MLOS
+  ↓
+guest ARM/x86 instructions
+  ↓
+HVF/KVM
+  ↓
+host CPU
+
+Good for studying a genuinely self-contained execution environment.
+
+Host compute provider
+MLOS
+  │
+  │ EXEC(matmul, A, B, C)
+  ▼
+host service
+  │
+  ├─ llama.cpp kernel
+  ├─ BLAS
+  ├─ AMX
+  ├─ AVX512
+  └─ Accelerate
+
+For this project I would actively support both.
+
+It creates a fascinating research question:
+
+At what granularity does crossing the guest/host boundary become worthwhile?
+
+You can measure:
+
+per tensor
+per layer
+per expert
+per token
+per batch
+
+rather than assuming the answer.
+
+And this makes the network a memory tier
+
+This is where the architecture becomes considerably more interesting.
+
+Instead of:
+
+VRAM
+RAM
+SSD
+HDD
+
+MLOS sees a graph:
+
+                         GPU0 VRAM
+                        /         \
+                   PCIe             PCIe
+                    /                 \
+             node A RAM             node B RAM
+                │   \                  │
+              SSD    \ 10GbE          SSD
+                │     \                │
+               HDD     ───────────── node C RAM
+                                      │
+                                   FPGA/NPU
+
+It shouldn't necessarily impose a simple HOT/WARM/COLD hierarchy anymore.
+
+It's a cost graph.
+
+For object X:
+
+SSD A → RAM A → GPU A
+        ↑
+        │ 10GbE
+        │
+      RAM B
+        ↑
+        │
+      SSD B
+
+The policy asks:
+
+What is the cheapest way to satisfy acquire(X, GPU_A) before its deadline?
+
+That starts looking like a genuinely novel ML resource-management experiment.
+
+Your old rack servers become particularly useful
+
+This framing also makes the heterogeneous hardware you've been discussing an asset rather than a nuisance.
+
+You can deliberately build an ugly cluster:
+
+Node A
+  P40 24G
+  128G RAM
+  SAS HDD array
+  SSD
+       │
+       │ 10GbE
+       │
+Node B
+  P100 16G
+  256G RAM
+  SSD
+       │
+       │
+Node C
+  RTX 3060 12G
+  64G RAM
+  NVMe
+       │
+       │ Ethernet/USB
+       │
+LicheeRV / FPGA / NPU nodes
+
+Now ask experimentally:
+
+Where should Expert 17 live?
+
+Or:
+
+Is fetching Expert 17 from node B's RAM faster/cheaper than reading it from node A's SSD?
+
+Or:
+
+Should four sessions wait 800 µs so they can share one expert transfer?
+
+Or:
+
+Should GPU A remain idle briefly rather than evicting something that will be needed two tokens later?
+
+Those are much more interesting questions than whether MLOS has a filesystem.
+
+This also changes how I'd interpret the milestones
+
+I would keep M1-M3 mostly as they are, but reinterpret later work.
+
+M1  BOOTSTRAP
+    Can the research kernel execute?
+
+M2  OBJECTS
+    Can model state be named independently
+    of physical representation?
+
+M3  RESIDENCY
+    Does semantic knowledge improve placement?
+                       ← CURRENT
+
+M4  SHARING
+    Can multiple inference streams exploit
+    shared model state?
+
+M5  PRESSURE
+    Can ML-specific degradation beat generic OOM?
+
+M6  HOST PROVIDERS
+    Can MLOS control real host resources?
+       RAM / storage / CUDA
+
+M7  DISTRIBUTION
+    Can another machine be a provider?
+
+M8  HETEROGENEITY
+    GPU + CPU + FPGA + NPU + storage
+
+M9  GLOBAL SCHEDULING
+    Can placement + compute + network scheduling
+    beat independent local decisions?
+
+M10 ML-MMU
+    Which successful software mechanisms are
+    worth accelerating in hardware?
+
+In particular, I would not make PCI passthrough the central goal of M6.
+
+Passthrough is useful as an experiment, but the host-provider architecture is more aligned with your stated goal.
+
+A passed-through P40 forces MLOS toward being a GPU OS.
+
+A host CUDA provider lets MLOS become an ML resource OS.
+
+That's a major difference.
+
+A more revealing end-state experiment
+
+Eventually I would want MLOS to run an intentionally oversized MoE model:
+
+                 80 GB model state
+                       │
+          ┌────────────┼────────────┐
+          │            │            │
+       Node A        Node B       Node C
+       P40 24G       P100 16G     3060 12G
+       RAM 64G       RAM 128G     RAM 32G
+       SSD           HDD          NVMe
+          │            │            │
+          └────────── 10GbE ────────┘
+
+No machine can efficiently hold everything where it wants it.
+
+Then compare:
+
+Baseline: independent inference runtime/offload decisions on each machine.
+
+versus:
+
+MLOS: globally known object identity, reuse, predicted next-use, transfer cost, compute cost and session demand.
+
+Measure:
+
+tokens/sec,
+TTFT,
+p50/p95 token latency,
+bytes SSD→RAM,
+bytes RAM→VRAM,
+network bytes,
+GPU idle time,
+redundant object loads,
+expert cache hit rate,
+energy if practical.
+
+A positive or negative result is useful research.
+
+And that makes the current M3 experiment much more important: next_use isn't merely an improved cache eviction algorithm. It is the first tiny experiment testing whether semantic knowledge about inference is valuable enough to justify moving resource decisions out of conventional host-OS abstractions and into this distributed ML control layer.
+
+That, I think, is the much better description of what sw-os-ml is actually becoming.
+

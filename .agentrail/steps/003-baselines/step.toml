@@ -1,6 +1,6 @@
 number = 3
 slug = "baselines"
-status = "pending"
+status = "in-progress"
 description = """
 `mlos-policy`: demand, FIFO and LRU. The numbers next-use has to beat.
 
