@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-16, during saga `mlos-nextuse`, after step 001.
+Last updated: 2026-09-16, during saga `mlos-nextuse`, after step 002.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **1 of 9 steps** -- saga `mlos-nextuse`. The milestone the project exists for |
+| M3 it knows better | **2 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -73,6 +73,8 @@ x86-64 anywhere in this repo.
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
 | Traces | And `build/runtime.trace`: the access sequence those events record -- session and `ObjectId` per acquire, and nothing about what the system did. What M3 replays policies against |
+| Simulator | `mlos-sim` replays a trace against a policy under a fixed residency budget and counts hits, provider reads, bytes, evictions and refusals. `compare` takes one budget for every policy, so an unequal comparison cannot be expressed |
+| Policy interface | `mlos-policy`: `no_std` and pure, so the same code runs in the kernel and the simulator. A policy reads `ObjectMeta` and names a victim; it holds no state the table does not own |
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
@@ -225,10 +227,9 @@ the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
 emitters, an event stream. Nothing has decided anything yet.
 
-Step 002 `sim-harness`: `mlos-sim`, replaying a trace against a policy
-under a fixed residency budget and counting provider reads and bytes
-moved. Identical budget across policies, enforced rather than intended --
-a comparison where one policy got more memory is not a comparison.
+Step 003 `baselines`: demand, FIFO and LRU in `mlos-policy`. Also the
+harness's own test -- LRU must beat FIFO on a workload with reuse, and if
+it does not, `mlos-sim` is wrong and every number after it is worthless.
 
 The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
 to 005 build the harness, the baselines, a workload with real reuse in

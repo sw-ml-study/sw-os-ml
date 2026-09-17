@@ -120,6 +120,11 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// Separate because its failure means something different: no room is
     /// a residency decision nobody has made yet, and it is the error a
     /// session's admission contract exists to prevent.
+    ///
+    /// Fetches BEFORE recording residency. An object the table calls
+    /// resident but whose bytes never arrived is worse than a miss: the
+    /// next acquire is a hit, and returns whatever was in the arena
+    /// beforehand.
     fn place(
         &mut self,
         id: ObjectId,
@@ -129,15 +134,14 @@ impl<'a, const N: usize> Manager<'a, N> {
     ) -> Result<Handle> {
         let size = located.size;
         let (address, into) = self.arena.place(size)?;
-        // Fetch before recording residency. An object the table calls
-        // resident but whose bytes never arrived is worse than a miss:
-        // the next acquire is a hit, and returns whatever was in the
-        // arena beforehand.
         provider.read(located, 0, into)?;
         self.counters.resident(i64::from(size));
 
+        let now = self.clock;
         let placed = self.table.get_mut(id).ok_or(Error::BadObject)?;
         placed.resident_at = address;
+        placed.placed_tick = now;
+        placed.used_tick = now;
         placed.tier = Tier::Warm;
         placed.share_count = u16::from(lease.pins());
         placed.reuse_count = placed.reuse_count.saturating_add(1);

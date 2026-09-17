@@ -53,6 +53,13 @@ pub struct Manager<'a, const N: usize> {
     /// not the totals -- and the totals can be rebuilt from the sequence
     /// where the reverse is not true.
     pub events: Ring,
+    /// A monotonic count of acquires, for `ObjectMeta`'s two ticks.
+    ///
+    /// The kernel keeps them even though nothing in the kernel reads them
+    /// yet: a field the simulator fills and the kernel does not is a
+    /// field the two disagree about, and step 009 replays the same trace
+    /// in both and requires the counts to match exactly.
+    pub clock: u32,
     /// What has happened, counted.
     ///
     /// Kept here rather than by a caller because this is where the events
@@ -70,6 +77,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
+            clock: 0,
             events: Ring::EMPTY,
             counters: Counters::EMPTY,
         }
@@ -90,13 +98,16 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// The fast path -- a resident object -- is a table lookup, a tier
     /// comparison and a counter. Everything else is [`Self::service`].
     pub fn acquire(&mut self, id: ObjectId, lease: Lease, by: SessionId) -> Result<Handle> {
+        self.clock = self.clock.saturating_add(1);
         if let Some(meta) = self.table.get(id)
             && meta.tier <= Tier::Warm
         {
             let (address, size) = (meta.resident_at, meta.size);
+            let now = self.clock;
             let claim = self.table.get_mut(id).ok_or(Error::BadObject)?;
             claim.share_count = claim.share_count.saturating_add(1);
             claim.reuse_count = claim.reuse_count.saturating_add(1);
+            claim.used_tick = now;
             self.events.record(Event::hit(id, by, size));
             return Ok(Handle { id, address, size });
         }

@@ -1,6 +1,6 @@
 number = 2
 slug = "sim-harness"
-status = "pending"
+status = "in-progress"
 description = "`mlos-sim`: replay a trace against a policy under a fixed residency budget, a..."
 role = "production"
 context_files = []

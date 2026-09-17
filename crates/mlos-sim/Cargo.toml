@@ -1,0 +1,18 @@
+[package]
+name        = "mlos-sim"
+version     = "0.0.1"
+description = "Replay an access trace against a policy, and count what it cost."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
+mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
+mlos-policy = { path = "../mlos-policy", version = "0.0.1" }
+mlos-trace  = { path = "../mlos-trace",  version = "0.0.1" }
+
+[lints]
+workspace = true

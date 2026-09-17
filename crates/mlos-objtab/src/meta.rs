@@ -130,6 +130,21 @@ pub struct ObjectMeta {
     pub next_use: NextUse,
     /// How often it has been wanted, for frequency-aware caching.
     pub reuse_count: u16,
+    /// When it became resident, on a monotonic acquire counter.
+    ///
+    /// Insertion order, which is the only thing FIFO knows. Here rather
+    /// than inside a policy because `docs/design.md` s.2 makes it a rule
+    /// that a policy holds no state the table does not own -- a FIFO
+    /// keeping its own queue could not be one piece of code running both
+    /// in the kernel and in the simulator, and that sameness is the only
+    /// thing making the comparison worth anything.
+    pub placed_tick: u32,
+    /// When it was last wanted, on the same counter.
+    ///
+    /// Recency, which is what LRU knows and all it knows. Distinct from
+    /// `placed_tick` for exactly the case the two disagree about: an
+    /// object placed early and used recently.
+    pub used_tick: u32,
     /// What fetching it again would cost.
     pub reload_cost: CostNs,
     /// What recomputing it would cost, or [`CostNs::IMPOSSIBLE`].

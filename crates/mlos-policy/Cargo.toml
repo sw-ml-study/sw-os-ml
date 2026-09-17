@@ -1,0 +1,16 @@
+[package]
+name        = "mlos-policy"
+version     = "0.0.1"
+description = "What to throw away when memory runs out."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
+mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
+
+[lints]
+workspace = true
