@@ -1,6 +1,6 @@
 number = 5
 slug = "nextuse-policy"
-status = "pending"
+status = "in-progress"
 description = """
 Known-next-use replacement, in the simulator.
 

@@ -1,21 +1,41 @@
-//! FIFO and LRU: the same policy, reading different clocks.
+//! The three an ordinary operating system would bring.
 //!
-//! One type rather than two, because that is what they are. Both evict
-//! the resident object with the smallest tick; they differ only in which
-//! tick they look at -- when the object arrived, or when it was last
-//! wanted. Writing them as one makes the comparison between them exactly
-//! a comparison of which clock matters, which is the only interesting
-//! thing about it.
+//! Together because they are one thing: the numbers known-next-use has to
+//! beat. Demand paging is the floor -- it never evicts, it refuses, and
+//! what refusing costs is part of what the comparison measures. FIFO and
+//! LRU are the two a page-based kernel actually ships.
 //!
-//! Neither keeps a queue or a list. `docs/design.md` s.2 forbids a policy
-//! state the table does not own, so both find their victim by scanning
-//! for a minimum -- which is what the kernel would have to do over its own
-//! table, and what known-next-use will do when it scans for a maximum.
+//! FIFO and LRU are ONE TYPE reading different clocks, because that is
+//! what they are. Both evict the resident object with the smallest tick;
+//! they differ only in whether that tick is when the object arrived or
+//! when it was last wanted. Written as one, the comparison between them
+//! is exactly a comparison of which clock matters -- and they come out
+//! identical whenever nothing is reused, because then the two clocks are
+//! the same clock.
+//!
+//! None of them keeps a queue or a list. `docs/design.md` s.2 forbids
+//! policy state the table does not own, so each finds its victim by
+//! scanning for a minimum -- which is what the kernel would have to do
+//! over its own table, and what known-next-use does when it scans for a
+//! maximum.
 
 use mlos_abi::ObjectId;
 use mlos_objtab::ObjectMeta;
 
 use crate::{Policy, Residency};
+
+/// Evicts nothing, ever.
+pub struct Demand;
+
+impl Policy for Demand {
+    fn name(&self) -> &'static str {
+        "demand"
+    }
+
+    fn victim(&self, _resident: &dyn Residency, _wanting: &ObjectMeta) -> Option<ObjectId> {
+        None
+    }
+}
 
 /// Evicts whichever resident object has the smallest tick.
 pub struct Oldest {

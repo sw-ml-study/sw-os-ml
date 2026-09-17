@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 004.
+Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 005.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **4 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
+| M3 it knows better | **5 of 11 steps** -- saga `mlos-nextuse`. Step 006 is the verdict |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -207,16 +207,50 @@ sessions that finish at different times and recency starts to mean
 something. That is the knob this workload has, and the answer moves with
 it -- which step 006 must report rather than pick a column from.
 
-**Policy only matters inside a band.** Below about 128 KiB the cyclic
-weight sweep misses everything whatever is evicted; above about 384 KiB
-the working set fits and nothing is ever evicted. Every policy is
-identical outside those bounds. `cargo test -p mlos-workload --test sweep
--- --ignored --nocapture` prints the shape.
+**Policy matters in a band -- and that was only true of the baselines.**
+Step 004 concluded that below about 128 KiB the cyclic weight sweep
+misses everything whatever is evicted. That holds for FIFO and LRU and
+not for known-next-use, which is the correction step 005 made: where both
+baselines score 25,200 reads out of 25,200 accesses, next-use serves half
+of them. Above about 384 KiB the working set fits and every policy is
+identical, which is still true of all of them. `cargo test -p
+mlos-workload --test sweep -- --ignored --nocapture` prints the shape.
 
 **Demand paging's read count is not comparable.** At 192 KiB it does 384
 reads against LRU's 11,942 -- and refuses 6,896 of 25,200 accesses to get
 there, where LRU refuses none. Reporting those two numbers side by side
 without the refusals would be the most misleading row in any table.
+
+## Known-next-use, measured
+
+Four sessions, forty rounds, 25,200 accesses. Provider reads, lower being
+better. Demand is shown as reads+refusals because its read count is
+bought by not serving the workload.
+
+| budget | demand | FIFO | LRU | next-use | vs best baseline |
+| --- | --- | --- | --- | --- | --- |
+| 32 KiB | 35+22060 | 25200 | 25200 | 22127 | +13% |
+| 64 KiB | 67+18860 | 25200 | 25200 | 18959 | +25% |
+| 96 KiB | 102+15720 | 25200 | 25200 | 15791 | +38% |
+| 128 KiB | 134+12520 | 25200 | 25200 | **12599** | **+51%** |
+| 160 KiB | 256+9392 | 19526 | 17692 | **7729** | **+57%** |
+| 192 KiB | 384+6896 | 12067 | 11942 | **3480** | **+71%** |
+| 256 KiB | 640+2672 | 1448 | 928 | 928 | +0% |
+| 384 KiB | 928+0 | 928 | 928 | 928 | +0% |
+
+Total recovery cost at 128 KiB: LRU 56,160 ms against next-use 5,856 ms,
+about a tenfold reduction.
+
+**This is not the verdict.** Step 006 is, and it has to weigh three
+things this table does not show: the result moves with session count
+(step 004), the simulator SUPPLIES the foresight that step 007's syscalls
+would have to deliver in a kernel, and the workload is a model of a
+decode loop rather than a recording of one.
+
+Two bugs were found by the rule that a policy with strictly more
+information cannot lose. Both are in
+[the commit](https://github.com/sw-ml-study/sw-os-ml/commits/main) and
+both were invisible to every other test.
 
 ## The first policy table, and why it proves nothing
 
@@ -317,10 +351,10 @@ the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
 emitters, an event stream. Nothing has decided anything yet.
 
-Step 005 `nextuse-policy`: known-next-use in the simulator. Evict what is
-wanted furthest away -- Belady's rule, which a declared stream hands over
-for free. Distance acted on with certainty, probability only as a hint,
-and cost part of the decision rather than distance alone.
+Step 006 `verdict`: stop and look at the table. Four policies, several
+budgets, several session counts, and a decision about whether the rest of
+the saga is worth doing. The plan commits to the other outcome too -- if
+the separation is not there, say so and stop before M4.
 
 The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
 to 005 build the harness, the baselines, a workload with real reuse in

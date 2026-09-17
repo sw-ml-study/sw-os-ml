@@ -17,7 +17,7 @@
 #[test]
 #[ignore = "prints a table; run with --ignored --nocapture"]
 fn budget_sweep() {
-    use mlos_policy::{Demand, FIFO, LRU};
+    use mlos_policy::{Demand, FIFO, LRU, NEXT_USE, Policy};
     use mlos_sim::compare;
     use mlos_trace::Trace;
     use mlos_workload::Decode;
@@ -38,21 +38,22 @@ fn budget_sweep() {
             header: decode.header(),
             accesses: &held,
         };
-        println!("{:>8} {:>8} {:>8} {:>8}", "KiB", "demand", "fifo", "lru");
+        println!(
+            "{:>6} {:>11} {:>8} {:>8} {:>9}  vs best baseline",
+            "KiB", "demand", "fifo", "lru", "next-use"
+        );
         for kib in [32u64, 64, 96, 128, 160, 192, 256, 384, 512] {
-            let table = compare(&trace, &decode, kib * 1024, &[&Demand, &FIFO, &LRU]);
-            let r = |n: &str| table.iter().find(|(m, _)| *m == n).expect(n).1.reads;
-            println!(
-                "{kib:>8} {:>8} {:>8} {:>8}{}",
-                r("demand"),
-                r("fifo"),
-                r("lru"),
-                if r("lru") < r("fifo") {
-                    "   <- lru wins"
-                } else {
-                    ""
-                }
-            );
+            let policies = [&Demand as &dyn Policy, &FIFO, &LRU, &NEXT_USE];
+            let table = compare(&trace, &decode, kib * 1024, &policies);
+            let of = |n: &str| table.iter().find(|(m, _)| *m == n).expect(n).1;
+            let (fifo, lru, next) = (of("fifo").reads, of("lru").reads, of("next-use").reads);
+            // Demand is printed as reads+refusals, because its read count
+            // is bought by not serving the workload and is not comparable
+            // with policies that served all of it.
+            let demand = format!("{}+{}", of("demand").reads, of("demand").refused);
+            let best = fifo.min(lru).max(1);
+            let gain = 100 - (next as i64 * 100 / best as i64);
+            println!("{kib:>6} {demand:>11} {fifo:>8} {lru:>8} {next:>9}  {gain:>+4}%");
         }
     }
 }

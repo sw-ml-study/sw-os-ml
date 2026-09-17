@@ -24,15 +24,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-mod demand;
-mod oldest;
+mod baselines;
+mod nextuse;
 mod residency;
 
 use mlos_abi::ObjectId;
 use mlos_objtab::ObjectMeta;
 
-pub use demand::Demand;
-pub use oldest::{FIFO, LRU, Oldest};
+pub use baselines::{Demand, FIFO, LRU, Oldest};
+pub use nextuse::{KnownNextUse, NEXT_USE};
 pub use residency::Residency;
 
 /// How to choose what to throw away.

@@ -23,6 +23,7 @@
 
 #![forbid(unsafe_code)]
 
+mod foresight;
 mod resident;
 mod run;
 mod view;
@@ -34,6 +35,7 @@ use mlos_trace::Trace;
 
 use run::Run;
 
+pub use foresight::{Foresight, foresee};
 pub use resident::Resident;
 
 /// Where an object's size and costs come from.
@@ -54,10 +56,15 @@ pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Po
         budget,
         policy,
     };
+    let seen = Foresight::read(trace.accesses);
     let mut resident = Resident::default();
     let mut outcome = Outcome::default();
     for (at, access) in trace.accesses.iter().enumerate() {
-        run.step(&mut resident, &mut outcome, access.object, at as u32 + 1);
+        let now = at as u32 + 1;
+        // Before the decision, not after: a policy asked to choose a
+        // victim must see the future as it is at that moment.
+        foresight::foresee(&mut resident, now, &seen);
+        run.step(&mut resident, &mut outcome, access.object, now);
     }
     outcome
 }
