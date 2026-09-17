@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-16, during saga `mlos-nextuse`, after step 002.
+Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 003.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **2 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
+| M3 it knows better | **3 of 11 steps** -- saga `mlos-nextuse`. The milestone the project exists for; step 006 is the verdict |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -155,6 +155,33 @@ file.
   subject; a demonstration of an ML operating system needs no neural
   network in it.
 
+## The first policy table, and why it proves nothing
+
+Three baselines replayed against `examples/viz/runtime.trace` -- a real
+recording of two sweeps on a real kernel -- under a 32 KiB budget against
+a 144 KiB model.
+
+| policy | provider reads | bytes | evicted | refused | hits per 1000 |
+| --- | --- | --- | --- | --- | --- |
+| demand | **32** | 32 KiB | 0 | 2 | **484** |
+| fifo | 66 | 66 KiB | 34 | 0 | 0 |
+| lru | 66 | 66 KiB | 34 | 0 | 0 |
+
+**Doing nothing wins**, and FIFO and LRU are indistinguishable. Both facts
+are properties of the workload rather than of the policies. A dense sweep
+re-reads nothing within a pass, so the object either baseline has just
+touched is the one it will want last: they evict precisely what they are
+about to need and miss every single access. Demand refuses twice, keeps
+the 32 tiles it already had, and the second sweep hits them.
+
+So this table is not evidence about residency policy. It is evidence that
+the trace is the degenerate case, which is why step 004 builds a workload
+with real reuse in it before step 006 compares anything that matters.
+
+One thing in it is worth keeping, because nobody designed the measurement
+to show it: refusing beat replacing. That is `docs/PRD.md` F4's argument
+for admission control turning up uninvited.
+
 ## What tracing costs
 
 Measured, not asserted. Two identical sweeps, one with `trace off` and one
@@ -227,9 +254,10 @@ the claim is that an OS which accepts the gift beats one that guesses.
 Everything built so far is mechanism -- a table, a fault, three tiers, two
 emitters, an event stream. Nothing has decided anything yet.
 
-Step 003 `baselines`: demand, FIFO and LRU in `mlos-policy`. Also the
-harness's own test -- LRU must beat FIFO on a workload with reuse, and if
-it does not, `mlos-sim` is wrong and every number after it is worthless.
+Step 004 `reuse-trace`: a workload with the reuse a decode loop actually
+has -- weights re-swept cyclically and KV blocks accumulating -- so LRU
+has a fair chance to be right and beating it means something. Needs
+`KvBlock` objects in the synthetic model, which nothing registers yet.
 
 The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
 to 005 build the harness, the baselines, a workload with real reuse in
