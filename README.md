@@ -13,16 +13,64 @@ tiering, leases and faults, the way pages are in Unix.
 
 This is not a Linux or BSD derivative. It is a new kernel.
 
-## Status
+## Status: three of eight gates, and the thesis is untested
 
-Three of eight proof-of-concept gates met. MLOS boots to a shell as a
-native aarch64 guest, holds an object table across three tiers, and
-services a model fault from a real virtio-blk device. What it does not
-have is a policy: nothing in it yet decides what to keep, and that is
-milestone M3 -- the one the whole argument turns on.
+| Gate | State |
+| --- | --- |
+| G1 boots to a shell | **done** |
+| G2 holds an object table | **done** |
+| G3 faults, and the fault carries meaning | **done** |
+| G4 known-next-use beats LRU | **not started -- this is the one that matters** |
+| G5-G8 sharing, degradation, GPU, ML-MMU | not started |
 
-See [docs/status.md](docs/status.md) for what actually exists today. If it
-is not in that file, it does not work.
+The three that are met are all *mechanism*. An object table with tiers
+and a fault handler is, to a fair sceptic, a cache with extra steps --
+and the sceptic is right so far.
+
+The one thing that makes MLOS not-a-cache is `next_use`: the field saying
+when an object will be wanted again, which no page-based system can hold.
+**Nothing writes it.** It has existed since the object table was built,
+every layout document emits it as `never`, and until a policy acts on it
+this project has demonstrated a *problem* rather than a solution.
+
+That is deliberate sequencing, not an oversight, and
+[docs/status.md](docs/status.md) is the ground truth -- if it is not in
+that file, it does not work.
+
+## What has been measured
+
+Real numbers from real runs, not estimates. Reproduce them with the
+commands under [Try it](#try-it).
+
+| | QEMU/HVF (native) | QEMU/TCG |
+| --- | --- | --- |
+| One model fault, off virtio-blk | ~42 us | ~91 us |
+| Recording one residency event | ~4 ns | ~129 ns |
+| Sweep of 32 resident tiles, no I/O | ~4.9 us | ~40 us |
+
+Recording costs about one ten-thousandth of a fault, which is why it is
+on by default. Method and caveats are in
+[docs/status.md](docs/status.md#what-tracing-costs); the first attempt to
+measure it found nothing, because sweeps that fault are dominated by 32
+virtio round trips.
+
+From a running guest, at an 8 KiB arena against a 144 KiB model:
+
+```
+registered 136 objects, 144 KiB across 3 tiers
+sweep   acquired 7 of 128 tiles in 364.708 us
+        stopped: NoBudget -- no eviction policy yet
+Rm      8/144 KiB of the model = 55 per mille
+```
+
+That is a faithful picture of the *problem*: memory is a fraction of the
+model, the sweep runs out, and MLOS refuses rather than guessing what to
+throw away. It is not yet a picture of a solution.
+
+**What has not been measured is the claim the project rests on:** that an
+operating system which is told the future beats one that guesses. The
+next four steps produce that number -- see
+[Where this goes next](#where-this-goes-next).
 
 ## Documents
 
@@ -79,6 +127,49 @@ Conforming samples are committed under `examples/viz/` so the sibling
 repositories can develop against them without running MLOS. The contract,
 the vocabulary and the open questions are in
 [docs/layout-handoff.md](docs/layout-handoff.md).
+
+## How this uses Apple Silicon
+
+As a **host**, and only as a host. MLOS is an aarch64 kernel, so on an
+M-series Mac it runs as a native guest: QEMU with the `hvf` accelerator
+hands the guest's ARM instructions to Hypervisor.framework, which runs
+them on the real cores. Nothing translates an instruction set.
+
+The evidence is in the boot banner. Under HVF the guest reads
+`CNTFRQ_EL0` and gets **24 MHz** -- Apple's own counter frequency, passed
+through. Under TCG the same read gets 62.5 MHz, which is QEMU's virtual
+timer. MLOS reads the register rather than assuming a rate, which is why
+the same binary times itself correctly on both.
+
+What MLOS *drives* is QEMU's virtual hardware, not Apple's: a GICv3
+interrupt controller (Apple Silicon has an AIC, which MLOS never sees), a
+PL011 or virtio console, and virtio-mmio block devices. That is the
+point -- the kernel is portable to any aarch64 machine QEMU can present,
+and a second x86-64 target is already built in CI.
+
+**The Apple GPU is not used at all.** No Metal, no ANE, nothing. Reaching
+a real GPU across a real PCIe bus is milestone M6, on a Linux/NVIDIA
+host, because Apple exposes no passthrough path for it.
+[docs/architecture.md](docs/architecture.md) s.7 explains why, and what
+the alternatives cost.
+
+Virtualization.framework (via `vfkit`) boots the same image and produces
+no console output yet: it offers a virtio console and no PL011, and the
+virtio-pci transport that would fix it arrives with M6.
+
+## Where this goes next
+
+The next milestone is the one that justifies the project: replay one
+workload against four residency policies under an identical memory
+budget, and see whether knowing the future wins.
+
+Four host-side steps produce that table -- a replay harness, three
+baselines, a workload with real reuse in it, and the known-next-use
+policy. None of them needs an emulator or anything from another
+repository. Then the saga stops and looks at the answer, because
+[the plan](docs/plan.md#saga-mlos-nextuse-m3) commits to the other
+outcome: if known-next-use does not separate from LRU on a fair
+workload, say so and stop before M4.
 
 ## Development
 

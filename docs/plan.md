@@ -242,26 +242,41 @@ does not show up as *columns*, not as a fork.
 > the OS its own future; show that an OS which accepts the gift beats one
 > that guesses.
 
+Reordered 2026-09-16 to put the measurement first. The original order
+reached a number at step 8 of 8; this one reaches it at step 6 of 11,
+and the four steps before it need no emulator and nothing from another
+repository. If the answer is no, everything after step 6 is work not
+worth doing, and finding that out early is the point.
+
 1. `trace-format` -- `mlos-trace`, record and replay. Renames M2's
    `mlos-trace` (residency events) to `mlos-events` and takes the name
-   back for what the plan always meant by it: an access trace.
+   back for what the plan always meant by it: an access trace. **Done.**
 2. `sim-harness` -- `mlos-sim`, identical budget across policies,
    enforced rather than intended.
 3. `baselines` -- demand, FIFO, LRU. Also the harness's own test: LRU
    must beat FIFO on a workload with reuse, or the harness is wrong.
-4. `generative-trace` -- weights re-swept per token and KV blocks
-   accumulating, so LRU has a fair chance to be right. Shape from
-   emufpga's `.spm` sidecar. **Blocked on a real checkpoint.**
-5. `stream-syscalls` -- `ml_stream_declare` / `advance`. The first thing
-   ever to write `ObjectMeta::next_use`.
-6. `nextuse-policy` -- known-next-use, host-simulated first. Distance
-   acted on with certainty, probability only as a hint.
-7. `evictable-arena` -- the arena stops being a bump allocator. Nothing
+4. `reuse-trace` -- weights re-swept cyclically and KV blocks
+   accumulating, so LRU has a fair chance to be right. From the
+   synthetic model, which needs `KvBlock` objects to express it.
+   **Not blocked:** what the measurement needs first is fairness, and
+   fairness does not require a real checkpoint.
+5. `nextuse-policy` -- known-next-use. Distance acted on with certainty,
+   probability only as a hint.
+6. `verdict` -- **stop and look at the table.** Four policies, several
+   budgets, and a decision about whether the rest is worth doing.
+7. `stream-syscalls` -- `ml_stream_declare` / `advance`. The first thing
+   ever to write `ObjectMeta::next_use`. Not needed before step 6: a
+   simulator has the whole trace and can compute next-use directly,
+   which is what makes it a simulator.
+8. `evictable-arena` -- the arena stops being a bump allocator. Nothing
    can run a policy in the kernel until it can give memory back.
-8. `in-kernel` -- same policy crates in-kernel under TCG; the numbers
+9. `in-kernel` -- same policy crates in-kernel under TCG; the numbers
    match the simulator exactly, not approximately.
-9. `g4-report` -- the measured comparison table, at more than one
-   budget, written so it can be disputed. Gate G4.
+10. `generative-trace` -- realism: real tensor sizes and the real
+    consumption order, from emufpga's `.spm` sidecar. **Blocked on a real
+    checkpoint** ([external-asks.md](external-asks.md) emufpga A1).
+11. `g4-report` -- the measured comparison table, at more than one
+    budget, written so it can be disputed. Gate G4.
 
 Three things this saga must not do, restated from its own plan because
 they are the ways it would fail without noticing: do not make the

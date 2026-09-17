@@ -75,7 +75,7 @@ x86-64 anywhere in this repo.
 | Traces | And `build/runtime.trace`: the access sequence those events record -- session and `ObjectId` per acquire, and nothing about what the system did. What M3 replays policies against |
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
-| Timing | `sweep` reports elapsed nanoseconds from the generic timer (62.5 MHz), not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable |
+| Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
 | Tests | 29 fast test binaries plus three TCG boot tests (`cargo test -p mlos-cli -- --ignored`); CI runs the lot on an aarch64 Linux runner |
 
 ## What does not exist yet
@@ -162,8 +162,13 @@ the table lookup and the ring store.
 
 | | per sweep (33 events) | per event | a fault, for scale |
 | --- | --- | --- | --- |
-| QEMU/HVF, native | +0.14 us | **4.3 ns** | 42 us |
+| QEMU/HVF, native | +0.14 us | **~4 ns** | 42 us |
 | QEMU/TCG | +4.3 us | 129 ns | 91 us |
+
+The HVF figure is near its own measurement floor and is quoted loosely
+for that reason: Apple's counter runs at 24 MHz, so one tick is 41.7 ns
+and the +0.14 us delta is about three ticks. Twelve runs either side of
+the switch is what makes it a number rather than a rounding error.
 
 Recording costs about one ten-thousandth of a fault on native hardware, so
 it is on by default. The first attempt to measure it used sweeps that
@@ -225,9 +230,16 @@ under a fixed residency budget and counting provider reads and bytes
 moved. Identical budget across policies, enforced rather than intended --
 a comparison where one policy got more memory is not a comparison.
 
-The blocker for step 004 is recorded in
-[external-asks.md](external-asks.md) as emufpga A1: a real model's order
-file and sidecar. Kilobytes of text, not the weights. Steps 002, 003 and
-005-009 do not depend on it.
+The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
+to 005 build the harness, the baselines, a workload with real reuse in
+it, and the known-next-use policy; step 006 stops and looks at the
+table. None of those four needs an emulator or anything from another
+repository. Everything after step 006 is work that is only worth doing
+if the answer is yes.
+
+The emufpga blocker ([external-asks.md](external-asks.md) A1) now sits at
+step 010, where it belongs: a real checkpoint buys REALISM -- real tensor
+sizes and the real consumption order -- and what the measurement needs
+first is FAIRNESS, which the synthetic model can express on its own.
 
 Install QEMU before starting it.
