@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 2,
+    "step": "sim-harness"
+  },
+  "action": "Designed the policy trait against the KERNEL's constraints first (indexed access, copies not borrows, no policy-owned state), so step 009 cannot discover the interface is unimplementable after the numbers exist. Made the equal-budget rule a property of the signature rather than a runtime check. Added the two tick fields to the kernel as well as the simulator so they cannot drift. Mutation-checked the harness three ways before trusting any count it produces.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-16T19:17:32"
+}
