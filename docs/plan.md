@@ -147,26 +147,80 @@ Scope:
 - `mlos-policy-router`: MoE expert prefetch from a router distribution.
 - `Rc`, `Ph`, `Ks` counters.
 
-### M6 -- It crosses PCIe (PoC gates G7, G8)
+### M6 -- It controls real host resources (PoC gate G7)
 
-**Result:** on the Linux/NVIDIA host, MLOS as a guest enumerates a
-passed-through GPU, maps its BARs, and moves a tensor into device
-memory under object-manager control. Separately, the emulated ML-MMU
-device services descriptors through the `mlmmu` provider.
+**Recut 2026-09-17.** M6 was "it crosses PCIe": an x86-64 HAL, PCI
+enumeration, VFIO passthrough and a driver for a real GPU. That is the
+wrong destination. Passing a GPU through and driving it would make MLOS a
+GPU operating system; the goal is an ML *resource* operating system, and
+the host already has a better NVIDIA driver than this project will ever
+write. See [architecture.md s.7.4](architecture.md#74-the-hostguest-boundary-what-mlos-does-not-own).
+
+**Result:** MLOS, as a guest, places real objects in real host resources
+it does not drive -- host memory, host storage, and host GPU memory --
+through narrow virtio interfaces, and the M3 policy governs the
+placement.
 
 Scope:
-- `mlos-hal-x86-64`: long mode, ACPI (MADT, MCFG), APIC, page tables.
-- `mlos-pci`: ECAM enumeration, BAR mapping (**resizable BAR
-  required**), MSI-X.
-- `mlos-provider-device`: GPU VRAM as a tier, DMA in and out.
-- QEMU device model implementing the
-  [ML-MMU register contract](design.md#8-the-ml-mmu-register-contract).
-- `mlos-provider-mlmmu` driving it, `CAPS`-gated.
-- Host setup documented and checked by `mlos doctor`: IOMMU groups,
-  early `vfio-pci` binding, Above-4G decoding, ReBAR, hugepages.
+- `virtio-ml-storage`: an object provider backed by a host file, served
+  with `mmap`, `io_uring` or NVMe as the host prefers. MLOS never learns
+  which.
+- `virtio-ml-compute`: "make this object resident in device memory",
+  implemented host-side with CUDA or Metal. The host does the transfer;
+  MLOS decides that it should happen.
+- The policy from M3 driving both, so the comparison extends from a
+  simulated tier to a real one.
+- What crossing the boundary costs, measured per object, per layer and
+  per token -- because the granularity at which the guest/host hop is
+  worth making is a finding, not an assumption.
 
-M6 is where the second machine becomes necessary. Everything before it
-runs on the Mac.
+Passthrough stays on the table as an experiment, not a destination: it is
+the only way to measure what the boundary costs, and that number is worth
+having. It is no longer what M6 is for.
+
+### M7 -- Another machine is a provider (PoC gate G8)
+
+**Result:** an object resident in node B's RAM is fetched by node A over
+Ethernet, and the policy chooses between that and node A's own SSD on
+cost rather than on a tier ordinal.
+
+This is where `TIER` stops being a ladder and becomes the cost graph
+[architecture.md s.7.5](architecture.md#75-tiers-are-a-cost-graph-not-a-ladder)
+describes. Node B's RAM may be cheaper to reach than node A's disk, and
+no total ordering can express that.
+
+Scope: `virtio-ml-net` as a remote object provider; placement as a set
+per object rather than one tier; cost per edge; the policy asking "what
+is the cheapest way to satisfy this before its deadline".
+
+### M8 -- Heterogeneity
+
+**Result:** an ugly deliberate cluster -- mismatched GPUs, mismatched
+RAM, SAS arrays beside NVMe, a slow link -- serving a model far larger
+than any one node's VRAM, with MLOS placing state across all of it.
+
+Old hardware is an asset here rather than a nuisance: older PCIe
+generations make bad residency decisions *more* expensive, which makes
+them easier to measure.
+
+### M9 -- Global scheduling
+
+**Result:** placement, compute and network scheduled together beat the
+same nodes deciding independently. The measurement is tokens/sec, TTFT,
+p50/p95 latency, bytes moved at each level, GPU idle time, redundant
+loads and expert hit rate, against a baseline of independent per-node
+inference runtimes.
+
+This is the end-state experiment, and it is where a distributed control
+plane either earns its existence or does not.
+
+### M10 -- ML-MMU
+
+**Result:** the mechanisms that turned out to matter in software, in
+gateware, against the
+[register contract](design.md#8-the-ml-mmu-register-contract) that
+already exists. Deliberately last: hardware should accelerate what has
+been shown to work, not what was hoped would.
 
 ## 3. Follow-on sagas
 
@@ -319,8 +373,10 @@ does if the answer is no -- in [external-asks.md](external-asks.md).
 
 | Needed from | What | Needed by |
 | --- | --- | --- |
-| `emufpga` | The `.spm` sidecar: real tensor inventory, and which streams rotate per operation | M3 step 4 |
-| a real checkpoint | Nobody has extracted one; only `tiny.spm` exists | M3 step 4, **blocked** |
+| `emufpga` | The `.spm` sidecar: real tensor inventory, and which streams rotate per operation | M3 step 10 |
+| a real checkpoint | Nobody has extracted one; only `tiny.spm` exists | M3 step 10, **blocked** |
+| a host compute service | CUDA or Metal behind `virtio-ml-compute` | M6 |
+| a second machine | Any Linux box with a GPU, on the same LAN | M7 |
 | `emufpga` | ML-MMU gateware, Gen 1+ | after M6 |
 | `demo-memory` | Eviction and retrieval policy candidates | M3, M5 |
 | `sw-mlpl` | Array language as eventual userspace | after M6 |

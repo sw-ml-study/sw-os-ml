@@ -28,8 +28,8 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | G4 -- known-next-use beats LRU | not started | M3 |
 | G5 -- one read serves N sessions | not started | M4 |
 | G6 -- degrades instead of dying | not started | M5 |
-| G7 -- touches a real GPU | not started | M6 |
-| G8 -- ML-MMU emulated | not started | M6 |
+| G7 -- controls a real host resource | not started | M6 |
+| G8 -- another machine is a provider | not started | M7 |
 
 ## Milestones
 
@@ -138,6 +138,26 @@ Checked 2026-09-06 on the primary development Mac:
 
 The first three rows are what `mlos doctor` will check once it exists.
 QEMU is the immediate prerequisite for M1.
+
+## What MLOS is for, restated 2026-09-17
+
+Not a self-sufficient operating system, and never going to be. MLOS is a
+**distributed guest control plane** for ML state: it runs in a VM, the
+host OS keeps owning the NVIDIA driver, CUDA, Metal, filesystems, NVMe
+and the network stack, and MLOS owns what none of them can express --
+which object should be where, when, at what precision and at what cost,
+across GPU VRAM, CPU cores, RAM, SSDs, disks and the network.
+
+That reframing recut M6 onward (see [plan.md](plan.md)): host providers
+over narrow virtio interfaces rather than PCI passthrough and a GPU
+driver, then distribution, heterogeneity, global scheduling, and the
+ML-MMU last. M1--M5 were already right and did not move.
+
+It makes M3 more important rather than less. `next_use` is not a better
+cache eviction heuristic; it is the first small test of whether semantic
+knowledge about inference is worth moving resource decisions out of the
+host OS at all. If it is not, a distributed control plane has no reason
+to exist.
 
 ## Is this picture of a real system?
 

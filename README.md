@@ -21,7 +21,7 @@ This is not a Linux or BSD derivative. It is a new kernel.
 | G2 holds an object table | **done** |
 | G3 faults, and the fault carries meaning | **done** |
 | G4 known-next-use beats LRU | **not started -- this is the one that matters** |
-| G5-G8 sharing, degradation, GPU, ML-MMU | not started |
+| G5-G8 sharing, degradation, host resources, distribution | not started |
 
 The three that are met are all *mechanism*. An object table with tiers
 and a fault handler is, to a fair sceptic, a cache with extra steps --
@@ -147,11 +147,13 @@ PL011 or virtio console, and virtio-mmio block devices. That is the
 point -- the kernel is portable to any aarch64 machine QEMU can present,
 and a second x86-64 target is already built in CI.
 
-**The Apple GPU is not used at all.** No Metal, no ANE, nothing. Reaching
-a real GPU across a real PCIe bus is milestone M6, on a Linux/NVIDIA
-host, because Apple exposes no passthrough path for it.
-[docs/architecture.md](docs/architecture.md) s.7 explains why, and what
-the alternatives cost.
+**The Apple GPU is not used at all.** No Metal, no ANE, nothing. It is
+reached at M6, and not by MLOS driving it: the host does, behind a narrow
+`virtio-ml-compute` interface, while MLOS decides what should be resident
+in device memory and when. MLOS is a control plane for ML state, not a
+GPU operating system, and a from-scratch GPU driver would spend the
+effort reproducing what the host already does well.
+[docs/architecture.md](docs/architecture.md) s.7.4 draws the boundary.
 
 Virtualization.framework (via `vfkit`) boots the same image and produces
 no console output yet: it offers a virtio console and no PL011, and the

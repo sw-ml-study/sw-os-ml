@@ -19,6 +19,24 @@ Companion documents: [architecture.md](architecture.md),
 
 MLOS is that OS. It is a new kernel, not a Linux or BSD derivative.
 
+**And it is deliberately not self-sufficient.** MLOS is a *distributed
+guest*: a semantic control plane for ML state, running in a VM on top of
+a host OS that keeps doing what it is already excellent at. The host owns
+the NVIDIA driver, CUDA, Metal, filesystems, NVMe, the NIC and the TCP
+stack. MLOS owns what none of them can express -- which object should be
+where, when, at what precision, and at what cost -- across GPU VRAM, CPU
+cores, system RAM, SSDs, spinning disks and the network.
+
+That division is the research, not a compromise. Reimplementing a GPU
+driver or a filesystem would spend the effort on reproducing Linux rather
+than on the question being asked. The interesting claim is narrower and
+testable:
+
+> Given the same hardware, the same model and the same workload, can a
+> control plane that understands ML semantics place state better than the
+> host OS abstractions -- pages, files, sockets, DMA buffers -- that
+> cannot see them?
+
 ## 2. The problem
 
 Today the stack looks like this:
@@ -138,17 +156,25 @@ Apple Silicon and on x86-64:
   budget the system walks a declared degradation ladder (quantize cold
   KV, shrink context, drop candidates) and reports the quality/latency
   it delivered, rather than OOM-killing a session.
-- **G7 -- It touches a real GPU.** On the Linux/NVIDIA host, MLOS as a
-  guest reaches a passed-through GPU over PCIe far enough to enumerate
-  it, map its BARs, and move a tensor into device memory under object
-  manager control. Full compute is a stretch goal; *managed placement
-  across the PCIe boundary* is the gate.
-- **G8 -- The ML-MMU is emulated.** The FPGA ML-MMU register contract
-  exists, is implemented as an emulated device, and the kernel uses it
-  through the same provider interface it will use for real gateware.
+- **G7 -- It controls a real host resource.** MLOS places objects in
+  host memory, host storage and host GPU memory through narrow virtio
+  interfaces it does not drive, with the M3 policy governing the
+  placement. *Managed placement across the guest/host boundary* is the
+  gate; the host performs every transfer.
+- **G8 -- Another machine is a provider.** An object resident in another
+  node's RAM is fetched over the network, and the policy chooses between
+  that and local storage on measured cost rather than on a tier ordinal.
 
-G1--G6 are achievable on the Apple Silicon machine alone. G7 requires
-the Linux/NVIDIA host. G8 is software-only until emufpga catches up.
+Recut 2026-09-17. G7 was "it touches a real GPU", by PCI passthrough and
+a driver, and G8 was "the ML-MMU is emulated". Passthrough would make
+MLOS a GPU operating system; the host already has a better NVIDIA driver
+than this project will write. The emulated ML-MMU has not gone away --
+it is M10, deliberately last, because hardware should accelerate what has
+been shown to work rather than what was hoped would.
+
+G1--G6 are achievable on the Apple Silicon machine alone. G7 needs a host
+compute service, which the Mac can provide through Metal. G8 needs a
+second machine on the same network.
 
 ### 5.2 The metrics MLOS reports
 
@@ -216,6 +242,12 @@ These are stated so they cannot creep in:
 1. **Bare-metal boot.** MLOS boots in a VM. Real hardware bring-up is
    a different project with a different cost structure, and it buys us
    nothing that the hypervisor does not already give us.
+1b. **Self-sufficiency.** MLOS will never have a filesystem, a TCP
+   stack, an NVMe driver, a USB stack or a display server, and the
+   absence of each is a decision rather than a gap. The host OS supplies
+   them through narrow interfaces; what MLOS supplies is the ML
+   semantics the host has no way to represent. A version of this project
+   that grew those subsystems would have buried its own experiment.
 2. **Being a Linux derivative, or source/binary compatible with one.**
 3. **A POSIX personality, a libc, or an ELF loader for Linux binaries.**
 4. **Training.** Inference first; LoRA-scale mutable state second;

@@ -490,6 +490,85 @@ the whole of VRAM is mapped into the host/guest address space rather
 than a 256 MB window, which is exactly what an object manager doing
 placement across the PCIe boundary needs.
 
+## 7.4 The host/guest boundary: what MLOS does NOT own
+
+The division that makes this project tractable, and the one that decides
+what every later milestone is for.
+
+| Resource | The host owns | MLOS owns |
+| --- | --- | --- |
+| NVIDIA GPU | driver, firmware, CUDA | placement, residency, scheduling |
+| Apple GPU | Metal | what to execute, and when |
+| SSD, HDD | filesystem, NVMe/SATA/SAS drivers | ML-object tiering |
+| Ethernet | NIC driver, TCP, eventually RDMA | remote objects as a tier |
+| CPU | physical CPU management | which ML work runs where |
+| RAM | the hypervisor's own mapping | semantic residency |
+| Failures | device and driver recovery | retry, re-home, degrade |
+
+So MLOS reaches real hardware through **host providers** rather than
+drivers: narrow interfaces over virtio, implemented on the host by
+whatever is appropriate.
+
+```
+            MLOS object manager
+                    |
+            acquire(EXPERT e37, on gpu0)
+                    |
+    +---------+-----+------+-----------+
+    v         v            v           v
+  DRAM      STORAGE      NET        COMPUTE
+    |         |            |           |
+    |    virtio-ml-     virtio-ml-  virtio-ml-
+    |      storage         net       compute
+    |         |            |           |
+    v         v            v           v
+  guest    mmap,        sockets,    CUDA, Metal,
+   RAM    io_uring,      RDMA       Vulkan, BLAS,
+          NVMe, SAS                 NPU runtimes
+```
+
+`PROVIDER` (s.3.2) was already this abstraction; a host provider is a
+provider whose bytes happen to come from another operating system.
+Nothing above it changes.
+
+**What this rules out.** Passing a GPU through with VFIO and writing a
+driver for it would make MLOS a GPU operating system. A host compute
+provider lets it be an ML *resource* operating system, which is the one
+worth building. Passthrough remains a legitimate experiment -- it is the
+only way to measure what the guest/host boundary costs -- but it is an
+experiment, not the destination.
+
+## 7.5 Tiers are a cost graph, not a ladder
+
+`TIER` (s.3.3) is presented as an ordering -- hot, warm, cold, stream,
+archive -- and that is a useful simplification exactly until the network
+becomes a tier. Then it stops being true:
+
+```
+                        GPU0 VRAM
+                       /                            PCIe           PCIe
+                     /                             node A RAM  --10GbE--  node B RAM
+                  |    \                 |
+                 SSD    \               SSD
+                  |      \               |
+                 HDD      ----------  node C RAM
+                                          |
+                                      FPGA / NPU
+```
+
+Node B's RAM may be cheaper to reach than node A's own SSD. There is no
+total order over those, only per-edge costs and a question:
+
+> What is the cheapest way to satisfy `acquire(X, on gpu0)` before its
+> deadline?
+
+`ObjectMeta` is already closer to this than `Tier` suggests: it carries
+`reload_cost` and `recompute_cost` per object rather than per tier, and
+`ObjectId` names an object without saying where it is -- identity is
+separate from placement, which is what makes a remote object nameable at
+all. The `Tier` ordering survives as a fast approximation for the single
+node case, and the cost graph is what M7 onward actually needs.
+
 ## 8. Host and boot environment
 
 MLOS never boots on bare metal. The question is which hypervisor, and

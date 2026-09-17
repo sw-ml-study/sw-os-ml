@@ -6,8 +6,9 @@ wanted, where it would live, why MLOS cannot reasonably do it itself, and
 **what MLOS does if the answer is no** -- because an ask with no fallback
 is a plan with a single point of failure.
 
-Nothing here blocks MLOS today. One ask (emufpga A1) blocks milestone M3
-step 4, which is three steps away.
+Nothing here blocks MLOS today. One ask (emufpga A1) blocks M3 step 010,
+which is seven steps away and is about realism rather than about whether
+the measurement can be made at all.
 
 ## How to read an ask
 
@@ -112,7 +113,7 @@ demonstrate it against a distribution it made up.
 `Probability` half is unmeasured. That is honest and it is a smaller
 claim than the PRD makes.
 
-### A5. Read the ML-MMU register contract -- LATER (after M6)
+### A5. Read the ML-MMU register contract -- LATER (M10)
 
 **What.** Acknowledgement, and a review of the `CAPS` bits and the
 descriptor ring. MLOS owes emufpga this artifact and it exists now, at
@@ -127,9 +128,19 @@ one side has seen is not a contract. Finding out at M6 that the `ROUTE`
 opcode is unbuildable would waste the four milestones in between.
 
 **If no.** MLOS builds the Gen 0 QEMU device model against its own
-contract and the gateware question stays open. Gate G8 is emulation only,
-so this does not block the PoC -- it blocks the contract being worth
-anything.
+contract and the gateware question stays open. The ML-MMU is M10 and
+deliberately last -- hardware should accelerate what has been shown to
+work rather than what was hoped would -- so this blocks nothing except
+the contract being worth anything.
+
+### A6. Nothing, for now -- the relationship changed shape
+
+The 2026-09-17 reframing ([plan.md](plan.md)) moved MLOS away from
+driving hardware and toward controlling host resources through narrow
+interfaces. emufpga's streaming engine is a compute provider under that
+model, reached the same way a CUDA host service would be, rather than a
+device MLOS drives. That is a better fit for both projects and needs
+nothing from emufpga until M10.
 
 ## 2. sw-mlpl
 
@@ -206,6 +217,18 @@ No other ask. MLOS is the second producer of a format SWTOS defined in
 practice, and what MLOS did differently is written down in
 [layout-handoff.md s.5](layout-handoff.md) so the divergences are visible
 rather than silent.
+
+## 4b. A host compute service -- LATER (M6)
+
+Not a repository ask; a thing that has to exist. M6 needs something on
+the host that answers "make this object resident in device memory" over
+`virtio-ml-compute` and does the transfer with CUDA or Metal. It is
+small -- a few hundred lines around an existing runtime -- and it is the
+piece that lets MLOS reach a GPU without driving one.
+
+Where it lives is open. It could be a new sibling repository, or it could
+be part of this one as the only host-side component MLOS ships. Worth
+deciding before M6 rather than during it.
 
 ## 5. demo-memory
 
