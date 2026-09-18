@@ -13,7 +13,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-mod arena;
+mod evict;
 mod fault;
 mod lease;
 
@@ -24,9 +24,9 @@ use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
 use mlos_provider::Provider;
 use mlos_stream::Stream;
 
-pub use arena::Arena;
 pub use fault::ModelFault;
 pub use lease::{Handle, Lease};
+pub use mlos_arena::{Arena, Occupancy};
 
 /// How many providers can be attached.
 pub const MAX_PROVIDERS: usize = 8;

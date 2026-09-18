@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-18, during saga `mlos-nextuse`, after step 007.
+Last updated: 2026-09-18, during saga `mlos-nextuse`, after step 008.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **7 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
+| M3 it knows better | **8 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -70,6 +70,7 @@ x86-64 anywhere in this repo.
 | Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
 | Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace`, `stream` |
 | Streams | `ml_stream_declare` / `ml_stream_advance` as `mlos-stream`. A declared cyclic order, and a cursor. **The kernel now writes `ObjectMeta::next_use`** -- the field that existed from M2 step 001 with nothing to set it |
+| Eviction | `mlos-arena` is a real allocator: first fit over a sorted free list, coalescing on release. `Manager::evict` gives bytes back, drops residency, and emits `Kind::Evicted`. `evict L T` from the shell |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -96,7 +97,11 @@ construction, so any comparison run against it proves nothing. Step 004
 brings the trace with real reuse structure in it, and until then no
 number from this saga should be quoted.
 
-No eviction, so no `evicted` event. `Kind::Evicted` exists in the event
+No POLICY, so nothing chooses. The arena can evict as of step 008 and
+`evict L T` proves it from the shell, but a full arena still returns
+`NoBudget` rather than asking a policy for a victim -- wiring the M3
+policy into the fault path is step 009. The mechanism exists and nothing
+drives it. `Kind::Evicted` exists in the event
 vocabulary and nothing emits it: until M3 has a policy, running out of
 arena produces a `refused` and the object that would have been thrown away
 stays. The most interesting line in a residency film is the one that is
@@ -227,6 +232,26 @@ mlos-workload --test sweep -- --ignored --nocapture` prints the shape.
 reads against LRU's 11,942 -- and refuses 6,896 of 25,200 accesses to get
 there, where LRU refuses none. Reporting those two numbers side by side
 without the refusals would be the most misleading row in any table.
+
+## What fragmentation costs
+
+Measured rather than assumed, in `mlos-arena/tests/fragmentation.rs`.
+
+**Uniform objects do not fragment.** The workload MLOS runs today is
+1 KiB tiles into a 32 KiB arena: evict every other one and the arena is
+half free in 1 KiB holes, every one of which fits another tile. Evict the
+rest and it is a single run again.
+
+**Ragged objects do, and the arena says by how much.** A mix of 256 B to
+1792 B objects, half of them released: 49,664 B free and the largest
+single run 34,304 B, so **69% of the free space is reachable in one
+piece**. `arena` in the shell reports the largest run beside the total,
+because a policy evicting perfectly into memory it cannot hand out has
+not helped -- and KV blocks growing with context are the ragged case.
+
+A release the fixed free list cannot record is REFUSED and nothing
+changes: the object stays resident rather than becoming bytes the
+accounting has lost.
 
 ## The verdict is in
 

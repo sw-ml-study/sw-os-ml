@@ -11,6 +11,26 @@ use mlos_objman::Lease;
 use mlos_objtab::SessionId;
 use mlos_synth::model;
 
+/// Throws one tile out, and says what came back.
+///
+/// The verb that makes the other half of the fault path pokeable. Run
+/// `get 3 7`, then `evict 3 7`, then `get 3 7` again: the third costs
+/// what the first did, which is the shortest demonstration that the
+/// bytes really went away.
+pub fn evict(out: &mut impl Write, args: &str) {
+    let mut numbers = args.split_whitespace().filter_map(|n| n.parse().ok());
+    let Some((layer, tensor)) = numbers.next().zip(numbers.next()) else {
+        let _ = writeln!(out, "  usage: evict LAYER TILE");
+        return;
+    };
+    let id = model::tile(layer, tensor);
+    match mlos_lab::with(|held| held.evict(id)) {
+        Some(Ok(bytes)) => drop(writeln!(out, "  evicted {bytes} B, returned to the arena")),
+        Some(Err(why)) => drop(writeln!(out, "  not evicted: {why:?}")),
+        None => {}
+    }
+}
+
 /// Acquires one tile by hand, and says whether it had to fault.
 ///
 /// The verb that makes the fault path pokeable. Running it twice on the

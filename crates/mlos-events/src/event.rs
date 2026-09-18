@@ -9,36 +9,7 @@
 use mlos_abi::{Error, ObjectId};
 use mlos_objtab::{CostNs, ObjectMeta, SessionId, Tier};
 
-/// What happened.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Kind {
-    /// Bytes arrived in the arena. Residency went up.
-    Placed,
-    /// A resident object was wanted again. Nothing moved.
-    Hit,
-    /// There was no room, and nothing was thrown away to make some.
-    ///
-    /// Not a failure. Until M3 there is no policy to choose a victim, so
-    /// refusing is the honest outcome -- and it is the most interesting
-    /// event in the stream, because it is the moment the system ran out of
-    /// the resource it exists to manage.
-    Refused,
-    /// A resident object was thrown away. Reserved for M3.
-    Evicted,
-}
-
-impl Kind {
-    /// The word a consumer matches on.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Placed => "placed",
-            Self::Hit => "hit",
-            Self::Refused => "refused",
-            Self::Evicted => "evicted",
-        }
-    }
-}
+use crate::Kind;
 
 /// One residency transition.
 #[derive(Clone, Copy)]
@@ -114,6 +85,27 @@ impl Event {
             cost: cost.0,
             tier: meta.tier,
             why: Some(why),
+        }
+    }
+
+    /// An object thrown away to make room.
+    ///
+    /// The kind that was reserved from the start and emitted by nothing
+    /// until M3 step 008, because until then a full arena refused rather
+    /// than choosing. `bytes` is what came back, which is the number that
+    /// makes a residency curve add up.
+    #[must_use]
+    pub const fn evicted(object: ObjectId, by: SessionId, meta: &ObjectMeta) -> Self {
+        Self {
+            seq: 0,
+            kind: Kind::Evicted,
+            object,
+            session: by,
+            offset: 0,
+            bytes: meta.size,
+            cost: 0,
+            tier: meta.home,
+            why: None,
         }
     }
 

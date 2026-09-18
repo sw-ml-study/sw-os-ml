@@ -1,6 +1,6 @@
 number = 8
 slug = "evictable-arena"
-status = "pending"
+status = "in-progress"
 description = """
 The arena stops being a bump allocator.
 

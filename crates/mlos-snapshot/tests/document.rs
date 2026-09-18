@@ -64,7 +64,7 @@ fn the_arena_holds_what_the_table_says_is_resident() {
 
     let in_arena = space.iter().zip(&state).filter(|(s, _)| **s == "dram");
     let resident = in_arena.filter(|(_, st)| **st == "resident").count();
-    let (used, _) = manager.arena.occupancy();
+    let used = manager.arena.occupancy().used;
     // Each tile is exactly one arena granule wide, so the count and the
     // occupancy have to agree. They are read from different places: one
     // from the emitted document, one from the arena itself.

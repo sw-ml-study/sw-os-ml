@@ -121,6 +121,13 @@ pub struct ObjectMeta {
     pub precision: Precision,
     /// Where it is now.
     pub tier: Tier,
+    /// Where it goes back to when it is evicted.
+    ///
+    /// `tier` moves -- an object faulted in becomes `Warm` -- so evicting
+    /// needs somewhere to put it back, and guessing `Cold` would send a
+    /// recomputable activation to a block store that never had it. Set
+    /// once, when the object is registered, and never changed.
+    pub home: Tier,
     /// Who can produce it.
     pub provider: ProviderId,
     /// Where its *home* is, as that provider understands "where".

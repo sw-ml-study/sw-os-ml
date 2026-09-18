@@ -63,20 +63,27 @@ fn list<const N: usize>(
 }
 
 /// The arena: what is in it, and what would still fit.
+///
+/// The largest single RUN, not the total free. After evictions those
+/// differ, and the difference is memory the arena holds and cannot give
+/// to anything -- a policy evicting perfectly into a fragmented arena has
+/// not helped.
+///
+/// `Rm` is the same fact against the model rather than the buffer, and
+/// the ratio `docs/PRD.md` s.5.2 says the whole system optimises. A small
+/// fraction of a large model resident is the good case, not a failure.
 pub fn arena(out: &mut impl Write) {
-    let Some((used, size)) = mlos_lab::with(|manager| manager.arena.occupancy()) else {
+    let Some(arena) = mlos_lab::with(|manager| manager.arena.occupancy()) else {
         return; // dispatch already said so
     };
+    let (used, size) = (arena.used, arena.capacity);
     let _ = writeln!(out, "  arena    {} of {} KiB used", used >> 10, size >> 10);
+    let tile = u64::from(mlos_lab::TILE_BYTES);
+    let (room, run) = (arena.largest / tile, arena.largest);
     let _ = writeln!(
         out,
-        "  room for {} more tiles of {} B",
-        (size - used) / u64::from(mlos_lab::TILE_BYTES),
-        mlos_lab::TILE_BYTES
+        "  room for {room} more tiles of {tile} B, largest run {run} B"
     );
-    // Rm: the same fact against the model rather than the buffer, and the
-    // ratio docs/PRD.md s.5.2 says the whole system optimises. A small
-    // fraction of a large model resident is the good case, not a failure.
     if let Some((report, _)) = mlos_lab::with(|m| (m.counters.report(), ())) {
         let rm = report.residency_per_mille().unwrap_or(0);
         let _ = writeln!(

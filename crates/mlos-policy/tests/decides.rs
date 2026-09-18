@@ -47,6 +47,7 @@ fn held(next_use: NextUse, reload: u32) -> ObjectMeta {
         size: 1024,
         precision: Precision::Q4,
         tier: Tier::Warm,
+        home: Tier::Warm,
         provider: ProviderId(2),
         handle: 0,
         resident_at: 1,

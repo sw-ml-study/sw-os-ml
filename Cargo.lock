@@ -7,6 +7,13 @@ name = "mlos-abi"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-arena"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+]
+
+[[package]]
 name = "mlos-cli"
 version = "0.0.1"
 dependencies = [
@@ -149,6 +156,7 @@ name = "mlos-objman"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-arena",
  "mlos-events",
  "mlos-metrics",
  "mlos-objtab",

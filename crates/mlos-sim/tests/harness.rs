@@ -25,6 +25,7 @@ impl Model for Uniform {
             size: SIZE,
             precision: Precision::Q4,
             tier: Tier::Cold,
+            home: Tier::Cold,
             provider: ProviderId(2),
             handle: 0,
             resident_at: 0,

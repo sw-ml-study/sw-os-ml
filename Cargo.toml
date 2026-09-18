@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/mlos-abi",
+    "crates/mlos-arena",
     "crates/mlos-console",
     "crates/mlos-elf",
     "crates/mlos-image-map",
@@ -46,6 +47,7 @@ members = [
 # `kbuild-arm` / `kbuild-x86` aliases in .cargo/config.toml.
 default-members = [
     "crates/mlos-abi",
+    "crates/mlos-arena",
     "crates/mlos-elf",
     "crates/mlos-image-map",
     "crates/mlos-layout",

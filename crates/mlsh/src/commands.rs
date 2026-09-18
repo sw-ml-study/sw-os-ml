@@ -29,6 +29,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::acquire::get(out, args),
+        "evict" => crate::acquire::evict(out, args),
         "objs" => crate::report::objs(out, args),
         "ticks" => ticks(out, facts),
         other => _ = writeln!(out, "no such command: {other}   (try `help`)"),
@@ -45,8 +46,8 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 ///
 /// A constant, so the check is one line in `dispatch` and the apology
 /// lives in one place -- three copies of it is three places to change.
-const NEEDS_MODEL: [&str; 8] = [
-    "sweep", "get", "objs", "arena", "faults", "layout", "trace", "stream",
+const NEEDS_MODEL: [&str; 9] = [
+    "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream",
 ];
 
 /// What `help` prints.
@@ -54,6 +55,7 @@ const HELP: &str = concat!(
     "model [KiB]   register the model; optionally set the arena budget\r\n",
     "sweep         acquire every tile in order, faulting them in\r\n",
     "get L T       acquire one tile, and say if it had to fault\r\n",
+    "evict L T     throw one tile out, returning its bytes to the arena\r\n",
     "objs [all]    what the table knows: tier, residency, use count\r\n",
     "arena         how full memory is, and what would still fit\r\n",
     "faults        what it all cost, per object class\r\n",

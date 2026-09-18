@@ -30,7 +30,7 @@
 mod event;
 mod line;
 
-pub use event::{Event, Kind};
+pub use event::Event;
 pub use line::{MARKER, verb, write};
 
 /// How many events a ring holds.
@@ -94,5 +94,36 @@ impl Ring {
     #[must_use]
     pub const fn dropped(&self) -> u32 {
         self.dropped
+    }
+}
+
+/// What happened.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    /// Bytes arrived in the arena. Residency went up.
+    Placed,
+    /// A resident object was wanted again. Nothing moved.
+    Hit,
+    /// There was no room, and nothing was thrown away to make some.
+    ///
+    /// Not a failure. Until M3 there is no policy to choose a victim, so
+    /// refusing is the honest outcome -- and it is the most interesting
+    /// event in the stream, because it is the moment the system ran out of
+    /// the resource it exists to manage.
+    Refused,
+    /// A resident object was thrown away. Reserved for M3.
+    Evicted,
+}
+
+impl Kind {
+    /// The word a consumer matches on.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Placed => "placed",
+            Self::Hit => "hit",
+            Self::Refused => "refused",
+            Self::Evicted => "evicted",
+        }
     }
 }

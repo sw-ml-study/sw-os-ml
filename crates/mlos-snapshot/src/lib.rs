@@ -70,9 +70,10 @@ pub fn write_for(out: &mut impl Write, bootargs: &str) -> bool {
 /// object without it. Key order is not significant to any JSON parser, and
 /// the two lines that identify the format are still the first two.
 pub fn of<const N: usize>(out: &mut impl Write, manager: &Manager<'static, N>, revision: &str) {
-    let (used, capacity) = manager.arena.occupancy();
+    let arena = manager.arena.occupancy();
+    let (used, capacity) = (arena.used, arena.capacity);
     let stored = u64::from(mlos_lab::LAYERS) * u64::from(mlos_lab::TILES) * TILE;
-    let (base, tail) = (manager.arena.base(), tail(used, capacity));
+    let (base, tail) = (arena.base, tail(used, capacity));
 
     let _ = write!(
         out,

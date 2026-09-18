@@ -59,6 +59,7 @@ pub fn meta(session: u16) -> ObjectMeta {
         size: BYTES,
         precision: Precision::Fp16,
         tier: Tier::Warm,
+        home: Tier::Warm,
         provider: ProviderId(3),
         handle: 0,
         resident_at: 0,
