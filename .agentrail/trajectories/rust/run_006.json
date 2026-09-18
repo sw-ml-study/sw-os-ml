@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 7,
+    "step": "stream-syscalls"
+  },
+  "action": "Took the step's performance constraint seriously enough to change the ABI rather than work around it, and proved the change neutral against the verdict's recorded numbers. Ran the thing in a guest and read the output, which is what surfaced the cursor bug -- no test would have caught it because every test declared and queried without advancing far. Split a module that had reached exactly the count AGENTS.md warns about instead of leaving it there.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-18T10:59:13"
+}
