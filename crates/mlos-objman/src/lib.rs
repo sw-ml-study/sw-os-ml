@@ -22,6 +22,7 @@ use mlos_events::{Event, Ring};
 use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
 use mlos_provider::Provider;
+use mlos_stream::Stream;
 
 pub use arena::Arena;
 pub use fault::ModelFault;
@@ -53,6 +54,14 @@ pub struct Manager<'a, const N: usize> {
     /// not the totals -- and the totals can be rebuilt from the sequence
     /// where the reverse is not true.
     pub events: Ring,
+    /// What this session has declared it will acquire, and where it is.
+    ///
+    /// The thing that finally writes `ObjectMeta::next_use`. Empty until
+    /// something declares a stream, and an empty stream answers `Never`
+    /// for everything -- which is exactly what the table said before
+    /// streams existed, so nothing changes for a workload that does not
+    /// declare one.
+    pub stream: Stream,
     /// A monotonic count of acquires, for `ObjectMeta`'s two ticks.
     ///
     /// The kernel keeps them even though nothing in the kernel reads them
@@ -77,6 +86,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
+            stream: Stream::EMPTY,
             clock: 0,
             events: Ring::EMPTY,
             counters: Counters::EMPTY,
@@ -99,6 +109,10 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// comparison and a counter. Everything else is [`Self::service`].
     pub fn acquire(&mut self, id: ObjectId, lease: Lease, by: SessionId) -> Result<Handle> {
         self.clock = self.clock.saturating_add(1);
+        // Asked once, here, and written into whichever path serves the
+        // acquire. A position stays true until the object is acquired
+        // again, so nothing has to revisit it when the stream advances.
+        let wanted = self.stream.next_after(id);
         if let Some(meta) = self.table.get(id)
             && meta.tier <= Tier::Warm
         {
@@ -108,10 +122,11 @@ impl<'a, const N: usize> Manager<'a, N> {
             claim.share_count = claim.share_count.saturating_add(1);
             claim.reuse_count = claim.reuse_count.saturating_add(1);
             claim.used_tick = now;
+            claim.next_use = wanted;
             self.events.record(Event::hit(id, by, size));
             return Ok(Handle { id, address, size });
         }
-        self.service(id, lease, by)
+        self.service(id, lease, by, wanted)
     }
 
     /// Registers an object the manager may later be asked for.

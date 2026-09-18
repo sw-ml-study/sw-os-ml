@@ -35,7 +35,7 @@ use mlos_trace::Trace;
 
 use run::Run;
 
-pub use foresight::{Foresight, foresee};
+pub use foresight::{Foresight, wanted_at};
 pub use resident::Resident;
 
 /// Where an object's size and costs come from.
@@ -51,20 +51,17 @@ pub trait Model {
 
 /// Replays `trace` against one policy under `budget` bytes.
 pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Policy) -> Outcome {
+    let seen = Foresight::read(trace.accesses);
     let run = Run {
         model,
         budget,
         policy,
+        seen: &seen,
     };
-    let seen = Foresight::read(trace.accesses);
     let mut resident = Resident::default();
     let mut outcome = Outcome::default();
     for (at, access) in trace.accesses.iter().enumerate() {
-        let now = at as u32 + 1;
-        // Before the decision, not after: a policy asked to choose a
-        // victim must see the future as it is at that moment.
-        foresight::foresee(&mut resident, now, &seen);
-        run.step(&mut resident, &mut outcome, access.object, now);
+        run.step(&mut resident, &mut outcome, access.object, at as u32 + 1);
     }
     outcome
 }

@@ -25,9 +25,10 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "arena" => crate::report::arena(out),
         "faults" => crate::report::faults(out),
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
+        "stream" => crate::objects::stream(out, args),
         "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
-        "get" => crate::objects::get(out, args),
+        "get" => crate::acquire::get(out, args),
         "objs" => crate::report::objs(out, args),
         "ticks" => ticks(out, facts),
         other => _ = writeln!(out, "no such command: {other}   (try `help`)"),
@@ -44,7 +45,9 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 ///
 /// A constant, so the check is one line in `dispatch` and the apology
 /// lives in one place -- three copies of it is three places to change.
-const NEEDS_MODEL: [&str; 7] = ["sweep", "get", "objs", "arena", "faults", "layout", "trace"];
+const NEEDS_MODEL: [&str; 8] = [
+    "sweep", "get", "objs", "arena", "faults", "layout", "trace", "stream",
+];
 
 /// What `help` prints.
 const HELP: &str = concat!(
@@ -56,6 +59,7 @@ const HELP: &str = concat!(
     "faults        what it all cost, per object class\r\n",
     "layout        the running layout as JSON, for the visualizer\r\n",
     "trace [on|off] residency events as they happened, one per line\r\n",
+    "stream [N]    declare the model's access order, or advance it by N\r\n",
     "mem           physical memory map, and what is left\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",

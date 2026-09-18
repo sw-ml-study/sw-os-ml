@@ -29,4 +29,15 @@ pub trait Residency {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Where the declared stream has got to.
+    ///
+    /// Here rather than passed to [`victim`](crate::Policy::victim)
+    /// because it is a fact the table's owner holds, and
+    /// `docs/design.md` s.2 says a policy reads what the table owns. It
+    /// is what turns `NextUse::At` -- a position -- into the distance a
+    /// policy actually compares, and doing that subtraction here, for the
+    /// few objects being weighed, is what lets advancing the stream stay
+    /// a single increment.
+    fn now(&self) -> u32;
 }

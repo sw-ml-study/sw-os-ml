@@ -7,10 +7,6 @@
 
 use core::fmt::Write;
 
-use mlos_objman::Lease;
-use mlos_objtab::SessionId;
-use mlos_synth::model;
-
 /// Registers the synthetic model, optionally with a different budget.
 ///
 /// `model` for the default, `model 8` for eight kibibytes -- which is the
@@ -88,71 +84,21 @@ pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
     }
 }
 
-/// Acquires one tile by hand, and says whether it had to fault.
+/// Declares the model's sweep, or moves it on.
 ///
-/// The verb that makes the fault path pokeable. Running it twice on the
-/// same tile is the shortest possible demonstration of what the object
-/// table is for: the second time costs nothing.
-pub fn get(out: &mut impl Write, args: &str) {
-    let mut numbers = args
-        .split_whitespace()
-        .filter_map(|word| word.parse::<u16>().ok());
-    let (Some(layer), Some(tensor)) = (numbers.next(), numbers.next()) else {
-        let _ = writeln!(out, "  usage: get <layer> <tensor>");
-        return;
-    };
-    match acquire(layer, tensor) {
-        None => {} // dispatch already said so
-        Some((_, Err(error), _)) => {
-            let _ = writeln!(out, "  refused: {error:?}");
-        }
-        Some((resident, Ok(handle), fault)) => outcome(out, resident, &handle, fault),
+/// `stream` declares; `stream N` advances by N. The verb exists so the
+/// one field no page-based system can hold -- when an object is next
+/// wanted -- can be watched being written, in `objs` and in the layout
+/// document, by something other than a test.
+pub fn stream(out: &mut impl Write, args: &str) {
+    match args.split_whitespace().next().and_then(|n| n.parse().ok()) {
+        Some(steps) => match mlos_lab::advance(steps) {
+            Some(at) => drop(writeln!(out, "  advanced to position {at}")),
+            None => drop(writeln!(out, "  no model registered (try `model`)")),
+        },
+        None => match mlos_lab::declare() {
+            Some(count) => drop(writeln!(out, "  declared {count} objects, cursor at 0")),
+            None => drop(writeln!(out, "  could not declare a stream")),
+        },
     }
-}
-
-/// Whether it hit or faulted, where it landed, and what it holds.
-///
-/// The first byte is printed because it is the cheapest possible proof of
-/// provenance: the stub tier fills with `layer ^ tensor`, and the disk
-/// image sets a high nibble the stub never writes.
-fn outcome(
-    out: &mut impl Write,
-    resident: bool,
-    handle: &mlos_objman::Handle,
-    fault: Option<mlos_objman::ModelFault>,
-) {
-    let how = if resident { "hit" } else { "faulted" };
-    // SAFETY: the handle names memory the arena owns and the lease is
-    // still held, which is exactly when an address from a handle is valid.
-    let first = unsafe { core::ptr::read_volatile(handle.address as *const u8) };
-    let _ = writeln!(
-        out,
-        "  {how}: {} B at {:#x}, first byte {first:#04x}",
-        handle.size, handle.address
-    );
-    if let (false, Some(fault)) = (resident, fault) {
-        let _ = writeln!(out, "  cost {} us", fault.cost.0 / 1000);
-    }
-}
-
-/// Acquires one tile, reporting whether it was already resident.
-///
-/// The residency is read *before* the acquire, because afterwards every
-/// object is resident and the interesting fact -- whether this one had to
-/// be fetched -- is gone.
-type Acquired = (
-    bool,
-    mlos_abi::Result<mlos_objman::Handle>,
-    Option<mlos_objman::ModelFault>,
-);
-fn acquire(layer: u16, tensor: u16) -> Option<Acquired> {
-    let id = model::tile(layer, tensor);
-    mlos_lab::with(|manager| {
-        let resident = manager
-            .table
-            .get(id)
-            .is_some_and(|meta| meta.resident_at != 0);
-        let acquired = manager.acquire(id, Lease::Pin, SessionId(1));
-        (resident, acquired, manager.last_fault)
-    })
 }

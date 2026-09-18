@@ -25,4 +25,8 @@ impl Residency for Resident {
     fn at(&self, index: usize) -> Option<(ObjectId, ObjectMeta)> {
         self.held.get(index).copied()
     }
+
+    fn now(&self) -> u32 {
+        self.cursor
+    }
 }

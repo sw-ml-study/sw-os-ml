@@ -58,8 +58,8 @@ pub const fn state(meta: &ObjectMeta) -> &'static str {
 ///
 /// A string with three shapes rather than a number, for the reason
 /// [`NextUse`]'s own documentation gives: a dense layer sweep yields an
-/// exact distance and an MoE router yields a distribution, and those
-/// differ in kind rather than in degree. A policy may act on a distance
+/// exact position in a declared stream and an MoE router yields a
+/// distribution, and those differ in kind rather than in degree. A policy may act on a distance
 /// with certainty and on a probability only as a hint, so collapsing them
 /// into one column would licence a consumer to draw them the same way.
 pub struct NextUseText(pub NextUse);
@@ -68,7 +68,7 @@ impl fmt::Display for NextUseText {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             NextUse::Never => out.write_str("never"),
-            NextUse::Distance(steps) => write!(out, "distance {steps}"),
+            NextUse::At(position) => write!(out, "at {position}"),
             NextUse::Probability(chance) => write!(out, "probability {chance}"),
         }
     }

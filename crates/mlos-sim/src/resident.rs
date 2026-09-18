@@ -12,7 +12,7 @@
 //! every comparison becomes an argument.
 
 use mlos_abi::ObjectId;
-use mlos_objtab::ObjectMeta;
+use mlos_objtab::{NextUse, ObjectMeta};
 
 /// What is in memory, and how much of it there is.
 #[derive(Default)]
@@ -20,6 +20,9 @@ pub struct Resident {
     /// Visible to `view.rs`, which opens the policy's window onto it.
     pub(crate) held: Vec<(ObjectId, ObjectMeta)>,
     bytes: u64,
+    /// Where the replay has got to, which is this simulator's equivalent
+    /// of a declared stream's cursor.
+    pub(crate) cursor: u32,
 }
 
 impl Resident {
@@ -29,12 +32,20 @@ impl Resident {
     /// separating them leaves a caller holding an index into a collection
     /// it is about to mutate, which is the shape of a bug rather than of
     /// an API.
-    pub fn touch(&mut self, id: ObjectId, now: u32) -> bool {
+    pub fn touch(&mut self, id: ObjectId, now: u32, next: NextUse) -> bool {
+        self.cursor = now;
         let Some((_, meta)) = self.held.iter_mut().find(|(held, _)| *held == id) else {
             return false;
         };
         meta.used_tick = now;
         meta.reuse_count = meta.reuse_count.saturating_add(1);
+        // Written ONCE, here, and not touched again until this object is
+        // acquired again -- which is the whole point of storing a
+        // position rather than a distance. The earlier version walked
+        // every resident object on every access to keep distances
+        // current; a kernel could not afford that and now neither side
+        // does it.
+        meta.next_use = next;
         true
     }
 
@@ -42,9 +53,11 @@ impl Resident {
     ///
     /// The caller decides that, because only the caller knows the budget
     /// and what it was willing to evict to get there.
-    pub fn insert(&mut self, id: ObjectId, mut meta: ObjectMeta, now: u32) {
+    pub fn insert(&mut self, id: ObjectId, mut meta: ObjectMeta, now: u32, next: NextUse) {
+        self.cursor = now;
         meta.placed_tick = now;
         meta.used_tick = now;
+        meta.next_use = next;
         meta.reuse_count = meta.reuse_count.saturating_add(1);
         self.bytes += u64::from(meta.size);
         self.held.push((id, meta));

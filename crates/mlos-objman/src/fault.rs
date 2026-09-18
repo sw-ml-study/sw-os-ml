@@ -13,7 +13,7 @@
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
 use mlos_events::Event;
-use mlos_objtab::{CostNs, SessionId, Tier};
+use mlos_objtab::{CostNs, NextUse, SessionId, Tier};
 use mlos_provider::Located;
 
 use mlos_objtab::ObjectMeta;
@@ -74,7 +74,20 @@ impl<'a, const N: usize> Manager<'a, N> {
     /// attempted, so a failure to find room still leaves a record of what
     /// was wanted -- the difference between a system that can explain why
     /// it refused and one that just refuses.
-    pub(crate) fn service(&mut self, id: ObjectId, lease: Lease, by: SessionId) -> Result<Handle> {
+    ///
+    /// The event is recorded AFTER the outcome, so one event says what
+    /// actually happened rather than a hope amended later. Its offset is
+    /// arena-relative rather than the absolute address the lease carries:
+    /// that is what the layout document's `dram` regions use, and an
+    /// event has to be replayable onto one, which an absolute address
+    /// would put outside the space it belongs to.
+    pub(crate) fn service(
+        &mut self,
+        id: ObjectId,
+        lease: Lease,
+        by: SessionId,
+        wanted: NextUse,
+    ) -> Result<Handle> {
         let meta = *self.table.get(id).ok_or(Error::BadObject)?;
         let provider = self.provider_for(&meta)?;
         let located = Located::new(id, &meta);
@@ -84,15 +97,8 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.last_fault = Some(fault);
         self.counters.fault(fault.class, meta.size);
 
-        // Recorded after the outcome, so one event says what actually
-        // happened rather than a hope amended later.
-        //
-        // The offset is arena-relative, not the absolute address the lease
-        // carries. That is what the layout document's dram regions use,
-        // and an event has to be replayable onto one -- an absolute
-        // address would put every placement outside the space it is in.
         let base = self.arena.base();
-        let placed = self.place(id, located, provider, lease);
+        let placed = self.place(id, located, provider, lease, wanted);
         self.events.record(match &placed {
             Ok(handle) => Event::placed(id, by, &meta, cost, handle.address - base),
             Err(why) => Event::refused(id, by, &meta, cost, *why),
@@ -131,6 +137,7 @@ impl<'a, const N: usize> Manager<'a, N> {
         located: Located,
         provider: &dyn Provider,
         lease: Lease,
+        wanted: NextUse,
     ) -> Result<Handle> {
         let size = located.size;
         let (address, into) = self.arena.place(size)?;
@@ -140,6 +147,7 @@ impl<'a, const N: usize> Manager<'a, N> {
         let now = self.clock;
         let placed = self.table.get_mut(id).ok_or(Error::BadObject)?;
         placed.resident_at = address;
+        placed.next_use = wanted;
         placed.placed_tick = now;
         placed.used_tick = now;
         placed.tier = Tier::Warm;

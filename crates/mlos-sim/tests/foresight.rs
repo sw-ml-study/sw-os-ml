@@ -51,37 +51,23 @@ fn a_repeated_object_chains_forward() {
     assert_eq!(seen.after(4), None);
 }
 
-/// What `foresee` writes into the table, which is what a policy reads.
+/// What the replay writes into the table, which is what a policy reads.
 ///
-/// Regression. `Foresight::after` answers in trace indices and `foresee`
-/// is handed a one-based tick; the first version compared them directly,
-/// so an object wanted on the very NEXT access was marked `Never` and
-/// became the most evictable thing in the table.
+/// Regression. `Foresight::after` answers in trace INDICES and the caller
+/// counts one-based ticks; the first version compared them directly, so
+/// an object wanted on the very NEXT access was marked `Never` and became
+/// the most evictable thing in the table.
 #[test]
 fn the_next_access_is_the_least_evictable_not_the_most() {
     use mlos_objtab::NextUse;
-    use mlos_policy::Residency;
-    use mlos_sim::Resident;
+    use mlos_sim::wanted_at;
 
     //  index: 0  1  2
     // object: A  B  A
-    // At index 1, A is wanted next -- distance 1, not `Never`.
+    // A is acquired at tick 1 and wanted again at index 2, which is
+    // position 3 in the one-based counting a policy compares against.
     let held = trace(&[1, 2, 1]);
     let seen = Foresight::read(&held);
-
-    let mut resident = Resident::default();
-    resident.insert(id(1), meta(), 1); // A, last used at tick 1
-    mlos_sim::foresee(&mut resident, 2, &seen);
-
-    let (_, after) = resident.at(0).expect("A is resident");
-    assert_eq!(
-        after.next_use,
-        NextUse::Distance(1),
-        "A is wanted on the very next access"
-    );
-}
-
-/// A plain weight-tile metadata, for building a resident set by hand.
-fn meta() -> mlos_objtab::ObjectMeta {
-    mlos_synth::model::weights()
+    assert_eq!(wanted_at(&seen, 1), NextUse::At(3), "A comes round again");
+    assert_eq!(wanted_at(&seen, 3), NextUse::Never, "and then never");
 }

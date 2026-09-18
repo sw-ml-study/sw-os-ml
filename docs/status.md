@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 006 -- the verdict.
+Last updated: 2026-09-18, during saga `mlos-nextuse`, after step 007.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **6 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
+| M3 it knows better | **7 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -68,7 +68,8 @@ x86-64 anywhere in this repo.
 | Faults | `ml_acquire` -> miss -> `MODEL_FAULT` -> provider read -> arena placement -> resident. Counted per class |
 | Tiers | Three, with genuinely different costs: a virtio-blk disk, a recompute tier, and DRAM |
 | Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
-| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace` |
+| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace`, `stream` |
+| Streams | `ml_stream_declare` / `ml_stream_advance` as `mlos-stream`. A declared cyclic order, and a cursor. **The kernel now writes `ObjectMeta::next_use`** -- the field that existed from M2 step 001 with nothing to set it |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -107,10 +108,16 @@ in the static document, drawn from the linked image. The two share `disk`
 and `dram`, with the same region ids, which is what lets a consumer join
 them.
 
-`region_next_use` is always `never`. The column is emitted, and the object
-table has carried the field since step 001, but nothing writes it: streams
-and known-next-use are M3, and that is the whole thesis. A viewer colouring
-by next-use today would show one colour.
+`region_next_use` is `never` until a stream is declared. The kernel writes
+it from M3 step 007 onwards -- `stream` in `mlsh` declares the model's
+sweep and `stream N` advances it -- so a layout document taken after that
+carries real positions. Nothing declares one automatically, because
+nothing yet decides anything with it: the kernel has no policy and no
+eviction, which is steps 008 and 009.
+
+`NextUse::Probability` is still produced by nothing. A declared stream
+says exactly WHEN; only a router says how LIKELY, and nothing routes until
+M5. The distinction is preserved rather than collapsed.
 
 Events carry no wall clock. The only clock the shell had when they were
 designed is the 2 Hz tick, which cannot resolve a fault, and elapsed time

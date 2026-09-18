@@ -153,6 +153,7 @@ dependencies = [
  "mlos-metrics",
  "mlos-objtab",
  "mlos-provider",
+ "mlos-stream",
 ]
 
 [[package]]
@@ -234,6 +235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-stream"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+]
+
+[[package]]
 name = "mlos-synth"
 version = "0.0.1"
 dependencies = [
@@ -306,5 +315,6 @@ dependencies = [
  "mlos-objtab",
  "mlos-queue",
  "mlos-snapshot",
+ "mlos-spaces",
  "mlos-synth",
 ]

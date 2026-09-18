@@ -63,8 +63,18 @@ pub enum NextUse {
     /// Not known to be wanted again.
     #[default]
     Never,
-    /// Wanted again in exactly this many steps of a declared stream.
-    Distance(u32),
+    /// Wanted again at exactly this position in a declared stream.
+    ///
+    /// A POSITION, not a distance, and the difference is the whole
+    /// reason `ml_stream_advance` can be O(1). A distance is measured
+    /// from somewhere, so advancing a stream by one step would make every
+    /// resident object's distance wrong and the kernel would have to walk
+    /// the table to fix them -- a per-token cost over the very structure
+    /// it would be walking. A position is measured from the stream's
+    /// origin and does not move when the cursor does, so advancing is a
+    /// single increment and the subtraction happens once, in the policy,
+    /// for the handful of objects it actually compares.
+    At(u32),
     /// Wanted with this likelihood, as a fraction of `u16::MAX`.
     Probability(u16),
 }

@@ -26,5 +26,7 @@ mlos-machine  = { path = "../mlos-machine",  version = "0.0.1" }
 
 mlos-events    = { path = "../mlos-events",    version = "0.0.1" }
 
+mlos-spaces   = { path = "../mlos-spaces",   version = "0.0.1" }
+
 [lints]
 workspace = true

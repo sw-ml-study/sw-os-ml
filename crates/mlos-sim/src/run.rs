@@ -5,7 +5,7 @@
 //! be served at all. Everything the comparison measures is decided here.
 
 use mlos_abi::ObjectId;
-use mlos_objtab::ObjectMeta;
+use mlos_objtab::{NextUse, ObjectMeta};
 use mlos_policy::Policy;
 
 use crate::{Model, Outcome, Resident};
@@ -19,6 +19,9 @@ pub struct Run<'a> {
     pub budget: u64,
     /// The policy under test.
     pub policy: &'a dyn Policy,
+    /// Where each object is next wanted, which a declared stream would
+    /// tell a kernel and a whole trace tells a simulator.
+    pub seen: &'a crate::Foresight,
 }
 
 impl Run<'_> {
@@ -31,11 +34,12 @@ impl Run<'_> {
             outcome.mismatched += 1;
             return;
         };
-        if resident.touch(id, now) {
+        let next = crate::wanted_at(self.seen, now);
+        if resident.touch(id, now, next) {
             outcome.hits += 1;
             return;
         }
-        self.fetch(resident, outcome, (id, meta), now);
+        self.fetch(resident, outcome, (id, meta), (now, next));
     }
 
     /// A miss: make room if the policy will give any, then place.
@@ -44,9 +48,10 @@ impl Run<'_> {
         resident: &mut Resident,
         out: &mut Outcome,
         want: (ObjectId, ObjectMeta),
-        now: u32,
+        when: (u32, NextUse),
     ) {
         let (id, meta) = want;
+        let (now, next) = when;
         while resident.bytes() + u64::from(meta.size) > self.budget {
             // One victim at a time, so a policy never has to know how much
             // more room is needed -- only which single object it would
@@ -58,7 +63,7 @@ impl Run<'_> {
             resident.remove(victim);
             out.evicted += 1;
         }
-        resident.insert(id, meta, now);
+        resident.insert(id, meta, now, next);
         out.reads += 1;
         out.bytes += u64::from(meta.size);
         out.cost += u64::from(meta.reload_cost.0);

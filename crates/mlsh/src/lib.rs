@@ -12,6 +12,7 @@
 
 #![no_std]
 
+mod acquire;
 mod commands;
 mod objects;
 mod report;

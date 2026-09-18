@@ -24,7 +24,7 @@ use state::{arena, manager};
 
 pub use devices::{on_disk, set_slots};
 pub use mlos_synth::{ACTIVATION_BYTES, LAYERS, TILE_BYTES, TILES};
-pub use sweep::{Swept, sweep};
+pub use sweep::{Swept, advance, declare, sweep};
 
 /// Objects the table can hold. Comfortably more than the model needs, so
 /// a full table is never what a sweep runs into first.

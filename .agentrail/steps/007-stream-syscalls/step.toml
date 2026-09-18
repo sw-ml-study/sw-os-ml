@@ -1,6 +1,6 @@
 number = 7
 slug = "stream-syscalls"
-status = "pending"
+status = "in-progress"
 description = "`ml_stream_declare` and `ml_stream_advance`: the calls by which userspace han..."
 role = "production"
 context_files = []

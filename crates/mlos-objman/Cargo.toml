@@ -16,5 +16,7 @@ mlos-provider = { path = "../mlos-provider", version = "0.0.1" }
 
 mlos-events    = { path = "../mlos-events",    version = "0.0.1" }
 
+mlos-stream   = { path = "../mlos-stream",   version = "0.0.1" }
+
 [lints]
 workspace = true

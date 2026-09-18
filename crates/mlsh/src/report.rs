@@ -31,28 +31,33 @@ pub fn objs(out: &mut impl Write, args: &str) {
 /// Prints every tile the table knows, or only the resident ones.
 ///
 /// Resident by default: a full listing of 128 identical cold tiles says
-/// nothing, and the ones in memory are the ones a decision was made about.
+/// nothing, and the ones in memory are the ones a decision was made
+/// about.
+///
+/// The last column is `next_use` -- when the object is next wanted,
+/// which no page-based system can hold. It reads `never` until something
+/// declares a stream, because until M3 step 007 nothing ever wrote it.
 fn list<const N: usize>(
     out: &mut impl Write,
     manager: &mlos_objman::Manager<'static, N>,
     all: bool,
 ) -> u32 {
+    let tiles = (0..LAYERS).flat_map(|layer| (0..TILES).map(move |tensor| (layer, tensor)));
     let mut shown = 0;
-    for layer in 0..LAYERS {
-        for tensor in 0..TILES {
-            let Some(meta) = manager.table.get(model::tile(layer, tensor)) else {
-                continue;
-            };
-            if meta.resident_at == 0 && !all {
-                continue;
-            }
-            let _ = writeln!(
-                out,
-                "  L{layer:02} T{tensor:02}  {:?}  {:#x}  used {}",
-                meta.tier, meta.resident_at, meta.reuse_count
-            );
-            shown += 1;
+    for (layer, tensor) in tiles {
+        let Some(meta) = manager.table.get(model::tile(layer, tensor)) else {
+            continue;
+        };
+        if meta.resident_at == 0 && !all {
+            continue;
         }
+        let next = mlos_spaces::NextUseText(meta.next_use);
+        let (tier, at, used) = (meta.tier, meta.resident_at, meta.reuse_count);
+        let _ = writeln!(
+            out,
+            "  L{layer:02} T{tensor:02}  {tier:?}  {at:#x}  used {used}  next {next}"
+        );
+        shown += 1;
     }
     shown
 }

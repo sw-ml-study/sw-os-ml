@@ -23,8 +23,6 @@
 use mlos_objtab::NextUse;
 use mlos_trace::Access;
 
-use crate::Resident;
-
 /// Where the next use of each access's object is.
 pub struct Foresight {
     /// For access `i`, the index of the next access to the same object,
@@ -71,29 +69,29 @@ impl Foresight {
     }
 }
 
-/// Writes each resident object's distance-to-next-use into the table.
+/// Where the object being acquired at `tick` is next wanted.
 ///
-/// A distance from NOW, recomputed every access, because that is what
-/// `ml_stream_advance` will do in the kernel: advancing a stream is what
-/// makes every resident object's future one step nearer. Storing an
-/// absolute position instead would be cheaper and would not survive
-/// contact with a kernel that has no trace to index into.
-pub fn foresee(resident: &mut Resident, now: u32, seen: &Foresight) {
-    // `after` answers in trace INDICES and `now` is a one-based tick.
-    // Mixing the two is what made the first version of this wrong, and
-    // wrong in the worst available way: an object whose next use was the
-    // very next access failed the comparison, fell through to `Never`,
-    // and became the MOST evictable thing in the table. Belady was being
-    // told to throw away exactly what it was about to need, and it lost
-    // to LRU by three times -- which is how the bug was found, because a
-    // policy with strictly more information cannot honestly do that.
-    let here = now.saturating_sub(1);
-    for (_, meta) in &mut resident.held {
-        meta.next_use = match seen.after(meta.used_tick) {
-            // Zero distance is the access being served right now: the
-            // least evictable thing there is, not the most.
-            Some(at) if at >= here => NextUse::Distance(at - here),
-            _ => NextUse::Never,
-        };
+/// One lookup, at acquire time, and never revisited -- the object is not
+/// wanted again before the position this returns, so the answer stays
+/// true until the next acquire rewrites it. An earlier version wrote
+/// DISTANCES instead and had to walk every resident object on every
+/// access to keep them current; a kernel could not afford that, and the
+/// step that said so is the reason `NextUse` carries a position.
+///
+/// `after` answers in trace INDICES and the caller counts one-based
+/// ticks. Mixing the two is what made the first version wrong, and wrong
+/// in the worst available way: an object whose next use was the very next
+/// access fell through to `Never` and became the MOST evictable thing in
+/// the table. Belady was being told to throw away exactly what it was
+/// about to need, and it lost to LRU by three times.
+#[must_use]
+pub fn wanted_at(seen: &Foresight, tick: u32) -> NextUse {
+    match seen.after(tick) {
+        // Indices are zero-based and ticks are one-based, so the position
+        // a policy compares against `Residency::now` is the index plus
+        // one. Getting this wrong is invisible in every test but the
+        // measurement.
+        Some(at) => NextUse::At(at + 1),
+        None => NextUse::Never,
     }
 }

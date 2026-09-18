@@ -78,12 +78,12 @@ fn residency_can_be_updated_in_place() {
     let meta = table.get_mut(tile(3, 0)).expect("present");
     meta.tier = mlos_objtab::Tier::Warm;
     meta.share_count += 1;
-    meta.next_use = NextUse::Distance(32);
+    meta.next_use = NextUse::At(32);
 
     let found = table.get(tile(3, 0)).expect("present");
     assert_eq!(found.tier, mlos_objtab::Tier::Warm);
     assert_eq!(found.share_count, 1);
-    assert_eq!(found.next_use, NextUse::Distance(32));
+    assert_eq!(found.next_use, NextUse::At(32));
 }
 
 /// The property linear probing gets wrong if removal writes a vacancy:

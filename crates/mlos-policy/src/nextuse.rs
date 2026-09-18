@@ -14,8 +14,8 @@
 //! victim if it is also the dearest to get back, so what is maximised is
 //! **distance per unit of recovery cost** rather than distance.
 //!
-//! **A guess is not knowledge.** `NextUse::Distance` is exact -- a
-//! declared stream said so. `NextUse::Probability` is a router's
+//! **A guess is not knowledge.** `NextUse::At` is exact -- a declared
+//! stream said so. `NextUse::Probability` is a router's
 //! distribution, and acting on it as though it were a distance would
 //! licence evicting something the system was merely unsure about as
 //! though it knew. Both are turned into a horizon, and the probabilistic
@@ -64,12 +64,12 @@ impl Policy for KnownNextUse {
     }
 
     fn victim(&self, resident: &dyn Residency, _wanting: &ObjectMeta) -> Option<ObjectId> {
-        let mut best: Option<(ObjectId, u64)> = None;
+        let (mut best, now): (Option<(ObjectId, u64)>, u32) = (None, resident.now());
         for index in 0..resident.len() {
             let Some((id, meta)) = resident.at(index) else {
                 continue;
             };
-            let score = evictability(&meta);
+            let score = evictability(&meta, now);
             if best.is_none_or(|(_, held)| score > held) {
                 best = Some((id, score));
             }
@@ -89,20 +89,23 @@ impl Policy for KnownNextUse {
 /// computation that produces a trained weight -- so taking the minimum is
 /// what makes an activation, cheap to rebuild and expensive to store, a
 /// better victim than a tile at the same distance.
-fn evictability(meta: &ObjectMeta) -> u64 {
+fn evictability(meta: &ObjectMeta, now: u32) -> u64 {
     let (reload, recompute) = (meta.reload_cost.0, meta.recompute_cost.0);
     let recovery = match reload.min(recompute) {
         0 => 1,
         cost => u64::from(cost),
     };
-    horizon(meta.next_use).saturating_mul(SCALE) / recovery
+    horizon(meta.next_use, now).saturating_mul(SCALE) / recovery
 }
 
 /// How far away the next use is, in steps, with a hint discounted.
-fn horizon(next: NextUse) -> u64 {
+fn horizon(next: NextUse, now: u32) -> u64 {
     match next {
         NextUse::Never => UNDECLARED,
-        NextUse::Distance(steps) => steps as u64,
+        // A position minus where the stream has got to. Saturating
+        // because a position already passed means the object is wanted
+        // now, which is a distance of zero and the worst possible victim.
+        NextUse::At(position) => u64::from(position.saturating_sub(now)),
         // A router's distribution, not a distance. An expert wanted with
         // probability p each step is expected about 1/p steps away -- and
         // then halved, because being unsure is not the same as knowing.

@@ -41,7 +41,7 @@ impl Policy for Belady {
             };
             let horizon = match meta.next_use {
                 NextUse::Never => u64::MAX,
-                NextUse::Distance(steps) => u64::from(steps),
+                NextUse::At(position) => u64::from(position.saturating_sub(resident.now())),
                 NextUse::Probability(_) => u64::MAX / 2,
             };
             if best.is_none_or(|(_, held)| horizon > held) {
