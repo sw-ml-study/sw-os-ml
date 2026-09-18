@@ -67,10 +67,16 @@ That is a faithful picture of the *problem*: memory is a fraction of the
 model, the sweep runs out, and MLOS refuses rather than guessing what to
 throw away. It is not yet a picture of a solution.
 
-**What has not been measured is the claim the project rests on:** that an
-operating system which is told the future beats one that guesses. The
-next four steps produce that number -- see
-[Where this goes next](#where-this-goes-next).
+**The claim the project rests on has now been measured, in simulation.**
+Replaying one workload against four residency policies under identical
+budgets, a policy told when each object is next wanted does **32% to 71%
+fewer provider reads** than the best of demand paging, FIFO and LRU --
+across twenty-eight configurations, never losing.
+
+That is the encouraging half. The other half: the simulator SUPPLIES that
+knowledge by holding the whole trace, and nothing in the kernel can yet
+be told the future at all. [docs/m3-verdict.md](docs/m3-verdict.md) has
+the table and an honest account of what it does not settle.
 
 ## Documents
 
@@ -84,6 +90,7 @@ next four steps produce that number -- see
 | [docs/layout-handoff.md](docs/layout-handoff.md) | What MLOS emits for the cross-repo visualization, and what it needs back |
 | [docs/external-asks.md](docs/external-asks.md) | What MLOS needs from emufpga, sw-mlpl, demo-extensions, sw-tos and demo-memory -- and what it does without each |
 | [docs/clustering.md](docs/clustering.md) | How MLOS becomes many instances: transports, homogeneous and heterogeneous clusters, and what each measures |
+| [docs/m3-verdict.md](docs/m3-verdict.md) | Does knowing the future beat guessing? The measured comparison, and what it does not settle |
 | docs/research.txt | Raw source material the architecture was distilled from |
 
 ## Try it
@@ -162,17 +169,15 @@ virtio-pci transport that would fix it arrives with M6.
 
 ## Where this goes next
 
-The next milestone is the one that justifies the project: replay one
-workload against four residency policies under an identical memory
-budget, and see whether knowing the future wins.
+The simulated comparison is done and it separated, so the work now is
+making it true of the kernel rather than of a model of one:
+`ml_stream_declare` so a workload can hand MLOS its own future, an arena
+that can evict at all (it is still a bump allocator), and the same policy
+crates running in-kernel under TCG. Step 009 has to reproduce the
+simulator's counts **exactly**, not approximately, or the two are not
+measuring the same thing.
 
-Four host-side steps produce that table -- a replay harness, three
-baselines, a workload with real reuse in it, and the known-next-use
-policy. None of them needs an emulator or anything from another
-repository. Then the saga stops and looks at the answer, because
-[the plan](docs/plan.md#saga-mlos-nextuse-m3) commits to the other
-outcome: if known-next-use does not separate from LRU on a fair
-workload, say so and stop before M4.
+Only then is gate G4 met.
 
 ## Development
 

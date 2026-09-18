@@ -1,6 +1,6 @@
 number = 6
 slug = "verdict"
-status = "pending"
+status = "in-progress"
 description = """
 Stop, run the comparison, and look at the table.
 

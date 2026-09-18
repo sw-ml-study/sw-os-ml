@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 005.
+Last updated: 2026-09-17, during saga `mlos-nextuse`, after step 006 -- the verdict.
 
 ---
 
@@ -38,7 +38,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **5 of 11 steps** -- saga `mlos-nextuse`. Step 006 is the verdict |
+| M3 it knows better | **6 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -220,6 +220,30 @@ mlos-workload --test sweep -- --ignored --nocapture` prints the shape.
 reads against LRU's 11,942 -- and refuses 6,896 of 25,200 accesses to get
 there, where LRU refuses none. Reporting those two numbers side by side
 without the refusals would be the most misleading row in any table.
+
+## The verdict is in
+
+[m3-verdict.md](m3-verdict.md) is the document; this is the sentence.
+
+**Known-next-use beats every baseline at every budget where any policy
+can differ, at every session count tested** -- twenty-eight
+configurations, 32% to 71% fewer provider reads, never a loss. Bytes moved
+fall further than reads do, because it keeps the expensive objects and
+evicts the cheap ones.
+
+What that does NOT settle is in
+[s.5 of the verdict](m3-verdict.md#5-what-this-is-not), and the first
+item is the one that matters: **the simulator supplies the foresight.**
+It holds the whole trace and looks the answer up. The claim is that a
+transformer hands an operating system that knowledge through a declared
+stream, and nothing has built or measured that. Step 007 does, and if
+streams cannot deliver next-use cheaply in a kernel then this result does
+not transfer.
+
+PRD s.9 Q1 and Q2 are answered by name in the verdict, with numbers.
+Gate G4 is **not** met by this: G4 asks for the comparison from a running
+kernel, which needs an evictable arena (step 008) and the in-kernel port
+(step 009).
 
 ## Known-next-use, measured
 
