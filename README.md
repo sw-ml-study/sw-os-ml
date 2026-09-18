@@ -83,6 +83,7 @@ next four steps produce that number -- see
 | [docs/status.md](docs/status.md) | Ground truth |
 | [docs/layout-handoff.md](docs/layout-handoff.md) | What MLOS emits for the cross-repo visualization, and what it needs back |
 | [docs/external-asks.md](docs/external-asks.md) | What MLOS needs from emufpga, sw-mlpl, demo-extensions, sw-tos and demo-memory -- and what it does without each |
+| [docs/clustering.md](docs/clustering.md) | How MLOS becomes many instances: transports, homogeneous and heterogeneous clusters, and what each measures |
 | docs/research.txt | Raw source material the architecture was distilled from |
 
 ## Try it

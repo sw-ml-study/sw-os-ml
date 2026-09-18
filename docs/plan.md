@@ -180,6 +180,11 @@ having. It is no longer what M6 is for.
 
 ### M7 -- Another machine is a provider (PoC gate G8)
 
+Planned in detail in [clustering.md](clustering.md): simulate a cost
+graph first, then two emulated guests on one Mac joined by a host relay,
+then `virtio-net` and a second machine. Homogeneous before heterogeneous,
+so that any difference the cluster makes is attributable.
+
 **Result:** an object resident in node B's RAM is fetched by node A over
 Ethernet, and the policy chooses between that and node A's own SSD on
 cost rather than on a tier ordinal.
