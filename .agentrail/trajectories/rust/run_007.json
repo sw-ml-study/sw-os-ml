@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 8,
+    "step": "evictable-arena"
+  },
+  "action": "Made the sibling crate when the crate filled up, per AGENTS.md, rather than accepting warnings -- and the split turned out to be a real concern boundary (bytes vs objects) rather than a filing exercise. Measured fragmentation across uniform and ragged workloads instead of asserting it, and surfaced the largest-run number in the shell so it is visible during a run. Ran it in a guest and read the output, which is how the coalescing was confirmed.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-18T13:39:01"
+}
