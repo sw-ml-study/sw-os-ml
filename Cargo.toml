@@ -27,6 +27,7 @@ members = [
     "crates/mlos-hal-aarch64",
     "crates/mlos-hal-x86-64",
     "crates/mlos-kernel-x86-64",
+    "crates/mlos-uart16550",
     "crates/mlos-machine",
     "crates/mlos-objtab",
     "crates/mlos-lab",

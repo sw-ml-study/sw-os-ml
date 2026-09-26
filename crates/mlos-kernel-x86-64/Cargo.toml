@@ -9,7 +9,9 @@ repository.workspace   = true
 authors.workspace      = true
 
 [dependencies]
+mlos-device     = { path = "../mlos-device",     version = "0.0.1" }
 mlos-hal-x86-64 = { path = "../mlos-hal-x86-64", version = "0.0.1" }
+mlos-uart16550  = { path = "../mlos-uart16550",  version = "0.0.1" }
 
 [lints]
 workspace = true

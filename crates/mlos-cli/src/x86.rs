@@ -5,15 +5,26 @@
 //! same lines. Folding the two into one `--arch`-aware path is a later
 //! refactor, once both have merged.
 //!
-//! Without `--arch`, nothing changes: `mlos` means aarch64, as before.
-//! `--arch aarch64` says so explicitly and takes the unchanged path.
+//! Without `--arch`, `build` and `run` target the host's own architecture
+//! -- x86-64 on a Linux PC, aarch64 on Apple Silicon -- which is the one
+//! it can accelerate. Every other verb (`doctor`, `layout`, `runtime`,
+//! `help`) is architecture-neutral or aarch64-only for now and keeps the
+//! shared path. `--arch aarch64` takes that path explicitly.
 
 use std::{
-    io,
+    io::{self, Write},
     path::PathBuf,
     process::Command,
     thread,
     time::{Duration, Instant},
+};
+
+/// The architecture `build` and `run` mean when `--arch` is not given:
+/// this machine's, as `mlos` itself was compiled for it.
+const HOST: &str = if cfg!(target_arch = "x86_64") {
+    "x86-64"
+} else {
+    "aarch64"
 };
 
 /// The bare target the x86-64 kernel is built for.
@@ -28,30 +39,33 @@ Usage:
   mlos --arch x86-64 run [tcg]    boot it under QEMU microvm via PVH
 
 Options:
-  --capture SECONDS               boot headless, give up after SECONDS
+  --capture SECONDS               boot headless for SECONDS, print the console
 
-TCG only: KVM is saga mlos-two-hosts. There is no console yet (step
-x86-console); the guest reports what it checked through its exit status.";
+On an x86-64 host `--arch x86-64` is the default for build and run.
+The console is COM1 and echoes what you type; Ctrl-D ends the guest,
+which then reports what it checked through its exit status. TCG only:
+KVM is saga mlos-two-hosts.";
 
-/// Handles `--arch`, or returns `None` so `main` takes the usual path.
+/// Handles `--arch`, or an x86-64 host's `build`/`run`; `None` means
+/// `main` takes the usual path.
 ///
 /// `--arch aarch64` is stripped and handed back to [`crate::dispatch`], so
-/// both architectures are selectable and neither is reached by accident.
+/// both architectures are selectable wherever `mlos` runs.
 pub fn dispatch(args: &[String]) -> Option<io::Result<()>> {
-    let at = args.iter().position(|arg| arg == "--arch")?;
     let mut rest = args.to_vec();
-    let arch = rest
-        .drain(at..args.len().min(at + 2))
-        .nth(1)
-        .unwrap_or_default();
+    let arch = match args.iter().position(|arg| arg == "--arch") {
+        Some(at) => rest
+            .drain(at..args.len().min(at + 2))
+            .nth(1)
+            .unwrap_or_default(),
+        None if matches!(args.first().map(String::as_str), Some("build" | "run")) => HOST.into(),
+        None => return None,
+    };
     Some(match (arch.as_str(), rest.first().map(String::as_str)) {
         ("aarch64", _) => crate::dispatch(&rest),
         ("x86-64", Some("build")) => build().map(|elf| println!("{}", elf.display())),
         ("x86-64", Some("run")) => boot(&rest),
-        ("x86-64", None | Some("help" | "--help" | "-h")) => {
-            println!("{USAGE}");
-            Ok(())
-        }
+        ("x86-64", None | Some("help" | "--help" | "-h")) => writeln!(io::stdout(), "{USAGE}"),
         ("x86-64", Some(other)) => Err(io::Error::other(format!(
             "{other:?} is not available for x86-64 yet (see `mlos --arch x86-64 help`)"
         ))),
@@ -79,6 +93,7 @@ fn build() -> io::Result<PathBuf> {
 /// QEMU for the x86-64 guest, minus RAM size and kernel.
 ///
 /// `microvm`: virtio-mmio, which MLOS speaks, rather than `q35`'s PCI.
+/// COM1 is the console, multiplexed with the QEMU monitor (`Ctrl-A x`).
 /// `-cpu max` so the identity map can use 1 GiB pages; the 2 MiB fallback
 /// is exercised by the boot test with QEMU's default CPU. The debug-exit
 /// device is how the guest reports before it has a console.
@@ -89,7 +104,10 @@ const MICROVM: [&str; 15] = [
     "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-kernel",
 ];
 
-/// Boots under QEMU `microvm` and reports what the guest said it checked.
+/// Boots under QEMU `microvm`, console on this terminal.
+///
+/// With `--capture`, stops the guest at the deadline: it waits for input
+/// that a headless boot never sends, so still running is the normal end.
 fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, _) = crate::options(args, true)?;
     if args.iter().any(|arg| arg == host) && host != "tcg" {
@@ -114,11 +132,15 @@ fn boot(args: &[String]) -> io::Result<()> {
 
 /// Turns the guest's exit status into what it means, or into an error.
 ///
-/// QEMU's `isa-debug-exit` exits with `(code << 1) | 1`. The bits are
-/// `mlos-kernel/src/x86.rs`'s: `0x40` reached `mlos_main`, `0x01` long
-/// mode, `0x02` a valid `hvm_start_info`, `0x04` 1 GiB pages.
+/// `None` is the `--capture` deadline, not a failure: the console above
+/// already says what the guest did. Otherwise QEMU's `isa-debug-exit`
+/// exited with `(code << 1) | 1`, and the bits are
+/// `mlos-kernel-x86-64`'s: `0x40` reached `mlos_main`, `0x01` long mode,
+/// `0x02` a valid `hvm_start_info`, `0x04` 1 GiB pages.
 fn describe(status: Option<i32>) -> io::Result<String> {
-    let code = status.ok_or_else(|| io::Error::other("the guest did not exit in time"))?;
+    let Some(code) = status else {
+        return Ok("(stopped at the --capture deadline)".to_owned());
+    };
     let bits = (code - 1) / 2;
     if code % 2 == 0 || bits & 0x40 == 0 {
         return Err(io::Error::other(format!(
@@ -128,7 +150,7 @@ fn describe(status: Option<i32>) -> io::Result<String> {
     let yes =
         |bit: i32, on: &'static str, off: &'static str| if bits & bit != 0 { on } else { off };
     let report = format!(
-        "x86-64 guest reached mlos_main: long mode {}, start_info {}, identity map {} pages",
+        "x86-64 guest exited: long mode {}, start_info {}, identity map {} pages",
         yes(0x01, "yes", "NO"),
         yes(0x02, "valid", "INVALID"),
         yes(0x04, "1 GiB", "2 MiB")

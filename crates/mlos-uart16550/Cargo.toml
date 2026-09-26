@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-uart16550"
+version     = "0.0.1"
+description = "The 16550 UART over x86 port I/O: the x86-64 guest's console."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-device = { path = "../mlos-device", version = "0.0.1" }
+
+[lints]
+workspace = true

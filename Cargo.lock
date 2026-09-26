@@ -118,7 +118,9 @@ dependencies = [
 name = "mlos-kernel-x86-64"
 version = "0.0.1"
 dependencies = [
+ "mlos-device",
  "mlos-hal-x86-64",
+ "mlos-uart16550",
 ]
 
 [[package]]
@@ -284,6 +286,13 @@ dependencies = [
 [[package]]
 name = "mlos-trap-aarch64"
 version = "0.0.1"
+
+[[package]]
+name = "mlos-uart16550"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+]
 
 [[package]]
 name = "mlos-virtio"

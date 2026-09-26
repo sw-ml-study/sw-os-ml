@@ -26,7 +26,9 @@ const SECONDS: &str = "8";
 
 /// Boots and returns everything the console said.
 fn boot(extra: &[&str]) -> String {
-    let mut args = vec!["run", "tcg", "--capture", SECONDS];
+    // `--arch aarch64` explicitly: without it `run` means the host's
+    // architecture, which on a Linux PC is x86-64 (tests/boot_x86.rs).
+    let mut args = vec!["--arch", "aarch64", "run", "tcg", "--capture", SECONDS];
     args.extend_from_slice(extra);
     let out = Command::new(MLOS)
         .args(&args)
