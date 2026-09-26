@@ -91,7 +91,10 @@ fn guest() -> String {
     let script = POLICIES
         .map(|(name, _)| format!("model {BUDGET_KIB};replay {name}"))
         .join(";");
+    // `--arch aarch64` explicitly: without it `run` means the host's
+    // architecture, which on a Linux PC is x86-64 (tests/boot_x86.rs).
     let out = Command::new(MLOS)
+        .args(["--arch", "aarch64"])
         .args(["run", "tcg", "--capture", SECONDS, "--run"])
         .arg(script)
         .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
