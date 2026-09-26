@@ -16,8 +16,10 @@
 #![cfg(all(target_arch = "x86_64", target_os = "none"))]
 
 mod boot;
+mod phys;
 
 pub use boot::{gigabyte_pages, long_mode, start_info_valid};
+pub use phys::{bytes, c_str};
 
 unsafe extern "C" {
     /// First byte of the image. Defined by `linker/x86_64.ld`.

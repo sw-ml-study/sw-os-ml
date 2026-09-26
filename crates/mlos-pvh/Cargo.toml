@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-pvh"
+version     = "0.0.1"
+description = "Reading what the PVH loader hands an x86-64 guest: start info, memory map, command line."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-hal = { path = "../mlos-hal", version = "0.0.1" }
+
+[lints]
+workspace = true

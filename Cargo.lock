@@ -118,9 +118,14 @@ dependencies = [
 name = "mlos-kernel-x86-64"
 version = "0.0.1"
 dependencies = [
- "mlos-device",
+ "mlos-hal",
  "mlos-hal-x86-64",
+ "mlos-lab",
+ "mlos-machine",
+ "mlos-pvh",
+ "mlos-queue",
  "mlos-uart16550",
+ "mlsh",
 ]
 
 [[package]]
@@ -215,6 +220,13 @@ dependencies = [
  "mlos-abi",
  "mlos-objtab",
  "mlos-provider",
+]
+
+[[package]]
+name = "mlos-pvh"
+version = "0.0.1"
+dependencies = [
+ "mlos-hal",
 ]
 
 [[package]]

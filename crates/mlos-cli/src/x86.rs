@@ -42,9 +42,9 @@ Options:
   --capture SECONDS               boot headless for SECONDS, print the console
 
 On an x86-64 host `--arch x86-64` is the default for build and run.
-The console is COM1 and echoes what you type; Ctrl-D ends the guest,
-which then reports what it checked through its exit status. TCG only:
-KVM is saga mlos-two-hosts.";
+The console is COM1 with mlsh on it (try `mem`, `dev`). Ctrl-D ends the
+guest, which then reports what it checked through its exit status. TCG
+only: KVM is saga mlos-two-hosts.";
 
 /// Handles `--arch`, or an x86-64 host's `build`/`run`; `None` means
 /// `main` takes the usual path.
@@ -93,13 +93,16 @@ fn build() -> io::Result<PathBuf> {
 /// QEMU for the x86-64 guest, minus RAM size and kernel.
 ///
 /// `microvm`: virtio-mmio, which MLOS speaks, rather than `q35`'s PCI.
+/// `acpi=off`, because with ACPI on `microvm` describes its virtio-mmio
+/// slots in the DSDT and leaves them OFF the command line -- and the
+/// command line is where MLOS reads them (`mlos-pvh`).
 /// COM1 is the console, multiplexed with the QEMU monitor (`Ctrl-A x`).
 /// `-cpu max` so the identity map can use 1 GiB pages; the 2 MiB fallback
 /// is exercised by the boot test with QEMU's default CPU. The debug-exit
 /// device is how the guest reports before it has a console.
 #[rustfmt::skip] // flag/value pairs, one pair per line reads as a command line
 const MICROVM: [&str; 15] = [
-    "-M", "microvm", "-accel", "tcg", "-cpu", "max",
+    "-M", "microvm,acpi=off", "-accel", "tcg", "-cpu", "max",
     "-display", "none", "-nodefaults", "-no-reboot", "-serial", "mon:stdio",
     "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-kernel",
 ];

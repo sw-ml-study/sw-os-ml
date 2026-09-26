@@ -28,6 +28,7 @@ members = [
     "crates/mlos-hal-x86-64",
     "crates/mlos-kernel-x86-64",
     "crates/mlos-uart16550",
+    "crates/mlos-pvh",
     "crates/mlos-machine",
     "crates/mlos-objtab",
     "crates/mlos-lab",
@@ -72,6 +73,7 @@ default-members = [
     "crates/mlos-pl011",
     "crates/mlos-cli",
     "crates/mlos-queue",
+    "crates/mlos-pvh",
     "crates/mlsh",
 ]
 

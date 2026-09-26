@@ -90,14 +90,19 @@ fn mem(out: &mut impl Write, facts: &Facts<'_>) {
     );
 }
 
-/// What the device tree said about the devices in use.
+/// The devices in use, as found -- whichever source described them.
+///
+/// Every line comes from `Facts`, none from an assumption about the
+/// architecture: the console kind is the one `boot` chose (a PL011 or
+/// virtio on aarch64, a 16550 on x86-64), and a timer the platform has
+/// not described is reported as absent rather than as irq 0.
 fn dev(out: &mut impl Write, facts: &Facts<'_>) {
-    let _ = writeln!(
-        out,
-        "  console  pl011 @ {:#x}, irq {}",
-        facts.uart, facts.uart_irq
-    );
-    let _ = writeln!(out, "  timer    generic, irq {}", facts.timer_irq);
+    let (kind, uart, irq) = (facts.console, facts.uart, facts.uart_irq);
+    let _ = writeln!(out, "  console  {kind} @ {uart:#x}, irq {irq}");
+    match facts.timer_irq {
+        0 => _ = out.write_str("  timer    none\r\n"),
+        irq => _ = writeln!(out, "  timer    generic, irq {irq}"),
+    }
     match facts.gic {
         Some((dist, redist)) => {
             let _ = writeln!(out, "  gic      v3, dist {dist:#x}, redist {redist:#x}");

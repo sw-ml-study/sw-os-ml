@@ -10,7 +10,13 @@
 use std::{
     env, fs,
     process::{Command, Output},
+    sync::atomic::{AtomicUsize, Ordering},
 };
+
+/// Numbers each boot's scratch directory. Tests run in parallel in one
+/// process, so the process id alone is not unique: two boots sharing a
+/// directory once deleted each other's console log mid-run.
+static BOOTS: AtomicUsize = AtomicUsize::new(0);
 
 /// The binary cargo built for this test.
 const MLOS: &str = env!("CARGO_BIN_EXE_mlos");
@@ -24,26 +30,40 @@ fn mlos(args: &[&str]) -> Output {
     out.expect("mlos runs")
 }
 
-/// Boots the x86-64 kernel with `input` scripted onto COM1, straight
-/// through QEMU so the input can be a file. Returns the exit status and
-/// everything the console said.
+/// Boots the x86-64 kernel with `input` scripted onto COM1 and `append`
+/// as its command line, straight through QEMU so the input can be a file.
+/// A 1 MiB scratch disk is attached, so there is a virtio-mmio slot for
+/// the command line to announce. Returns the exit status and everything
+/// the console said.
 ///
 /// The input is all there at t=0, before the kernel has touched the UART,
 /// which is the case the driver's "leave the FIFO alone" exists for.
-fn boot_with_input(cpu: &str, input: &[u8]) -> (Option<i32>, String) {
+fn boot_with_input(cpu: &str, append: &str, input: &[u8]) -> (Option<i32>, String) {
     let built = mlos(&["--arch", "x86-64", "build"]);
     let elf = String::from_utf8_lossy(&built.stdout).trim().to_owned();
-    let dir = env::temp_dir().join(format!("mlos-x86-{}-{cpu}", std::process::id()));
+    let n = BOOTS.fetch_add(1, Ordering::Relaxed);
+    let dir = env::temp_dir().join(format!("mlos-x86-{}-{n}", std::process::id()));
     fs::create_dir_all(&dir).expect("temp dir");
-    let (inp, out) = (dir.join("in"), dir.join("out"));
+    let (inp, out, disk) = (dir.join("in"), dir.join("out"), dir.join("disk"));
     fs::write(&inp, input).expect("input written");
+    fs::write(&disk, vec![0; 1 << 20]).expect("disk written");
     let com1 = format!(
         "file,id=com1,path={},input-path={}",
         out.display(),
         inp.display()
     );
+    let drive = format!("if=none,id=d0,format=raw,file={}", disk.display());
     let status = Command::new("qemu-system-x86_64")
-        .args(["-M", "microvm", "-accel", "tcg", "-cpu", cpu, "-m", "512"])
+        .args([
+            "-M",
+            "microvm,acpi=off",
+            "-accel",
+            "tcg",
+            "-cpu",
+            cpu,
+            "-m",
+            "512",
+        ])
         .args([
             "-display",
             "none",
@@ -58,11 +78,14 @@ fn boot_with_input(cpu: &str, input: &[u8]) -> (Option<i32>, String) {
             "-device",
             "isa-debug-exit,iobase=0xf4,iosize=0x04",
         ])
-        .args(["-kernel", &elf])
+        .args(["-drive", &drive, "-device", "virtio-blk-device,drive=d0"])
+        .args(["-append", append, "-kernel", &elf])
         .current_dir(ROOT)
         .status()
         .expect("qemu-system-x86_64 runs");
-    let console = fs::read_to_string(&out).unwrap_or_default();
+    let console = fs::read_to_string(&out)
+        .unwrap_or_default()
+        .replace('\r', "");
     let _ = fs::remove_dir_all(&dir);
     (status.code(), console)
 }
@@ -121,15 +144,42 @@ fn the_banner_comes_first_and_names_the_architecture() {
     }
 }
 
-/// Receive: what is typed comes back, and `Ctrl-D` ends the guest with
-/// reached | long mode | start_info | 1 GiB pages.
+/// Receive: a command typed on COM1 reaches `mlsh` and runs, and
+/// `Ctrl-D` ends the guest with reached | long mode | start_info | 1 GiB.
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
-fn it_echoes_what_it_receives_until_ctrl_d() {
-    let (status, console) = boot_with_input("max", b"hello, 16550\rsecond line\n\x04");
+fn a_typed_command_runs_in_the_shell_until_ctrl_d() {
+    let (status, console) = boot_with_input("max", "", b"dev\r\x04");
     assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
-    let echoed = console.split("Ctrl-D ends").nth(1).unwrap_or_default();
-    assert_eq!(echoed.trim(), "hello, 16550\r\nsecond line", "{console}");
+    assert!(
+        console.contains("mlsh> dev\n  console  16550 @ 0x3f8, irq 4"),
+        "{console}"
+    );
+}
+
+/// `mem` and `dev` report what the loader and the command line said, not
+/// what was assumed: the PVH map with the image carved out, the virtio
+/// slot QEMU announced, a 16550, and no timer yet. And `mlsh.run=` runs
+/// its verbs without QEMU's appended device list riding on the last one.
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn mem_and_dev_report_what_pvh_and_the_command_line_said() {
+    let (status, console) = boot_with_input("max", "mlsh.run=mem;dev", b"\x04");
+    assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
+    for fact in [
+        "memory map of",
+        "virtio      1 slot(s) from the command line",
+        " Kernel\n",
+        "  image  0x100000 + ",
+        "mlsh> dev\n",
+        "  console  16550 @ 0x3f8, irq 4\n  timer    none\n  gic      none",
+    ] {
+        assert!(console.contains(fact), "missing {fact:?} in {console}");
+    }
+    assert!(
+        !console.contains("Reclaimable"),
+        "loader structures are in Reserved BIOS memory, left as is:\n{console}"
+    );
 }
 
 /// QEMU's default CPU has no `pdpe1gb`, so this is the 2 MiB fallback:
@@ -137,7 +187,7 @@ fn it_echoes_what_it_receives_until_ctrl_d() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn it_falls_back_to_two_megabyte_pages_without_pdpe1gb() {
-    let (status, console) = boot_with_input("qemu64", b"\x04");
+    let (status, console) = boot_with_input("qemu64", "", b"\x04");
     assert_eq!(status, Some((0x43 << 1) | 1), "{console}");
     assert!(console.contains("2 MiB pages"), "{console}");
 }
