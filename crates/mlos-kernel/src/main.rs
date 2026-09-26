@@ -42,18 +42,11 @@ pub unsafe extern "C" fn mlos_main(dtb: *const u8) -> ! {
     halt()
 }
 
-/// Placeholder entry for x86-64.
-///
-/// x86-64 is milestone M6 (`docs/plan.md`). The target is kept building so
-/// it cannot silently rot, but there is no HAL behind it yet, so this
-/// parks rather than pretending.
+// x86-64: the entry is `mlos-hal-x86-64`'s PVH `_start`, and `mlos_main`
+// is in `mlos-kernel-x86-64`, a crate of its own so the two architectures
+// never edit the same file. Linked for its `#[no_mangle]` symbol.
 #[cfg(target_arch = "x86_64")]
-#[unsafe(naked)]
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".text.boot")]
-pub extern "C" fn _start() -> ! {
-    core::arch::naked_asm!("1:", "hlt", "jmp 1b");
-}
+use mlos_kernel_x86_64 as _;
 
 /// Last resort. There is no scheduler to yield to, so the machine stops.
 #[panic_handler]

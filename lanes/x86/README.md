@@ -17,8 +17,8 @@ wherever it says `.agentrail/` (agentrail's own reminders still print the
 root path; ignore that).
 
 **Conflict discipline for this lane.** x86-64 code goes in new files:
-new crates (`mlos-hal-x86-64`, ...), `crates/mlos-kernel/src/x86_64.rs`,
-`crates/mlos-cli/src/x86.rs`, `tests/boot_x86.rs`, and
+new crates (`mlos-hal-x86-64`, `mlos-kernel-x86-64`, ...),
+`crates/mlos-cli/src/x86.rs`, `crates/mlos-cli/tests/boot_x86.rs`, and
 `docs/status-x86-64.md` rather than rows in `docs/status.md`. Shared files
 get the smallest possible hook, placed where the aarch64 lane is least
 likely to be editing. Folding it back into shared locations is a later,

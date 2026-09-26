@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-kernel-x86-64"
+version     = "0.0.1"
+description = "The x86-64 half of the MLOS kernel: bring-up, above the HAL."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-hal-x86-64 = { path = "../mlos-hal-x86-64", version = "0.0.1" }
+
+[lints]
+workspace = true

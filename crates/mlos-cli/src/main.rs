@@ -8,13 +8,14 @@ mod doctor;
 mod image;
 mod run;
 mod vmm;
+mod x86;
 
 use std::{io, process::ExitCode};
 
 /// Parses arguments, dispatches, and turns a failure into an exit code.
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match dispatch(&args) {
+    match x86::dispatch(&args).unwrap_or_else(|| dispatch(&args)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("mlos: {error}");

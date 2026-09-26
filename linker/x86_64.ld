@@ -1,9 +1,8 @@
 /* MLOS kernel image layout, x86-64.
  *
- * Placeholder. x86-64 is milestone M6 (docs/plan.md); this script exists so
- * the target builds and stays building, not because the layout is settled.
- * 1 MiB is the conventional load address below which legacy structures and
- * firmware live.
+ * Loaded by QEMU's PVH path (saga mlos-x86-64): physical == virtual at
+ * 1 MiB, the conventional load address below which legacy structures and
+ * firmware live. The entry is `_start` in mlos-hal-x86-64's entry.s.
  */
 
 ENTRY(_start)
@@ -21,6 +20,12 @@ SECTIONS
     }
 
     .rodata : ALIGN(4096) { *(.rodata .rodata.*) }
+
+    /* The PVH note is how QEMU finds the 32-bit entry. Kept explicitly:
+     * the /DISCARD/ below drops every other note, and without this one
+     * QEMU refuses the ELF ("Error loading uncompressed kernel without
+     * PVH ELF Note"). */
+    .note.pvh : ALIGN(4) { KEEP(*(.note.pvh)) }
     .data   : ALIGN(4096) { *(.data .data.*) }
 
     .bss : ALIGN(4096) {
