@@ -124,7 +124,7 @@ fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {
 /// Read-only because weights are immutable, which is the property that
 /// lets one copy serve every session. A writable model disk would be a
 /// tier that has to be invalidated.
-fn disk() -> Vec<String> {
+pub fn disk() -> Vec<String> {
     let Ok(path) = crate::image::disk() else {
         return Vec::new();
     };

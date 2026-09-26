@@ -326,3 +326,38 @@ fn sweep_is_timed_by_a_measured_tsc() {
         "sweep should take measurable time: {console}"
     );
 }
+
+/// The model faults in from the model disk over virtio-blk -- the same
+/// driver and the same disk image as the aarch64 guest, attached by
+/// `mlos run` -- and the bytes carry the disk's provenance: `0xA0` in the
+/// high nibble, which the stub provider's pattern never has, and
+/// `layer ^ tensor` below it.
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn the_model_faults_in_from_virtio_blk_with_its_provenance() {
+    let script = "model 32;get 0 0;get 3 5";
+    let out = mlos(&[
+        "--arch",
+        "x86-64",
+        "run",
+        "tcg",
+        "--capture",
+        "25",
+        "--run",
+        script,
+    ]);
+    let said = String::from_utf8_lossy(&out.stdout).replace('\r', "");
+    assert!(
+        out.status.success(),
+        "{said}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        said.contains("virtio      1 slot(s) from the command line"),
+        "{said}"
+    );
+    assert!(said.contains("  weights    from virtio-blk"), "{said}");
+    // (0, 0): 0xA0 | 0 -- and (3, 5): 0xA0 | (3 ^ 5) = 0xA6.
+    assert!(said.contains("first byte 0xa0"), "{said}");
+    assert!(said.contains("first byte 0xa6"), "{said}");
+}

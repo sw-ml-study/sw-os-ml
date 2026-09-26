@@ -40,10 +40,11 @@ Usage:
 
 Options:
   --capture SECONDS               boot headless for SECONDS, print the console
+  --run SCRIPT                    drive mlsh with SCRIPT, as `model 32;get 0 0`
 
 On an x86-64 host `--arch x86-64` is the default for build and run.
-The console is COM1 with mlsh on it (try `mem`, `dev`). Ctrl-D ends the
-guest, which then reports what it checked through its exit status. TCG
+The console is COM1 with mlsh on it (try `mem`, `dev`, `model`); the
+model disk is attached over virtio-mmio. Ctrl-D ends the guest, which then reports what it checked through its exit status. TCG
 only: KVM is saga mlos-two-hosts.";
 
 /// Handles `--arch`, or an x86-64 host's `build`/`run`; `None` means
@@ -118,10 +119,14 @@ fn boot(args: &[String]) -> io::Result<()> {
             "{host} cannot run the x86-64 guest here; saga mlos-x86-64 is TCG-only"
         )));
     }
+    // `--run SCRIPT` becomes `mlsh.run=`, as it does for aarch64.
+    let script = args.iter().skip_while(|arg| *arg != "--run").nth(1);
+    let append = script.map_or_else(String::new, |script| format!("mlsh.run={script}"));
     let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut child = Command::new("qemu-system-x86_64")
-        .args(["-m", &ram])
-        .args(MICROVM)
+        .args(["-m", &ram, "-append", &append])
+        .args(crate::vmm::disk()) // the same model disk the aarch64 guest gets
+        .args(MICROVM) // last: it ends in `-kernel`, which takes the ELF
         .arg(build()?)
         .spawn()?;
     let deadline = Instant::now() + Duration::from_secs(seconds.unwrap_or(u64::MAX >> 1));

@@ -21,6 +21,7 @@ becomes a column there (step `x86-replay`).
 | Clock | The TSC. Its rate is read from `CPUID.15H` when the CPU reports one, otherwise calibrated over 50 ms of PIT channel 0; which is printed (under TCG it is calibrated, ~2.1 GHz here). Shifted right if it exceeds a `u32` of Hz, which `Facts.clock` takes. `sweep` reports real microseconds |
 | Device window | 3-4 GiB is identity-mapped uncached (PCD|PWT): LAPIC, IOAPIC, virtio-mmio. 1-3 GiB stays unmapped, so `mem peek 0x40000000` still faults |
 | Boot stack | 256 KiB, reserved in `linker/x86_64.ld` like aarch64's. It was 64 KiB and `model` overflowed it through the page tables -- a triple fault, since the fault handler's own fetches faulted -- the same bug aarch64 hit in its step 010. Page tables now sit at the far end of `.bss`. No guard page: that needs 4 KiB mappings |
+| Model disk | The existing `mlos-virtio-blk`, unchanged, over `microvm`'s virtio-mmio: **zero lines of new driver code**. `mlos run` attaches the same model image as for aarch64 (`vmm::disk`, `force-legacy=false`). `model` reports `weights from virtio-blk`; `get 0 0` reads `0xa0` and `get 3 5` reads `0xa6` -- the `0xA0` provenance nibble with `layer ^ tensor` under it. It needed only the device window (step `x86-interrupts`). `mlos run --run SCRIPT` drives `mlsh`, as on aarch64 |
 | Console | `mlos-uart16550`: COM1 over port I/O, 115200 8N1, polled transmit and receive. FIFO deliberately left off so input sent before the kernel looks is not discarded. Receive interrupt: step `x86-interrupts` |
 | CLI | `mlos [--arch x86-64] build`, `mlos [--arch x86-64] run [tcg] [--capture S]`. Without `--arch`, `build` and `run` mean the host's architecture (x86-64 on a Linux PC, aarch64 on Apple Silicon); `doctor`, `layout`, `runtime` keep the shared path |
 
@@ -55,7 +56,6 @@ attempted -- saga `mlos-two-hosts`.
 
 ## For step `x86-virtio-blk`
 
-- The virtio-mmio slots at `0xfeb00000`+ are now mapped, uncached, in
-  the device window (step `x86-interrupts`).
+- Done in step `x86-virtio-blk`: no driver change was needed.
 - `mlos doctor` does not check `qemu-system-x86_64` (step `x86-gate`).
 - This file becomes a column of `status.md`.
