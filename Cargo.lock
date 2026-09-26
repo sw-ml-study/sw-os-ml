@@ -19,7 +19,11 @@ version = "0.0.1"
 dependencies = [
  "mlos-image-map",
  "mlos-layout",
+ "mlos-policy",
+ "mlos-sim",
  "mlos-synth",
+ "mlos-trace",
+ "mlos-workload",
 ]
 
 [[package]]
@@ -116,7 +120,10 @@ dependencies = [
  "mlos-abi",
  "mlos-objman",
  "mlos-objtab",
+ "mlos-policy",
+ "mlos-stream",
  "mlos-synth",
+ "mlos-trace",
  "mlos-virtio",
  "mlos-virtio-blk",
 ]
@@ -160,6 +167,7 @@ dependencies = [
  "mlos-events",
  "mlos-metrics",
  "mlos-objtab",
+ "mlos-policy",
  "mlos-provider",
  "mlos-stream",
 ]
@@ -212,8 +220,10 @@ name = "mlos-sim"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-arena",
  "mlos-objtab",
  "mlos-policy",
+ "mlos-stream",
  "mlos-synth",
  "mlos-trace",
 ]

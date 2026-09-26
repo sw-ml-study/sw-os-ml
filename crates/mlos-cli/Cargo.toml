@@ -12,6 +12,12 @@ authors.workspace      = true
 mlos-image-map = { path = "../mlos-image-map", version = "0.0.1" }
 mlos-layout    = { path = "../mlos-layout",    version = "0.0.1" }
 mlos-synth     = { path = "../mlos-synth",     version = "0.0.1" }
+mlos-workload  = { path = "../mlos-workload",  version = "0.0.1" }
+
+[dev-dependencies]
+mlos-policy   = { path = "../mlos-policy",   version = "0.0.1" }
+mlos-sim      = { path = "../mlos-sim",      version = "0.0.1" }
+mlos-trace    = { path = "../mlos-trace",    version = "0.0.1" }
 
 [[bin]]
 name = "mlos"

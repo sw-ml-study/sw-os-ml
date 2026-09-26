@@ -3,18 +3,22 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-18, during saga `mlos-nextuse`, after step 008.
+Last updated: 2026-09-26, during saga `mlos-nextuse`, after step 009.
 
 ---
 
 ## Where we are
 
-**M1 complete, M2 well under way. Three of eight gates met.**
+**M1 and M2 complete, M3 nine steps of eleven. Three of eight gates
+met; the fourth is measured and awaiting its report.**
 
 The kernel boots to a shell as a native aarch64 guest, holds an object
-table, and services a model fault from a real block device. What it does
-not have is a policy: nothing in it yet decides what to keep. That is
-M3, and M3 is where the thesis in [PRD.md](PRD.md) is actually tested.
+table, services a model fault from a real block device, and -- as of
+step 009 -- chooses what to evict with the same policy crates the
+simulator runs, producing the same counts to the integer. What it does
+not yet have is the trace from a real model's shape (step 010) and the
+report that states the comparison so it can be disputed (step 011).
+That is where the thesis in [PRD.md](PRD.md) is actually tested.
 
 ## PoC gates
 
@@ -25,7 +29,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | G1 -- it boots, reaches a shell | **done** | M1 |
 | G2 -- it holds an object table | **done** | M2 |
 | G3 -- it faults | **done** | M2 |
-| G4 -- known-next-use beats LRU | not started | M3 |
+| G4 -- known-next-use beats LRU | **in progress** -- measured in simulation and in the kernel, identically; real-shape trace and report pending | M3 |
 | G5 -- one read serves N sessions | not started | M4 |
 | G6 -- degrades instead of dying | not started | M5 |
 | G7 -- controls a real host resource | not started | M6 |
@@ -38,7 +42,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **8 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. Gate G4 is not met until the same numbers come out of the kernel |
+| M3 it knows better | **9 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. The same numbers now come out of the kernel: four policies replayed in-kernel under TCG match the simulator to the integer. Gate G4 waits on the real-shape trace (step 010) and the report (step 011) |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -68,44 +72,41 @@ x86-64 anywhere in this repo.
 | Faults | `ml_acquire` -> miss -> `MODEL_FAULT` -> provider read -> arena placement -> resident. Counted per class |
 | Tiers | Three, with genuinely different costs: a virtio-blk disk, a recompute tier, and DRAM |
 | Model | A synthetic 8x16 transformer, 136 objects, 144 KiB, registered and sweepable from the shell |
-| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace`, `stream` |
+| Shell | `mlsh`: `help`, `mem`, `dev`, `ticks`, `model [KIB]`, `objs`, `get L T`, `sweep`, `faults`, `arena`, `layout`, `trace`, `stream`, `replay POLICY` |
 | Streams | `ml_stream_declare` / `ml_stream_advance` as `mlos-stream`. A declared cyclic order, and a cursor. **The kernel now writes `ObjectMeta::next_use`** -- the field that existed from M2 step 001 with nothing to set it |
-| Eviction | `mlos-arena` is a real allocator: first fit over a sorted free list, coalescing on release. `Manager::evict` gives bytes back, drops residency, and emits `Kind::Evicted`. `evict L T` from the shell |
+| Eviction | `mlos-arena` is a real allocator: first fit over a sorted free list, coalescing on release. `Manager::evict` gives bytes back, drops residency, and emits `Kind::Evicted`. `evict L T` from the shell. A full arena now asks the policy for victims (`Manager::make_room`) until the largest free run fits, rather than refusing |
+| Policy in kernel | `Manager::policy`: demand (refuse), FIFO, LRU or known-next-use -- the same `mlos-policy` crate `mlos-sim` links, chosen with `replay POLICY`. Verified against the simulator on the same trace and budget: identical integers for all four |
+| Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
 | Traces | And `build/runtime.trace`: the access sequence those events record -- session and `ObjectId` per acquire, and nothing about what the system did. What M3 replays policies against |
-| Simulator | `mlos-sim` replays a trace against a policy under a fixed residency budget and counts hits, provider reads, bytes, evictions and refusals. `compare` takes one budget for every policy, so an unequal comparison cannot be expressed |
+| Simulator | `mlos-sim` replays a trace against a policy under a fixed residency budget and counts hits, provider reads, bytes, evictions and refusals. `compare` takes one budget for every policy, so an unequal comparison cannot be expressed. The budget is a real `mlos-arena` -- the kernel's allocator -- so what fragmentation costs a policy is counted |
 | Policy interface | `mlos-policy`: `no_std` and pure, so the same code runs in the kernel and the simulator. A policy reads `ObjectMeta` and names a victim; it holds no state the table does not own |
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 30 fast test binaries plus eight TCG boot tests (`cargo test -p mlos-cli -- --ignored`). Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 30 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
-No residency policy: the arena is a bump allocator and eviction is
-unimplemented, so a full arena reports `NoBudget` rather than choosing a
-victim. No userspace, no scheduler beyond a single kernel thread, no
-leases, no sessions, no sharing, no degradation ladder, no GPU and no
-ML-MMU. `next_use` is recorded and read by nothing -- which is exactly
-the gap M3 closes, and the reason M3 is the milestone that matters.
+No userspace, no scheduler beyond a single kernel thread, no leases, no
+sessions, no sharing, no degradation ladder, no GPU and no ML-MMU. The
+policy runs only when `replay` asks it to: nothing declares a stream or
+chooses a policy at boot, because nothing but the replay is a workload
+yet.
 
-The only trace that exists is a dense sweep, and it is the EASY case. LRU
-is pessimal on it by construction and known-next-use is optimal by
-construction, so any comparison run against it proves nothing. Step 004
-brings the trace with real reuse structure in it, and until then no
-number from this saga should be quoted.
+The workload with reuse in it (step 004) is synthetic in shape. The
+trace from a real model's `.spm` sidecar is step 010, and until it
+exists the 32--71% is a number about a plausible workload rather than a
+measured one.
 
-No POLICY, so nothing chooses. The arena can evict as of step 008 and
-`evict L T` proves it from the shell, but a full arena still returns
-`NoBudget` rather than asking a policy for a victim -- wiring the M3
-policy into the fault path is step 009. The mechanism exists and nothing
-drives it. `Kind::Evicted` exists in the event
-vocabulary and nothing emits it: until M3 has a policy, running out of
-arena produces a `refused` and the object that would have been thrown away
-stays. The most interesting line in a residency film is the one that is
-not there yet.
+The in-kernel comparison runs on a 2x16 replay trace (4,448 accesses),
+not the verdict's 4x40. The guest parses the whole trace into static
+arrays, and 25,200 accesses would be 400 KiB of `.bss` plus half a
+megabyte read off a virtual disk under TCG. Exactness is what step 009
+needed, and a shorter trace shows it as well as a longer one; the report
+(step 011) decides what the kernel is asked to run.
 
 The runtime document has no `sysram` space. A running kernel has no symbol
 table and cannot say where its own `.text` ended, so guest RAM appears only
@@ -115,10 +116,10 @@ them.
 
 `region_next_use` is `never` until a stream is declared. The kernel writes
 it from M3 step 007 onwards -- `stream` in `mlsh` declares the model's
-sweep and `stream N` advances it -- so a layout document taken after that
-carries real positions. Nothing declares one automatically, because
-nothing yet decides anything with it: the kernel has no policy and no
-eviction, which is steps 008 and 009.
+sweep and `stream N` advances it, and `replay` declares the whole trace
+it is about to run -- so a layout document taken after either carries
+real positions. Nothing declares one at boot, because nothing but those
+two is a workload yet.
 
 `NextUse::Probability` is still produced by nothing. A declared stream
 says exactly WHEN; only a router says how LIKELY, and nothing routes until
@@ -357,6 +358,65 @@ it is on by default. The first attempt to measure it used sweeps that
 faulted, and found nothing: 32 virtio transactions per sweep swamped the
 signal and the run-to-run spread was larger than the effect. The number
 above is from the sweeps where residency is already established.
+
+## The kernel and the simulator agree
+
+Step 009. Four policies, one trace (2 sessions x 16 rounds, 4,448
+accesses), one budget (32 KiB), replayed in `mlos-sim` on the host and in
+`mlos-kernel` under QEMU/TCG. The lines the guest prints and the lines the
+simulator computes are compared as strings by
+`crates/mlos-cli/tests/replay.rs`, and they are equal:
+
+| policy | reads | hits | bytes | evicted | refused |
+| --- | --- | --- | --- | --- | --- |
+| demand | 35 | 741 | 32,768 | 0 | 3,672 |
+| fifo | 4,448 | 0 | 3,497,984 | 4,392 | 0 |
+| lru | 4,448 | 0 | 3,497,984 | 4,392 | 0 |
+| next-use | 3,748 | 700 | 2,781,184 | 3,713 | 0 |
+
+Four disagreements were found on the way. Each was a bug, each side was
+self-consistent, and only the comparison could have found any of them:
+
+- **Residency was read from the tier.** `acquire` called an object
+  resident when its tier was `Warm`. Weight tiles start `Cold` and
+  agreed; KV blocks start `Warm` -- they come from compute, not storage
+  -- and a never-fetched one read as a hit at address zero. Residency is
+  now `resident_at != 0`.
+- **Streams were cyclic.** One declared period, cursor running past the
+  end, on the reasoning that every token reads the same objects in the
+  same order. True of weights, false of a KV cache, which accumulates.
+  Every KV block read as `Never`, the most evictable thing in the table,
+  and next-use threw away exactly what it was about to want: 27 reads. A
+  declaration is now a finite sequence, borrowed from the declarer, and
+  both sides build its next-use chain with the one function
+  `mlos_stream::chain`.
+- **The simulator's budget was a number.** It evicted until a byte count
+  fitted; the kernel evicts until a contiguous run fits in a first-fit
+  arena. FIFO and LRU evict in roughly placement order, so their holes
+  coalesce and the two models agree; next-use evicts whatever is
+  furthest away, wherever it sits, and paid for fragmentation the
+  simulator could not see: 8 reads. `mlos-sim` now links `mlos-arena`
+  and places into a real one, and both sides ask `Occupancy::fits`.
+- **Ties were broken by enumeration order.** The kernel offers residents
+  in hash-slot order, the simulator in insertion order, and two `Never`
+  blocks of the same session score equally. Which one goes changes the
+  hole geometry: 5 reads. Both policies now break ties on object id, so
+  the answer no longer depends on who is asking.
+
+Under the arena-aware simulator the verdict's numbers move by at most a
+percentage point -- next-use at 128 KiB with four sessions is 12,722
+reads rather than 12,599, +50% over LRU rather than +51% -- and the
+baselines do not move at all, because their evictions never fragmented.
+The separation stands. [m3-verdict.md](m3-verdict.md) keeps step 006's
+table as the record of what was measured then; step 011's report is the
+one to quote.
+
+**How the trace reaches the guest.** On the model disk, after the
+weights. The model occupies a fixed extent, so the sector after it is
+spare, and one device is one probe: a second virtio-blk would have meant
+teaching `probe` to tell two block devices apart, in service of a layout
+decision that is free. `/chosen/bootargs` carries the script in
+(`mlsh.run=model 32;replay lru`) and the console carries the counts out.
 
 ## Known gaps
 

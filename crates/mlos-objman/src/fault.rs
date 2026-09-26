@@ -98,6 +98,7 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.counters.fault(fault.class, meta.size);
 
         let base = self.arena.occupancy().base;
+        self.make_room(&meta);
         let placed = self.place(id, located, provider, lease, wanted);
         self.events.record(match &placed {
             Ok(handle) => Event::placed(id, by, &meta, cost, handle.address - base),

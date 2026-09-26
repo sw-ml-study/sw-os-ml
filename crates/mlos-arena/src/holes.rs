@@ -5,6 +5,23 @@
 //! hole rather than a thousand, and a list that grew instead would run
 //! out of its fixed capacity on a workload that never fragmented.
 
+use crate::{Arena, Occupancy};
+
+impl Occupancy {
+    /// Whether a placement of `size` bytes would succeed right now.
+    ///
+    /// THE question a caller making room has to ask, and the one place
+    /// it is answered: the kernel's `make_room` and the simulator's
+    /// eviction loop both stop when this says yes, so the two cannot
+    /// disagree about when enough has been thrown away. Rounded the way
+    /// [`Arena::place`] rounds, because a run that fits the size and not
+    /// its alignment is a run the placement would still refuse.
+    #[must_use]
+    pub const fn fits(&self, size: u32) -> bool {
+        self.largest >= size.next_multiple_of(Arena::ALIGN) as u64
+    }
+}
+
 /// A run of free bytes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Hole {

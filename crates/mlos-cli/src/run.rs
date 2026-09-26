@@ -126,13 +126,28 @@ pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
 }
 
 /// Boots, headless or interactive, according to the arguments.
+///
+/// `--run` is what makes a headless boot a measurement rather than a
+/// smoke test: the guest has no keyboard, so the only way to ask it
+/// anything is to hand the shell a script at boot. `runtime` has done
+/// this with a hardcoded script since M2; this is the same door, opened
+/// to the caller, and it is how the kernel/simulator comparison drives
+/// four replays in one boot.
 pub fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, debug) = crate::options(args, true)?;
-    // `--console virtio`; the parser in main.rs accepts the pair.
+    // `--console virtio` and `--run SCRIPT`; the parser in main.rs
+    // accepts the pairs and the values are read back positionally here.
     let virtio = args.iter().any(|arg| arg == "virtio");
+    // `mlsh.run=` goes LAST in the command line, because it takes the
+    // rest of the string: its commands take arguments and arguments have
+    // spaces. Anything appended after it would be eaten as script.
+    let script = args.iter().skip_while(|arg| *arg != "--run").nth(1);
+    let bootargs = script.map_or_else(String::new, |script| {
+        format!("mlos.rev={} mlsh.run={script}", mlos_image_map::revision())
+    });
     match seconds {
         Some(seconds) => {
-            print!("{}", capture(host, seconds, virtio, "")?);
+            print!("{}", capture(host, seconds, virtio, &bootargs)?);
             Ok(())
         }
         None => run(host, debug, virtio),

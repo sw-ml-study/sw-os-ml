@@ -16,6 +16,16 @@ use crate::model;
 /// The provider slot a disk occupies.
 pub const DISK: ProviderId = ProviderId(4);
 
+/// The sector the model's weights end at, and the trace begins.
+///
+/// One device rather than two. A second virtio-blk would have meant
+/// teaching `probe` to tell two block devices apart and pick the right
+/// one, which is machinery in service of a layout decision -- and the
+/// layout decision is free: the model occupies a known, fixed extent, so
+/// everything after it is spare.
+pub const TRACE_AT: u64 = (model::LAYERS as u64 * model::TILES as u64 * model::TILE_BYTES as u64)
+    / mlos_virtio_blk::SECTOR as u64;
+
 /// A block device holding the model.
 pub struct Disk {
     /// The device its bytes come off. Public because `Disk` adds a layout

@@ -38,6 +38,25 @@ impl<const N: usize> Table<N> {
         slots: [Slot::Vacant; N],
     };
 
+    /// The object in slot `index`, if one lives there.
+    ///
+    /// Slot order, which is hash order and therefore arbitrary -- but
+    /// STABLE, which is what a policy needs: asked twice about an
+    /// unchanged table it must name the same victim, or a replay stops
+    /// being deterministic and every comparison becomes an argument.
+    ///
+    /// Indexed rather than iterable because that is the shape
+    /// `mlos-policy`'s `Residency` asks for, and it asks for it because
+    /// a kernel cannot hand out a borrow into a table it is about to
+    /// mutate.
+    #[must_use]
+    pub fn at(&self, index: usize) -> Option<(ObjectId, ObjectMeta)> {
+        match self.slots.get(index)? {
+            Slot::Live(id, meta) => Some((*id, *meta)),
+            Slot::Vacant | Slot::Removed => None,
+        }
+    }
+
     /// Records an object, replacing any entry already under that id.
     ///
     /// `false` if the table is full, which drops the registration rather

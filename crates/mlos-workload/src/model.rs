@@ -11,7 +11,8 @@ use mlos_objtab::ObjectMeta;
 use mlos_sim::Model;
 use mlos_synth::model as weights;
 
-use crate::{Decode, kv};
+use crate::Decode;
+use mlos_synth::kv;
 
 impl Model for Decode {
     /// Weight tiles come from the synthetic model; KV blocks from this
@@ -28,5 +29,27 @@ impl Model for Decode {
             ObjectClass::KvBlock => Some(kv::meta(id.fields().model)),
             _ => None,
         }
+    }
+}
+
+impl Decode {
+    /// The whole workload as trace text, ready for a disk or a file.
+    ///
+    /// Rendered once by the host and written where the guest will read
+    /// it, so the kernel replays the SAME accesses the simulator measured
+    /// rather than its own idea of them. Two generators agreeing is a
+    /// thing to be checked; one generator and a file is a thing that
+    /// cannot disagree. Beside the `Model` impl because both are this
+    /// workload as another crate consumes it.
+    #[must_use]
+    pub fn text(&self) -> String {
+        let held = self.trace();
+        let mut text = String::new();
+        let header = mlos_trace::Header {
+            model: crate::MODEL,
+            source: "mlos-workload::Decode",
+        };
+        let _ = mlos_trace::render(&mut text, header, &held);
+        text
     }
 }

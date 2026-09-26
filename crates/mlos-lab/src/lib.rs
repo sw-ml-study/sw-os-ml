@@ -13,6 +13,7 @@
 #![no_std]
 
 mod devices;
+mod replay;
 mod state;
 mod sweep;
 
@@ -24,6 +25,7 @@ use state::{arena, manager};
 
 pub use devices::{on_disk, set_slots};
 pub use mlos_synth::{ACTIVATION_BYTES, LAYERS, TILE_BYTES, TILES};
+pub use replay::{Replayed, replay};
 pub use sweep::{Swept, advance, declare, sweep};
 
 /// Objects the table can hold. Comfortably more than the model needs, so
@@ -36,6 +38,22 @@ pub(crate) const CAPACITY: usize = 512;
 /// demonstration where everything fits demonstrates nothing: the
 /// interesting number is how far it got.
 pub const ARENA_BYTES: usize = 32 * 1024;
+
+/// Which policy the kernel evicts with.
+///
+/// `None` is demand paging, which is what MLOS did before M3 step 009.
+/// The others are the same crate `mlos-sim` links, which is the whole
+/// point: two implementations would be two results.
+pub fn choose(name: &str) -> bool {
+    let policy: Option<&'static dyn mlos_policy::Policy> = match name {
+        "fifo" => Some(&mlos_policy::FIFO),
+        "lru" => Some(&mlos_policy::LRU),
+        "next-use" | "nextuse" => Some(&mlos_policy::NEXT_USE),
+        "demand" => None,
+        _ => return false,
+    };
+    with(|held| held.policy = policy).is_some()
+}
 
 /// Registers the model, replacing whatever was there.
 ///
