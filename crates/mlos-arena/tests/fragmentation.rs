@@ -10,7 +10,7 @@
 use mlos_arena::Arena;
 
 /// An arena of `bytes`, leaked because that is the lifetime it wants.
-fn arena(bytes: usize) -> Arena {
+fn arena(bytes: usize) -> Arena<'static> {
     Arena::new(Box::leak(vec![0u8; bytes].into_boxed_slice()))
 }
 

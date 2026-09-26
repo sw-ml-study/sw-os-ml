@@ -6,13 +6,30 @@
 //! finally writes `ObjectMeta::next_use` -- a field that has existed since
 //! M2 step 001 with nothing to set it.
 //!
-//! ## Cyclic, because a decode loop is
+//! ## Finite, because a decode loop is not actually cyclic
 //!
-//! A stream is not an arbitrary list. Every token of a dense transformer
-//! reads the same objects in the same order, so what gets declared is one
-//! period and the cursor runs on past the end of it. Declaring a thousand
-//! tokens' worth of accesses would be storing the same hundred-odd ids a
-//! thousand times, and a kernel has nowhere to put that.
+//! An earlier version declared ONE PERIOD and ran the cursor past the end
+//! of it, on the reasoning that every token reads the same objects in the
+//! same order. That is true of the weights and false of everything else:
+//! a KV cache ACCUMULATES, so token 17 reads sixteen blocks that token 1
+//! could not have named, and a sequence with a growing tail has no
+//! period. Under the cyclic model the kernel answered `Never` for every
+//! KV block -- making the most-reused objects in the workload look like
+//! the most evictable -- while the simulator, reading the whole trace,
+//! knew better. The two disagreed by 27 reads out of 3758, which is the
+//! sort of gap that looks like rounding and is not.
+//!
+//! So a declaration is a finite sequence, and running off the end of it
+//! answers `Never`: nothing has declared a future beyond what was
+//! declared. A workload that really does loop declares the loop it will
+//! run.
+//!
+//! ## Borrowed, because the declaration is as long as the workload
+//!
+//! One period of a sweep fitted in a fixed array. A decode loop's whole
+//! access sequence does not, and a kernel with no allocator cannot grow
+//! one. The declarer owns the storage -- statics in the kernel, `Vec`s in
+//! the simulator -- and a stream borrows it.
 //!
 //! ## Advancing is one increment, and the type is why
 //!
@@ -38,45 +55,47 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+mod chain;
+
+pub use chain::{NEVER, chain};
+
 use mlos_abi::{Error, ObjectId, Result};
 use mlos_objtab::NextUse;
 
-/// How many objects one period of a stream may declare.
-///
-/// The synthetic model's sweep is 128 weight tiles, so this is room to
-/// spare without being a growable collection the kernel would have to
-/// allocate for.
-pub const PERIOD: usize = 256;
-
 /// A declared sequence, and how far through it the workload is.
-pub struct Stream {
-    declared: [ObjectId; PERIOD],
-    length: usize,
+pub struct Stream<'a> {
+    declared: &'a [ObjectId],
+    /// For each position, where the same object is next declared.
+    next: &'a [u32],
     cursor: u32,
 }
 
-impl Stream {
+impl<'a> Stream<'a> {
     /// Nothing declared. Every object reads as `Never`, which is what the
     /// table said before streams existed.
     pub const EMPTY: Self = Self {
-        declared: [ObjectId(0); PERIOD],
-        length: 0,
+        declared: &[],
+        next: &[],
         cursor: 0,
     };
 
     /// `ml_stream_declare`: this session will acquire these, in this
-    /// order, repeatedly.
+    /// order.
+    ///
+    /// `next` is the chain [`chain`] builds over the same slice. Passed in
+    /// rather than computed here because the kernel has nowhere to put it
+    /// that a stream could own, and passing it is what forces both sides
+    /// to build it with the same code.
     ///
     /// Replaces whatever was declared before, and resets the cursor: a
     /// new declaration is a new workload, and carrying a position across
     /// would point into a sequence that no longer exists.
-    pub fn declare(&mut self, objects: &[ObjectId]) -> Result<()> {
-        let room = self
-            .declared
-            .get_mut(..objects.len())
-            .ok_or(Error::NoBudget)?;
-        room.copy_from_slice(objects);
-        self.length = objects.len();
+    pub fn declare(&mut self, objects: &'a [ObjectId], next: &'a [u32]) -> Result<()> {
+        if next.len() < objects.len() {
+            return Err(Error::NoBudget);
+        }
+        self.declared = objects;
+        self.next = next;
         self.cursor = 0;
         Ok(())
     }
@@ -95,39 +114,40 @@ impl Stream {
         self.cursor
     }
 
-    /// When `id` is next wanted NEXT, as a position in this stream.
+    /// When `id` is next wanted, as a tick a policy can compare against
+    /// `Residency::now`.
+    ///
+    /// Ticks are one-based -- the first acquire happens at tick 1 --
+    /// because that is how `ObjectMeta::used_tick` has counted since M2,
+    /// and position `p` in the declaration is therefore tick `p + 1`.
+    /// Mixing the two bases is not a cosmetic error: an object wanted by
+    /// the very next access reads as `Never` and becomes the most
+    /// evictable thing in the table.
     ///
     /// Strictly after the cursor, because this is asked while the object
     /// is being acquired: the use happening now is not the one a policy
-    /// needs to know about.
+    /// needs to know about. When the workload is running what it declared
+    /// -- the case every measurement covers -- the object IS the one on
+    /// the cursor, and the answer is one indexed read. Otherwise it is a
+    /// scan of what remains, which is the honest general answer.
     ///
-    /// `Never` for an object the stream does not mention -- which is an
-    /// honest answer rather than a maximum: it means nothing has declared
-    /// a future for it, not that it will not be wanted.
-    ///
-    /// A scan of one period, once per acquire. An acquire already costs a
-    /// table lookup at best and a provider fetch at worst, so a hundred
-    /// integer compares beside it is not the thing to optimise -- and it
-    /// is bounded by the declaration rather than by the object table,
-    /// which is the part that matters.
+    /// `Never` for an object the rest of the declaration does not mention
+    /// -- which is an honest answer rather than a maximum: it means
+    /// nothing has declared a future for it, not that it will not be
+    /// wanted.
     #[must_use]
     pub fn next_after(&self, id: ObjectId) -> NextUse {
-        let declared = &self.declared[..self.length];
-        let Some(offset) = declared.iter().position(|held| *held == id) else {
-            return NextUse::Never;
-        };
-        let period = self.length as u32;
-        let ahead = match (offset as u32 + period - self.cursor % period) % period {
-            // The object sitting exactly on the cursor is the one being
-            // acquired right now, so its NEXT use is a whole period away
-            // rather than here. Answering zero would say "wanted now"
-            // forever -- the position never changes, the cursor runs past
-            // it, and a policy computing `at - now` keeps saturating to
-            // zero and pins the object it should have evicted first.
-            // Found by watching `objs` after advancing the stream.
-            0 => period,
-            first => first,
-        };
-        NextUse::At(self.cursor + ahead)
+        let at = self.cursor as usize;
+        if self.declared.get(at) == Some(&id) {
+            return match self.next[at] {
+                NEVER => NextUse::Never,
+                next => NextUse::At(next + 1),
+            };
+        }
+        let rest = self.declared.get(at.saturating_add(1)..).unwrap_or(&[]);
+        match rest.iter().position(|held| *held == id) {
+            Some(offset) => NextUse::At((at + offset + 2) as u32),
+            None => NextUse::Never,
+        }
     }
 }

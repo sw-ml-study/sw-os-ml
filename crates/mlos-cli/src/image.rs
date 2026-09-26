@@ -69,13 +69,23 @@ fn run(program: &str, args: &[&str]) -> io::Result<()> {
     Err(io::Error::other(format!("{program} failed: {status}")))
 }
 
-/// Writes a disk image holding the synthetic model's weights.
+/// Writes a disk image holding the synthetic model's weights, then the
+/// replay trace.
 ///
 /// Laid out by id: tile `(layer, tensor)` at sector
 /// `(layer * TILES + tensor) * TILE_BYTES / 512`, filled with
-/// `layer ^ tensor`. The same pattern the stub provider fabricates, on
-/// purpose -- so when the guest reads it back from a real device, the
-/// bytes being *right* is not the news. The news is where they came from.
+/// `0xA0 | (layer ^ tensor)`. The low nibble is the same pattern the stub
+/// provider fabricates, on purpose -- so when the guest reads it back
+/// from a real device, the bytes being *right* is not the news. The high
+/// nibble is: the stub writes `layer ^ tensor` alone, so `0xA0` in a byte
+/// can only have come off the disk, and provenance becomes checkable
+/// rather than merely arithmetic.
+///
+/// The trace follows the weights at `mlos_synth::disk::TRACE_AT`, as an
+/// eight-byte little-endian length then the text. One device rather than
+/// two, because a second virtio-blk would mean teaching `probe` to tell
+/// block devices apart -- machinery in service of a layout decision that
+/// is free: the model occupies a fixed extent, so what follows is spare.
 pub fn disk() -> io::Result<PathBuf> {
     use mlos_synth::{LAYERS, TILE_BYTES, TILES};
 
@@ -84,15 +94,16 @@ pub fn disk() -> io::Result<PathBuf> {
     let mut bytes = Vec::with_capacity(usize::from(LAYERS) * usize::from(TILES) * bytes_per_tile);
     for layer in 0..LAYERS {
         for tensor in 0..TILES {
-            // 0xA0 | (layer ^ tensor). The high nibble is the point: the
-            // stub provider fills with `layer ^ tensor` alone, so a byte
-            // with 0xA0 in it can only have come off the disk. "The right
-            // bytes arrived" is then a statement about provenance rather
-            // than about arithmetic.
             let fill = 0xA0 | ((layer as u8) ^ (tensor as u8));
             bytes.extend(std::iter::repeat_n(fill, bytes_per_tile));
         }
     }
+    let (sessions, rounds) = mlos_image_map::runtime::REPLAY;
+    let trace = mlos_workload::Decode::of(sessions, rounds).text();
+    bytes.extend((trace.len() as u64).to_le_bytes());
+    bytes.extend(trace.as_bytes());
+    bytes.resize(bytes.len().next_multiple_of(512), 0);
+
     std::fs::write(&path, &bytes)?;
     Ok(path)
 }

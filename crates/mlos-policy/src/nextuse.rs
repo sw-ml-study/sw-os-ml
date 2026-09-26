@@ -70,7 +70,13 @@ impl Policy for KnownNextUse {
                 continue;
             };
             let score = evictability(&meta, now);
-            if best.is_none_or(|(_, held)| score > held) {
+            // Ties go to the lower id, so the answer does not depend on
+            // the order the residents were offered in. It did: the kernel
+            // offers hash-slot order and the simulator insertion order,
+            // and the two evicted different `Never` blocks of the same
+            // session -- harmless in a byte-counting simulator, and five
+            // reads apart once fragmentation was real on both sides.
+            if best.is_none_or(|(held_id, held)| score > held || (score == held && id < held_id)) {
                 best = Some((id, score));
             }
         }

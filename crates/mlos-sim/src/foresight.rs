@@ -13,6 +13,14 @@
 //! supplies it, and the numbers say what a policy WOULD do given
 //! knowledge the kernel is about to be given.
 //!
+//! **The chain itself is `mlos_stream::chain`, which the kernel also
+//! calls.** It used to be a second implementation living here, and a
+//! second implementation of "when is this next wanted" is a second
+//! answer: step 009 put the two side by side on one trace and they
+//! disagreed by 27 reads. What remains here is the part that is genuinely
+//! the simulator's -- allocating buffers the size of the trace, which is
+//! exactly what the kernel cannot do.
+//!
 //! No object's next use is looked up by identity. `ObjectMeta` already
 //! records `used_tick` -- when it was last wanted -- and an object that
 //! has not been wanted since is still sitting at that point in the trace.
@@ -20,7 +28,9 @@
 //! single indexed read, and the map from object to position that would
 //! otherwise be needed does not have to exist.
 
+use mlos_abi::ObjectId;
 use mlos_objtab::NextUse;
+use mlos_stream::NEVER;
 use mlos_trace::Access;
 
 /// Where the next use of each access's object is.
@@ -30,30 +40,18 @@ pub struct Foresight {
     next: Vec<u32>,
 }
 
-/// No further use in this trace.
-const NEVER: u32 = u32::MAX;
-
 impl Foresight {
-    /// Reads the whole trace backwards, recording where each object
-    /// turns up next.
+    /// Chains the whole trace, recording where each object turns up next.
     ///
-    /// Backwards because that is the direction the answer falls out in:
-    /// walking from the end, the last position seen for an object IS its
-    /// next use from any earlier point.
+    /// Sized from the trace so the buffers cannot be too small, which is
+    /// the only failure `chain` has. The kernel sizes its statics by
+    /// guess instead, and finds out loudly when the guess is wrong.
     #[must_use]
     pub fn read(accesses: &[Access]) -> Self {
-        let mut next = vec![NEVER; accesses.len()];
-        let mut latest: Vec<(u64, u32)> = Vec::new();
-        for (at, access) in accesses.iter().enumerate().rev() {
-            let id = access.object.0;
-            match latest.iter_mut().find(|(held, _)| *held == id) {
-                Some((_, position)) => {
-                    next[at] = *position;
-                    *position = at as u32;
-                }
-                None => latest.push((id, at as u32)),
-            }
-        }
+        let objects: Vec<ObjectId> = accesses.iter().map(|access| access.object).collect();
+        let mut next = vec![NEVER; objects.len()];
+        let mut seen = vec![(ObjectId(0), 0u32); objects.len()];
+        mlos_stream::chain(&objects, &mut next, &mut seen).expect("buffers sized from the trace");
         Self { next }
     }
 

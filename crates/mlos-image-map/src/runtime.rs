@@ -41,6 +41,19 @@ pub const TRACE: &str = "build/runtime.trace";
 /// be told that the missing kind exists.
 pub const SCRIPT: &str = "model;sweep;sweep;layout;trace";
 
+/// Sessions and rounds for the replay both sides run.
+///
+/// Smaller than the verdict's 4x40: the guest parses the whole trace into
+/// a static array, and 25,200 accesses is 400 KiB of `.bss` plus half a
+/// megabyte of text to read off a virtual disk under TCG. What step 009
+/// needs is that the two agree EXACTLY, which a shorter trace shows as
+/// well as a longer one.
+///
+/// Here rather than beside the disk writer that renders it, because this
+/// is the number the boot test reads back to build the simulator's side,
+/// and a test cannot import from a binary crate.
+pub const REPLAY: (u16, u16) = (2, 16);
+
 /// The access trace an event stream records.
 ///
 /// What the workload ASKED FOR, which is what a policy is replayed
