@@ -9,8 +9,11 @@
 
 use std::{
     env, fs,
-    process::{Command, Output},
+    io::Write,
+    process::{Command, Output, Stdio},
     sync::atomic::{AtomicUsize, Ordering},
+    thread,
+    time::Duration,
 };
 
 /// Numbers each boot's scratch directory. Tests run in parallel in one
@@ -172,7 +175,7 @@ fn mem_and_dev_report_what_pvh_and_the_command_line_said() {
         " Kernel\n",
         "  image  0x100000 + ",
         "mlsh> dev\n",
-        "  console  16550 @ 0x3f8, irq 4\n  timer    none\n  gic      none",
+        "  console  16550 @ 0x3f8, irq 4\n  timer    lapic, vector 48\n  irqchip  lapic + ioapic",
     ] {
         assert!(console.contains(fact), "missing {fact:?} in {console}");
     }
@@ -222,5 +225,104 @@ fn a_page_fault_provoked_from_the_shell_is_reported() {
     assert!(
         rip.is_some_and(|rip| (0x10_0000..0x40_0000).contains(&rip)),
         "rip outside the image: {console}"
+    );
+}
+
+/// Boots with COM1 on QEMU's stdio and types `script` into it, each
+/// piece after its delay -- input that arrives while the guest is asleep
+/// in `hlt`, which only an interrupt can deliver.
+fn boot_typing(script: &[(u64, &[u8])]) -> (Option<i32>, String) {
+    let built = mlos(&["--arch", "x86-64", "build"]);
+    let elf = String::from_utf8_lossy(&built.stdout).trim().to_owned();
+    let mut qemu = Command::new("qemu-system-x86_64")
+        .args([
+            "-M",
+            "microvm,acpi=off",
+            "-accel",
+            "tcg",
+            "-cpu",
+            "max",
+            "-m",
+            "512",
+        ])
+        .args([
+            "-display",
+            "none",
+            "-nodefaults",
+            "-no-reboot",
+            "-serial",
+            "stdio",
+        ])
+        .args([
+            "-device",
+            "isa-debug-exit,iobase=0xf4,iosize=0x04",
+            "-kernel",
+            &elf,
+        ])
+        .current_dir(ROOT)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("qemu-system-x86_64 runs");
+    let mut keys = qemu.stdin.take().expect("stdin");
+    for &(seconds, bytes) in script {
+        thread::sleep(Duration::from_secs(seconds));
+        keys.write_all(bytes).expect("typed");
+    }
+    let out = qemu.wait_with_output().expect("qemu finishes");
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout).replace('\r', ""),
+    )
+}
+
+/// The timer ticks at 2 Hz and a keystroke typed while the guest sleeps
+/// reaches the shell: `ticks` read four seconds in is roughly eight, and
+/// it was typed after boot, so the receive interrupt carried it.
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn the_timer_ticks_and_a_late_keystroke_arrives_by_interrupt() {
+    let (status, console) = boot_typing(&[(4, b"ticks\r"), (1, b"\x04")]);
+    assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
+    assert!(
+        console.contains("interrupts  lapic id 0 @ 0xfee00000, ioapic @ 0xfec00000"),
+        "{console}"
+    );
+    let ticks = console
+        .split("mlsh> ticks\n")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next()?.parse::<u32>().ok());
+    // Loose bounds: TCG on a loaded machine is slow, but zero means no
+    // timer and fifty means no divide.
+    assert!(
+        ticks.is_some_and(|n| (3..=20).contains(&n)),
+        "ticks {ticks:?} in {console}"
+    );
+}
+
+/// The clock `sweep` times with is the TSC at a measured rate, so a sweep
+/// reports a real, nonzero duration. Also the regression test for the
+/// 64 KiB boot stack that `model` overflowed through the page tables.
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn sweep_is_timed_by_a_measured_tsc() {
+    let (status, console) = boot_with_input("max", "mlsh.run=model 32;sweep", b"\x04");
+    assert_eq!(
+        status,
+        Some((0x47 << 1) | 1),
+        "model must not overflow the stack:\n{console}"
+    );
+    assert!(console.contains("clock       tsc, "), "{console}");
+    assert!(
+        console.contains("calibrated against the PIT") || console.contains("read from cpuid 15h"),
+        "{console}"
+    );
+    let us = console
+        .split(" tiles in ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next()?.parse::<f64>().ok());
+    assert!(
+        us.is_some_and(|us| us > 0.0),
+        "sweep should take measurable time: {console}"
     );
 }

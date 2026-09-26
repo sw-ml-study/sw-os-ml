@@ -7,6 +7,13 @@ name = "mlos-abi"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-apic-x86-64"
+version = "0.0.1"
+dependencies = [
+ "mlos-hal-x86-64",
+]
+
+[[package]]
 name = "mlos-arena"
 version = "0.0.1"
 dependencies = [
@@ -122,6 +129,7 @@ dependencies = [
 name = "mlos-kernel-x86-64"
 version = "0.0.1"
 dependencies = [
+ "mlos-apic-x86-64",
  "mlos-hal",
  "mlos-hal-x86-64",
  "mlos-lab",

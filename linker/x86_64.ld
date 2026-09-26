@@ -30,11 +30,25 @@ SECTIONS
 
     .bss : ALIGN(4096) {
         __bss_start = .;
+        /* The boot page tables first: the far end of .bss from the stack,
+         * so an overflow is not the thing that takes them out. */
+        *(.bss.boot)
         *(.bss .bss.*)
         *(COMMON)
         . = ALIGN(16);
         __bss_end = .;
     }
+
+    /* Boot stack, as linker/aarch64.ld has it and for the same reason:
+     * 256 KiB, because `Manager` is built on the stack before it is moved
+     * into a static, and a 64 KiB stack ran off the bottom on `model` --
+     * through the page tables, here, so the guest triple-faulted. Memory
+     * is identity-mapped in large pages, so there is no guard page; a 4 KiB
+     * guard needs 4 KiB mappings for the image, which is later work. */
+    . = ALIGN(4096);
+    __stack_bottom = .;
+    . += 0x40000;
+    __stack_top = .;
 
     . = ALIGN(4096);
     __kernel_end = .;

@@ -6,22 +6,22 @@
 //! structures are carved out of the map with the same `reserve` the
 //! aarch64 path uses, so `mem` reports what was found on both.
 
-use core::sync::atomic::AtomicU32;
-
 use mlos_hal::{BootInfo, MemoryKind};
 use mlos_hal_x86_64 as hal;
 use mlos_machine::{Regions, reserve};
 use mlos_pvh::{ENTRY_LEN, HEADER_LEN, StartInfo};
 use mlos_uart16550::{COM1, Uart16550};
-use mlsh::{Facts, Shell};
+use mlsh::{Facts, Platform, Shell};
 
-/// COM1's interrupt line: IRQ 4, by PC convention since the 8250 rather
-/// than by discovery -- nothing short of ACPI would say otherwise.
-const COM1_IRQ: u32 = 4;
+use crate::handlers;
 
-/// Timer ticks. Stays zero until step `x86-interrupts` gives the guest
-/// a timer; `ticks` in the shell says so by reporting it.
-static TICKS: AtomicU32 = AtomicU32::new(0);
+/// How `dev` names this platform's timer and interrupt controller, and
+/// the `mem peek` that reads through the identity map.
+const PLATFORM: Platform = Platform {
+    timer: "lapic, vector",
+    irqchip: "lapic + ioapic",
+    peek: Some(hal::peek),
+};
 
 /// What was found.
 pub struct Machine {
@@ -100,7 +100,10 @@ fn free(regions: &Regions, base: u64, len: u64) -> bool {
 
 impl Machine {
     /// Hands the machine to `mlsh` on `console`, forever.
-    pub fn run_shell(&self, console: &mut Uart16550, idle: fn()) -> ! {
+    ///
+    /// `clock_hz` is the rate of `mlos_apic_x86_64::clock::now`, or zero
+    /// if interrupts could not be armed (then there is no timer either).
+    pub fn run_shell(&self, console: &mut Uart16550, idle: fn(), clock_hz: u32) -> ! {
         if let Some((base, size, count)) = self.virtio {
             mlos_lab::set_slots(base, size, count);
         }
@@ -109,16 +112,17 @@ impl Machine {
             total: self.total,
             image: hal::extent(),
             uart: usize::from(COM1),
-            uart_irq: COM1_IRQ,
-            timer_irq: 0,
+            uart_irq: u32::from(handlers::COM1_IRQ),
+            // No timer without a clock: both come from arming interrupts.
+            timer_irq: u32::from(handlers::TIMER_VECTOR) * u32::from(clock_hz != 0),
             gic: None,
             console: "16550",
             virtio: self.virtio.map(|(base, size, _)| (base, size)),
             virtio_count: self.virtio.map_or(0, |(_, _, count)| count),
-            clock: (|| 0, 0),
+            clock: (mlos_apic_x86_64::clock::now, clock_hz),
             bootargs: self.cmdline,
-            ticks: &TICKS,
-            peek: Some(hal::peek),
+            ticks: &handlers::TICKS,
+            platform: PLATFORM,
         };
         Shell::default().run(console, &facts, idle)
     }

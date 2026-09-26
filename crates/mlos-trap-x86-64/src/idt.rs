@@ -1,5 +1,5 @@
-//! The interrupt descriptor table: 32 gates, one per exception vector,
-//! each pointing at a stub in `entry.s`.
+//! The interrupt descriptor table: 256 gates, one per vector, each
+//! pointing at a stub in `entry.s` -- 0-31 exceptions, 32-255 interrupts.
 
 use core::arch::{asm, global_asm};
 
@@ -7,7 +7,7 @@ global_asm!(include_str!("entry.s"));
 
 unsafe extern "C" {
     /// The stubs' addresses, vector order, emitted by `entry.s`.
-    static mlos_trap_stubs: [u64; 32];
+    static mlos_trap_stubs: [u64; 256];
 }
 
 /// The kernel code selector: the 64-bit code segment of the GDT that
@@ -18,9 +18,9 @@ const KERNEL_CS: u64 = 0x08;
 /// handler, which is what a fatal-fault path wants.
 const INTERRUPT_GATE: u64 = 0x8e;
 
-/// 32 gates of 16 bytes each, as pairs of words. Written once, by
+/// 256 gates of 16 bytes each, as pairs of words. Written once, by
 /// [`load`], before `lidt` makes the CPU read it.
-static mut IDT: [[u64; 2]; 32] = [[0; 2]; 32];
+static mut IDT: [[u64; 2]; 256] = [[0; 2]; 256];
 
 /// Fills the IDT and loads it.
 ///
@@ -34,13 +34,13 @@ pub unsafe fn load() {
     for (vector, &stub) in stubs.iter().enumerate() {
         let low = (stub & 0xffff) | KERNEL_CS << 16 | INTERRUPT_GATE << 40;
         let gate = [low | (stub >> 16 & 0xffff) << 48, stub >> 32];
-        // SAFETY: `vector` < 32, inside `IDT`; written only here, once,
+        // SAFETY: `vector` < 256, inside `IDT`; written only here, once,
         // before `lidt` tells the CPU the table exists.
         unsafe { idt.add(vector).write(gate) };
     }
     let base = (&raw const IDT) as u64;
     let pointer: [u16; 5] = [
-        (core::mem::size_of::<[[u64; 2]; 32]>() - 1) as u16,
+        (core::mem::size_of::<[[u64; 2]; 256]>() - 1) as u16,
         base as u16,
         (base >> 16) as u16,
         (base >> 32) as u16,

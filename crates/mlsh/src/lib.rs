@@ -70,14 +70,40 @@ pub struct Facts<'a> {
     /// changing and the shell should report the count at the moment it
     /// was asked, not at the moment boot handed these over.
     pub ticks: &'a AtomicU32,
-    /// Reads the eight bytes at an address, for `mem peek`, or `None` on
-    /// an architecture that does not provide it.
+    /// What differs by platform beyond addresses and numbers.
+    pub platform: Platform,
+}
+
+/// What differs by platform beyond addresses and numbers: how `dev`
+/// names the timer and interrupt controller, and whether `mem peek` can
+/// read. One value, so a kernel that has nothing new to say sets one
+/// field to [`Platform::GENERIC`].
+#[derive(Clone, Copy)]
+pub struct Platform {
+    /// What the timer is and what `timer_irq` counts in, as `dev` prints
+    /// it before the number: `generic, irq` on aarch64, `lapic, vector` on
+    /// x86-64, where the LAPIC timer has a vector and no IRQ line.
+    pub timer: &'static str,
+    /// The interrupt controller, named, where there is no GIC to describe
+    /// by its addresses; empty otherwise.
+    pub irqchip: &'static str,
+    /// Reads the eight bytes at an address, for `mem peek`, or `None`.
     ///
     /// Supplied by the kernel because it is `unsafe` underneath and the
     /// shell is not where `unsafe` lives. An unmapped address faults, and
     /// that is the point as much as the value is: it is how a trap report
     /// is provoked on purpose and read back.
     pub peek: Option<fn(u64) -> u64>,
+}
+
+impl Platform {
+    /// The aarch64 kernel as it was before these fields existed: the
+    /// generic timer by IRQ, the GIC described by its addresses, no peek.
+    pub const GENERIC: Self = Self {
+        timer: "generic, irq",
+        irqchip: "",
+        peek: None,
+    };
 }
 
 /// A line reader and a dispatcher.

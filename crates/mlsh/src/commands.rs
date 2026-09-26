@@ -85,7 +85,7 @@ const HELP: &str = concat!(
 fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
     if let Some(addr) = args.strip_prefix("peek") {
         let addr = u64::from_str_radix(addr.trim().trim_start_matches("0x"), 16);
-        let _ = match (facts.peek, addr) {
+        let _ = match (facts.platform.peek, addr) {
             (Some(peek), Ok(addr)) => writeln!(out, "  {addr:#x}: {:#018x}", peek(addr)),
             (None, _) => writeln!(out, "  mem peek: not provided on this machine"),
             (_, Err(_)) => writeln!(out, "  mem peek ADDR   (ADDR in hex)"),
@@ -116,16 +116,15 @@ fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
 fn dev(out: &mut impl Write, facts: &Facts<'_>) {
     let (kind, uart, irq) = (facts.console, facts.uart, facts.uart_irq);
     let _ = writeln!(out, "  console  {kind} @ {uart:#x}, irq {irq}");
-    match facts.timer_irq {
-        0 => _ = out.write_str("  timer    none\r\n"),
-        irq => _ = writeln!(out, "  timer    generic, irq {irq}"),
-    }
-    match facts.gic {
-        Some((dist, redist)) => {
-            let _ = writeln!(out, "  gic      v3, dist {dist:#x}, redist {redist:#x}");
+    let _ = match facts.timer_irq {
+        0 => writeln!(out, "  timer    none"),
+        irq => writeln!(out, "  timer    {} {irq}", facts.platform.timer),
+    };
+    let _ = match (facts.gic, facts.platform.irqchip) {
+        (Some((dist, redist)), _) => {
+            writeln!(out, "  gic      v3, dist {dist:#x}, redist {redist:#x}")
         }
-        None => {
-            let _ = out.write_str("  gic      none\r\n");
-        }
-    }
+        (None, "") => writeln!(out, "  gic      none"),
+        (None, chip) => writeln!(out, "  irqchip  {chip}"),
+    };
 }

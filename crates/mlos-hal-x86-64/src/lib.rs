@@ -17,6 +17,7 @@
 
 mod boot;
 mod phys;
+pub mod port;
 
 pub use boot::{gigabyte_pages, long_mode, start_info_valid};
 pub use phys::{bytes, c_str, peek};
@@ -42,6 +43,27 @@ pub fn extent() -> (u64, u64) {
 pub fn wait_for_interrupt() {
     // SAFETY: halts until an interrupt. No memory effects, no stack use.
     unsafe { core::arch::asm!("hlt", options(nomem, nostack)) };
+}
+
+/// Sleeps until an interrupt, unless `pending` says one already came.
+///
+/// The check and the sleep are atomic with respect to interrupts: `cli`
+/// before the check, then `sti; hlt`, and `sti` holds interrupts off for
+/// exactly one more instruction. Without that, an interrupt landing
+/// between the check and the `hlt` would be serviced and then slept
+/// through, and a keystroke would wait for the next timer tick.
+pub fn wait_unless(pending: &core::sync::atomic::AtomicBool) {
+    // SAFETY: masks interrupts on this CPU only; unmasked again below
+    // on both paths.
+    unsafe { core::arch::asm!("cli", options(nomem, nostack)) };
+    if pending.swap(false, core::sync::atomic::Ordering::AcqRel) {
+        // SAFETY: re-enables what the `cli` above masked.
+        unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
+        return;
+    }
+    // SAFETY: `sti; hlt` sleeps with interrupts enabled; the shadow makes
+    // the pair atomic.
+    unsafe { core::arch::asm!("sti", "hlt", options(nomem, nostack)) };
 }
 
 /// Ends the VM through QEMU's `isa-debug-exit` device at port `0xf4`.

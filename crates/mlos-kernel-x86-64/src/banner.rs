@@ -43,7 +43,6 @@ pub fn report(console: &mut Uart16550, machine: Option<&Machine>) -> u8 {
     let pages = if gigabyte { "1 GiB" } else { "2 MiB" };
     let _ = writeln!(console, "paging      identity, {pages} pages");
     describe(console, machine);
-    let _ = writeln!(console, "Ctrl-D ends the guest");
     let bits = [
         (long_mode, LONG_MODE),
         (machine.is_some(), START_INFO),

@@ -1,8 +1,12 @@
 // PVH entry for MLOS x86-64. Assembled by `global_asm!` in boot.rs.
 //
 // Arrives in 32-bit protected mode, paging off, interrupts off, with the
-// hvm_start_info pointer in ebx. Leaves in long mode, on a 64 KiB stack,
-// with .bss zeroed and the first 1 GiB identity-mapped, calling
+// hvm_start_info pointer in ebx. Leaves in long mode, on the boot stack
+// linker/x86_64.ld reserves,
+// with .bss zeroed, the first 1 GiB identity-mapped as RAM, and 3-4 GiB
+// identity-mapped UNCACHED as the device window -- the LAPIC (0xfee00000),
+// IOAPIC (0xfec00000) and virtio-mmio slots (0xfeb00000) live there.
+// 1-3 GiB stays unmapped, so a stray pointer there still faults. Calling
 // `mlos_main(start_info)`. Nothing else: everything a device tree told
 // the aarch64 kernel is read from start_info later, in Rust.
 
@@ -30,7 +34,7 @@ _start:
     sub ecx, edi
     xor eax, eax
     rep stosb
-    mov esp, offset mlos_boot_stack_top
+    mov esp, offset __stack_top
 
     // PML4[0] -> PDPT. The rest of the map depends on the CPU.
     mov eax, offset mlos_pdpt
@@ -42,8 +46,10 @@ _start:
     bt edx, 26
     jnc 2f
 
-    // 1 GiB page: PDPT[0] maps 0..1 GiB directly.
-    mov dword ptr [mlos_pdpt], 0x83   // present | writable | page size
+    // 1 GiB pages: PDPT[0] maps 0..1 GiB directly, PDPT[3] the device
+    // window, with PCD|PWT so device registers are never cached.
+    mov dword ptr [mlos_pdpt], 0x83         // present | writable | page size
+    mov dword ptr [mlos_pdpt + 3 * 8], 0xC000009B  // ... | PWT | PCD
     mov byte ptr [mlos_gigabyte_pages], 1
     jmp 3f
 
@@ -59,6 +65,20 @@ _start:
     inc ecx
     cmp ecx, 512
     jne 1b
+
+    // And the device window: PDPT[3] -> a second PD, 2 MiB uncached pages.
+    mov eax, offset mlos_pd_dev
+    or eax, 3
+    mov dword ptr [mlos_pdpt + 3 * 8], eax
+    xor ecx, ecx
+5:  mov eax, ecx
+    shl eax, 21
+    add eax, 0xC0000000
+    or eax, 0x9B                // present | writable | PWT | PCD | page size
+    mov dword ptr [mlos_pd_dev + ecx * 8], eax
+    inc ecx
+    cmp ecx, 512
+    jne 5b
 
 3:  mov eax, offset mlos_pml4
     mov cr3, eax
@@ -112,8 +132,6 @@ mlos_long_mode_ptr:
 mlos_pml4: .skip 4096
 mlos_pdpt: .skip 4096
 mlos_pd:   .skip 4096
+mlos_pd_dev: .skip 4096
     .global mlos_gigabyte_pages
 mlos_gigabyte_pages: .skip 1
-    .balign 16
-    .skip 64 * 1024
-mlos_boot_stack_top:

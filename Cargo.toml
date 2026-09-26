@@ -29,6 +29,7 @@ members = [
     "crates/mlos-kernel-x86-64",
     "crates/mlos-uart16550",
     "crates/mlos-trap-x86-64",
+    "crates/mlos-apic-x86-64",
     "crates/mlos-pvh",
     "crates/mlos-machine",
     "crates/mlos-objtab",
