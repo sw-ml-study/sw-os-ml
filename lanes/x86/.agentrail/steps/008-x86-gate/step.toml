@@ -1,0 +1,9 @@
+number = 8
+slug = "x86-gate"
+status = "pending"
+description = "`kbuild-x86` and `kclippy-x86` already run; the boot tests now run both archi..."
+role = "production"
+context_files = []
+created_at = "2026-09-26T17:36:51"
+task_type = "rust-x86"
+commits = []
