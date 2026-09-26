@@ -13,6 +13,8 @@ tiering, leases and faults, the way pages are in Unix.
 
 This is not a Linux or BSD derivative. It is a new kernel.
 
+Blog post: **[Made Visible: MLOS](https://blog.softwarewrighter.com/2026/09/13/made-visible-mlos/)** -- visualizing this OS.
+
 ## Status: three of eight gates, and the thesis is untested
 
 | Gate | State |
