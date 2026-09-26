@@ -365,14 +365,16 @@ Step 009. Four policies, one trace (2 sessions x 16 rounds, 4,448
 accesses), one budget (32 KiB), replayed in `mlos-sim` on the host and in
 `mlos-kernel` under QEMU/TCG. The lines the guest prints and the lines the
 simulator computes are compared as strings by
-`crates/mlos-cli/tests/replay.rs`, and they are equal:
+`crates/mlos-cli/tests/replay.rs`, and they are equal. The x86-64 guest
+(saga `mlos-x86-64`) prints the same lines: `tests/replay_x86.rs` boots
+both guests side by side and asserts x86-64 = aarch64 = simulator.
 
-| policy | reads | hits | bytes | evicted | refused |
-| --- | --- | --- | --- | --- | --- |
-| demand | 35 | 741 | 32,768 | 0 | 3,672 |
-| fifo | 4,448 | 0 | 3,497,984 | 4,392 | 0 |
-| lru | 4,448 | 0 | 3,497,984 | 4,392 | 0 |
-| next-use | 3,748 | 700 | 2,781,184 | 3,713 | 0 |
+| policy | reads | hits | bytes | evicted | refused | simulator | aarch64 guest | x86-64 guest |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| demand | 35 | 741 | 32,768 | 0 | 3,672 | = | = | = |
+| fifo | 4,448 | 0 | 3,497,984 | 4,392 | 0 | = | = | = |
+| lru | 4,448 | 0 | 3,497,984 | 4,392 | 0 | = | = | = |
+| next-use | 3,748 | 700 | 2,781,184 | 3,713 | 0 | = | = | = |
 
 Four disagreements were found on the way. Each was a bug, each side was
 self-consistent, and only the comparison could have found any of them:

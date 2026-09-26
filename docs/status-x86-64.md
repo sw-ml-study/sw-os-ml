@@ -22,6 +22,7 @@ becomes a column there (step `x86-replay`).
 | Device window | 3-4 GiB is identity-mapped uncached (PCD|PWT): LAPIC, IOAPIC, virtio-mmio. 1-3 GiB stays unmapped, so `mem peek 0x40000000` still faults |
 | Boot stack | 256 KiB, reserved in `linker/x86_64.ld` like aarch64's. It was 64 KiB and `model` overflowed it through the page tables -- a triple fault, since the fault handler's own fetches faulted -- the same bug aarch64 hit in its step 010. Page tables now sit at the far end of `.bss`. No guard page: that needs 4 KiB mappings |
 | Model disk | The existing `mlos-virtio-blk`, unchanged, over `microvm`'s virtio-mmio: **zero lines of new driver code**. `mlos run` attaches the same model image as for aarch64 (`vmm::disk`, `force-legacy=false`). `model` reports `weights from virtio-blk`; `get 0 0` reads `0xa0` and `get 3 5` reads `0xa6` -- the `0xA0` provenance nibble with `layer ^ tensor` under it. It needed only the device window (step `x86-interrupts`). `mlos run --run SCRIPT` drives `mlsh`, as on aarch64 |
+| Replay | `model 32; replay demand|fifo|lru|next-use` under x86-64 TCG prints the same four count lines as the aarch64 guest and the simulator, to the integer, first time -- no kernel change was needed. `tests/replay_x86.rs` boots both guests side by side and asserts x86-64 = aarch64 = simulator. `docs/status.md`'s replay table now has the architecture as columns |
 | Console | `mlos-uart16550`: COM1 over port I/O, 115200 8N1, polled transmit and receive. FIFO deliberately left off so input sent before the kernel looks is not discarded. Receive interrupt: step `x86-interrupts` |
 | CLI | `mlos [--arch x86-64] build`, `mlos [--arch x86-64] run [tcg] [--capture S]`. Without `--arch`, `build` and `run` mean the host's architecture (x86-64 on a Linux PC, aarch64 on Apple Silicon); `doctor`, `layout`, `runtime` keep the shared path |
 
@@ -58,4 +59,5 @@ attempted -- saga `mlos-two-hosts`.
 
 - Done in step `x86-virtio-blk`: no driver change was needed.
 - `mlos doctor` does not check `qemu-system-x86_64` (step `x86-gate`).
-- This file becomes a column of `status.md`.
+- The replay table in `status.md` has the architecture as columns now;
+  the rest of this file folds into `status.md` when the lanes merge.
