@@ -52,3 +52,7 @@ vm/
 # the event stream. Generated on demand; the conforming samples the
 # sibling repos develop against are committed at examples/viz/ instead.
 /build/
+
+# videos/*.webp are tracked demos; the GIF VHS renders on the way to one
+# is not (demos/x86-64.tape converts, then deletes it).
+videos/*.gif

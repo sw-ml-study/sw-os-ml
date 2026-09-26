@@ -112,6 +112,13 @@ const MICROVM: [&str; 15] = [
 ///
 /// With `--capture`, stops the guest at the deadline: it waits for input
 /// that a headless boot never sends, so still running is the normal end.
+/// Without it there is no deadline and this waits for the guest. (A
+/// far-future deadline instead overflowed `Instant` and panicked, leaving
+/// QEMU running behind the shell -- found recording demos/x86-64.tape.)
+///
+/// `--run SCRIPT` becomes `mlsh.run=`, as for aarch64, and the model disk
+/// is the one the aarch64 guest gets. The report after the guest ends
+/// goes on its own line: the guest's last output is usually a prompt.
 fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, _) = crate::options(args, true)?;
     if args.iter().any(|arg| arg == host) && host != "tcg" {
@@ -119,22 +126,21 @@ fn boot(args: &[String]) -> io::Result<()> {
             "{host} cannot run the x86-64 guest here; saga mlos-x86-64 is TCG-only"
         )));
     }
-    // `--run SCRIPT` becomes `mlsh.run=`, as it does for aarch64.
     let script = args.iter().skip_while(|arg| *arg != "--run").nth(1);
     let append = script.map_or_else(String::new, |script| format!("mlsh.run={script}"));
     let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
     let mut child = Command::new("qemu-system-x86_64")
         .args(["-m", &ram, "-append", &append])
-        .args(crate::vmm::disk()) // the same model disk the aarch64 guest gets
+        .args(crate::vmm::disk())
         .args(MICROVM) // last: it ends in `-kernel`, which takes the ELF
         .arg(build()?)
         .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(seconds.unwrap_or(u64::MAX >> 1));
-    while child.try_wait()?.is_none() && Instant::now() < deadline {
+    let deadline = seconds.map(|s| Instant::now() + Duration::from_secs(s));
+    while child.try_wait()?.is_none() && deadline.is_none_or(|end| Instant::now() < end) {
         thread::sleep(Duration::from_millis(50));
     }
     let _ = child.kill();
-    println!("{}", describe(child.wait()?.code())?);
+    println!("\n{}", describe(child.wait()?.code())?);
     Ok(())
 }
 

@@ -361,3 +361,40 @@ fn the_model_faults_in_from_virtio_blk_with_its_provenance() {
     assert!(said.contains("first byte 0xa0"), "{said}");
     assert!(said.contains("first byte 0xa6"), "{said}");
 }
+
+/// Interactive `mlos run`, with no `--capture`: it must wait for the
+/// guest, however long, and report when the guest ends. It used to build
+/// a far-future deadline that overflowed `Instant` and panicked at once,
+/// leaving QEMU running behind the terminal. Typed keys go through QEMU's
+/// monitor mux to COM1; `Ctrl-D` ends the guest.
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn interactive_run_waits_for_the_guest_and_reports_its_end() {
+    let mut run = Command::new(MLOS)
+        .args(["--arch", "x86-64", "run", "tcg"])
+        .current_dir(ROOT)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("mlos runs");
+    let mut keys = run.stdin.take().expect("stdin");
+    thread::sleep(Duration::from_secs(6));
+    keys.write_all(b"dev\r").expect("typed");
+    thread::sleep(Duration::from_secs(1));
+    keys.write_all(b"\x04").expect("typed");
+    let out = run.wait_with_output().expect("mlos finishes");
+    let (said, why) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        out.status.success() && !why.contains("panicked"),
+        "{said}\n{why}"
+    );
+    assert!(said.contains("irqchip  lapic + ioapic"), "{said}");
+    assert!(
+        said.contains("x86-64 guest exited: long mode yes"),
+        "{said}"
+    );
+}
