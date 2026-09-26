@@ -1,0 +1,20 @@
+[package]
+name = "mlos-x86-skeleton"
+version = "0.0.1"
+edition = "2024"
+description = "Spike: prove a Rust no_std x86-64 kernel boots under QEMU (PVH) and can be tested."
+
+[[bin]]
+name = "mlos-x86-skeleton"
+test = false
+bench = false
+
+[profile.dev]
+panic = "abort"
+[profile.release]
+panic = "abort"
+
+# Standalone: not a member of the sw-os-ml workspace. A spike, not a crate
+# the kernel links -- keeping it out of the workspace keeps it out of the
+# k* aliases, default-members and the aliases.rs check.
+[workspace]

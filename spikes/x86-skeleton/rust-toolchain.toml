@@ -1,0 +1,9 @@
+# Pinned so a kernel that builds here builds identically in CI and on the
+# Linux/NVIDIA host. Bump deliberately, in its own step.
+[toolchain]
+channel    = "1.96.0"
+components = ["rustfmt", "clippy", "rust-src", "llvm-tools"]
+targets    = [
+    "aarch64-unknown-none-softfloat",
+    "x86_64-unknown-none",
+]
