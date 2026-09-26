@@ -128,5 +128,6 @@ fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
         clock: (|| GenericTimer.now().0, GenericTimer.frequency().0),
         bootargs: machine.bootargs.unwrap_or_default(),
         ticks: &handlers::TICKS,
+        peek: None,
     }
 }

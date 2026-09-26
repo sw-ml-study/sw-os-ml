@@ -15,6 +15,21 @@ const MAPPED: u64 = 1 << 30;
 /// guard against a missing terminator walking off through memory.
 const MAX_CMDLINE: usize = 4096;
 
+/// The eight bytes at `addr`, for `mem peek`: a debugging read, and the
+/// shell's way to provoke a page fault on purpose.
+///
+/// Safe to call in the sense that matters here: every outcome is
+/// defined by the machine. Mapped, it returns what is there (a device
+/// register may notice being read -- this is a debugging tool). Unmapped,
+/// the CPU raises #PF and the trap reporter takes over; nothing returns.
+#[must_use]
+pub fn peek(addr: u64) -> u64 {
+    // SAFETY: deliberately any address -- the fault on an unmapped one is
+    // the intended, reported outcome. Volatile and unaligned, so the
+    // compiler neither elides it nor assumes alignment.
+    unsafe { (addr as *const u64).read_volatile() }
+}
+
 /// `len` bytes at physical `addr`, or empty if any of them is unmapped.
 ///
 /// # Safety

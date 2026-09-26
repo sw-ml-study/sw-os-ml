@@ -16,6 +16,16 @@ const LONG_MODE: u8 = 0x01;
 const START_INFO: u8 = 0x02;
 /// The identity map used 1 GiB pages rather than 2 MiB.
 const GIGABYTE_PAGES: u8 = 0x04;
+/// The guest stopped because of a trap, not Ctrl-D.
+const TRAPPED: u8 = 0x08;
+
+/// The trap reporter: prints why the CPU stopped, then ends the guest
+/// with the boot bits plus [`TRAPPED`], so `mlos run` and the tests get
+/// an answer instead of a machine that has silently stopped.
+pub fn fault(trap: &mlos_trap_x86_64::Trap) -> ! {
+    mlos_trap_x86_64::describe(trap, &mut Uart16550::at(mlos_uart16550::COM1));
+    hal::qemu_exit(crate::CODE.load(core::sync::atomic::Ordering::Relaxed) | TRAPPED)
+}
 
 /// Prints the banner and what was found, and returns it as report bits.
 ///

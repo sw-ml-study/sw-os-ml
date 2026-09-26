@@ -139,7 +139,8 @@ fn boot(args: &[String]) -> io::Result<()> {
 /// already says what the guest did. Otherwise QEMU's `isa-debug-exit`
 /// exited with `(code << 1) | 1`, and the bits are
 /// `mlos-kernel-x86-64`'s: `0x40` reached `mlos_main`, `0x01` long mode,
-/// `0x02` a valid `hvm_start_info`, `0x04` 1 GiB pages.
+/// `0x02` a valid `hvm_start_info`, `0x04` 1 GiB pages, `0x08` stopped
+/// by a trap (the report is on the console above).
 fn describe(status: Option<i32>) -> io::Result<String> {
     let Some(code) = status else {
         return Ok("(stopped at the --capture deadline)".to_owned());
@@ -153,7 +154,8 @@ fn describe(status: Option<i32>) -> io::Result<String> {
     let yes =
         |bit: i32, on: &'static str, off: &'static str| if bits & bit != 0 { on } else { off };
     let report = format!(
-        "x86-64 guest exited: long mode {}, start_info {}, identity map {} pages",
+        "x86-64 guest {}: long mode {}, start_info {}, identity map {} pages",
+        yes(0x08, "stopped by a trap", "exited"),
         yes(0x01, "yes", "NO"),
         yes(0x02, "valid", "INVALID"),
         yes(0x04, "1 GiB", "2 MiB")

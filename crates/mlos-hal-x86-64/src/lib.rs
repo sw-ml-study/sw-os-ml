@@ -19,7 +19,7 @@ mod boot;
 mod phys;
 
 pub use boot::{gigabyte_pages, long_mode, start_info_valid};
-pub use phys::{bytes, c_str};
+pub use phys::{bytes, c_str, peek};
 
 unsafe extern "C" {
     /// First byte of the image. Defined by `linker/x86_64.ld`.

@@ -70,6 +70,14 @@ pub struct Facts<'a> {
     /// changing and the shell should report the count at the moment it
     /// was asked, not at the moment boot handed these over.
     pub ticks: &'a AtomicU32,
+    /// Reads the eight bytes at an address, for `mem peek`, or `None` on
+    /// an architecture that does not provide it.
+    ///
+    /// Supplied by the kernel because it is `unsafe` underneath and the
+    /// shell is not where `unsafe` lives. An unmapped address faults, and
+    /// that is the point as much as the value is: it is how a trap report
+    /// is provoked on purpose and read back.
+    pub peek: Option<fn(u64) -> u64>,
 }
 
 /// A line reader and a dispatcher.

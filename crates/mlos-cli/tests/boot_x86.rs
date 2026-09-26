@@ -191,3 +191,36 @@ fn it_falls_back_to_two_megabyte_pages_without_pdpe1gb() {
     assert_eq!(status, Some((0x43 << 1) | 1), "{console}");
     assert!(console.contains("2 MiB pages"), "{console}");
 }
+
+/// A page fault provoked from the shell and read back: `mem peek` on the
+/// kernel's own first bytes answers (`cli` 0xfa, `cld` 0xfc), then on 1 GiB
+/// -- just past the identity map -- the CPU takes #PF, and the report names
+/// the vector, a not-present read (error 0), the faulting address in CR2,
+/// and a RIP inside the kernel image. The guest then exits with the boot
+/// bits plus "stopped by a trap" (0x08).
+#[test]
+#[ignore = "boots a VM; run with --ignored"]
+fn a_page_fault_provoked_from_the_shell_is_reported() {
+    let script = "mlsh.run=mem peek 0x100000;mem peek 0x40000000";
+    let (status, console) = boot_with_input("max", script, b"");
+    assert_eq!(status, Some((0x4f << 1) | 1), "{console}");
+    assert!(
+        console.contains("  0x100000: 0x") && console.contains("fcfa\n"),
+        "{console}"
+    );
+    for fact in [
+        "!! trap 14 (#PF page fault)",
+        "   error  0x0000000000000000",
+        "   cr2    0x0000000040000000",
+    ] {
+        assert!(console.contains(fact), "missing {fact:?} in {console}");
+    }
+    let rip = console
+        .split("   rip    0x")
+        .nth(1)
+        .and_then(|r| u64::from_str_radix(&r[..16], 16).ok());
+    assert!(
+        rip.is_some_and(|rip| (0x10_0000..0x40_0000).contains(&rip)),
+        "rip outside the image: {console}"
+    );
+}

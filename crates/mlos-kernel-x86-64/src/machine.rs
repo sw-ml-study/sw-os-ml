@@ -118,6 +118,7 @@ impl Machine {
             clock: (|| 0, 0),
             bootargs: self.cmdline,
             ticks: &TICKS,
+            peek: Some(hal::peek),
         };
         Shell::default().run(console, &facts, idle)
     }

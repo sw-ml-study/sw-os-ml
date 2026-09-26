@@ -19,7 +19,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
     match verb {
         "" => {}
         "help" | "?" => _ = out.write_str(HELP),
-        "mem" => mem(out, facts),
+        "mem" => mem(out, facts, args),
         "dev" => dev(out, facts),
         "sweep" => crate::objects::sweep(out, facts.clock),
         "arena" => crate::report::arena(out),
@@ -63,6 +63,7 @@ const HELP: &str = concat!(
     "trace [on|off] residency events as they happened, one per line\r\n",
     "stream [N]    declare the model's access order, or advance it by N\r\n",
     "mem           physical memory map, and what is left\r\n",
+    "mem peek ADDR read 8 bytes at ADDR; unmapped faults, on purpose\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",
     "help          this\r\n",
@@ -74,7 +75,19 @@ const HELP: &str = concat!(
 /// device tree blob are memory the machine has and MLOS may not hand out.
 /// Everything the object manager will ever do starts from this number
 /// being honest.
-fn mem(out: &mut impl Write, facts: &Facts<'_>) {
+///
+/// `mem peek ADDR` reads eight bytes at ADDR instead. On an unmapped
+/// address the CPU faults and the trap report is the answer.
+fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
+    if let Some(addr) = args.strip_prefix("peek") {
+        let addr = u64::from_str_radix(addr.trim().trim_start_matches("0x"), 16);
+        let _ = match (facts.peek, addr) {
+            (Some(peek), Ok(addr)) => writeln!(out, "  {addr:#x}: {:#018x}", peek(addr)),
+            (None, _) => writeln!(out, "  mem peek: not provided on this machine"),
+            (_, Err(_)) => writeln!(out, "  mem peek ADDR   (ADDR in hex)"),
+        };
+        return;
+    }
     for region in facts.info.regions {
         let (base, len, kind) = (region.base, region.len, region.kind);
         let _ = writeln!(out, "  {base:#012x} + {len:#x} {kind:?}");

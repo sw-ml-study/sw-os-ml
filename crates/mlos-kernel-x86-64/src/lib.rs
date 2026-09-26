@@ -18,7 +18,7 @@
 mod banner;
 mod machine;
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use mlos_hal_x86_64 as hal;
 use mlos_uart16550::{COM1, Uart16550};
@@ -26,8 +26,11 @@ use mlos_uart16550::{COM1, Uart16550};
 /// `Ctrl-D`: ends the guest, from anywhere in the shell.
 const END: u8 = 0x04;
 
-/// The report bits, kept for [`idle`] to exit with.
+/// The report bits, kept for [`idle`] and [`banner::fault`] to exit with.
 static CODE: AtomicU8 = AtomicU8::new(0);
+
+/// `Ctrl-D` has arrived; the guest ends once the shell has caught up.
+static ENDING: AtomicBool = AtomicBool::new(false);
 
 /// Kernel entry, reached from `mlos-hal-x86-64`'s `_start` in long mode.
 ///
@@ -39,6 +42,9 @@ static CODE: AtomicU8 = AtomicU8::new(0);
 pub unsafe extern "C" fn mlos_main(start_info: *const u8) -> ! {
     let mut console = Uart16550::at(COM1);
     console.init();
+    // SAFETY: boot CPU, once, interrupts off; `banner::fault` only writes
+    // to COM1 and exits.
+    unsafe { mlos_trap_x86_64::install(banner::fault) };
     // SAFETY: forwarded from `_start`, which is this function's contract.
     let found = unsafe { machine::discover(start_info) };
     CODE.store(
@@ -58,13 +64,22 @@ pub unsafe extern "C" fn mlos_main(start_info: *const u8) -> ! {
 /// What the shell does between keystrokes: moves whatever COM1 received
 /// into `mlsh`'s input queue, and ends the guest on `Ctrl-D`.
 ///
+/// `Ctrl-D` ends the guest on the NEXT call, not this one. The shell
+/// drains the queue between calls, so everything typed before `Ctrl-D`
+/// is run first; exiting on the spot lost `dev\r` whenever it arrived in
+/// the same burst, which under load it did.
+///
 /// Polling stands in for the receive interrupt until step
 /// `x86-interrupts`; the queue is the same one the aarch64 interrupt
 /// handler fills, so the shell cannot tell the difference.
 fn idle() {
+    if ENDING.load(Ordering::Relaxed) {
+        hal::qemu_exit(CODE.load(Ordering::Relaxed));
+    }
     while let Some(byte) = Uart16550::at(COM1).read() {
         if byte == END {
-            hal::qemu_exit(CODE.load(Ordering::Relaxed));
+            ENDING.store(true, Ordering::Relaxed);
+            return;
         }
         let _ = mlos_queue::push(byte);
     }

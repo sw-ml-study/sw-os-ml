@@ -16,6 +16,7 @@ becomes a column there (step `x86-replay`).
 | `mlos_main` | `mlos-kernel-x86-64`: opens COM1, prints the banner (`MLOS x86-64`) and what was found, then runs `mlsh`. `Ctrl-D` ends the guest through `isa-debug-exit` with the entry's findings as bits |
 | Boot info | `mlos-pvh` (host-tested, no `unsafe`): memory map from `hvm_start_info` (e820: RAM usable, ACPI reclaimable, anything else reserved), virtio-mmio slots from `virtio_mmio.device=` on the command line, `mlsh.run=` from the same string with QEMU's appended entries cut off. The kernel image is carved out with the same `reserve` aarch64 uses; the loader's structures only when they sit in usable RAM (with ACPI off QEMU puts them in the BIOS area, already reserved). Map overflow past `MAX_REGIONS` is reported, not dropped silently. Nothing from `mlos-fdt` is in the image (`nm`); it is still a build dependency through `mlos-machine` |
 | Shell | `mlsh`, fed by polling COM1 into the same queue the aarch64 receive interrupt fills. `mem` and `dev` report the PVH map, the 16550, `timer none`, `gic none`. CPU count is 1 (the boot CPU; SMP is not in this saga). `sweep` has no clock yet (step `x86-interrupts`) |
+| Traps | `mlos-trap-x86-64`: a 32-gate IDT, one stub per vector (so the vector is known without asking), a uniform frame, and a report in the aarch64 layout: `!! trap N (name)`, then error code, `RIP`, `CR2`, `RFLAGS`. Fatal path only -- nothing is saved for a return. Installed right after COM1, before anything else can fault. The reporter prints on COM1 and exits with the boot bits plus `0x08` (trapped). `mem peek ADDR` in `mlsh` reads 8 bytes through `Facts.peek` (x86-64 supplies it; aarch64 passes `None` and says so); on an unmapped address it is how a fault is provoked on purpose. No IST or TSS yet, so a fault that overflows the stack becomes a triple fault |
 | Console | `mlos-uart16550`: COM1 over port I/O, 115200 8N1, polled transmit and receive. FIFO deliberately left off so input sent before the kernel looks is not discarded. Receive interrupt: step `x86-interrupts` |
 | CLI | `mlos [--arch x86-64] build`, `mlos [--arch x86-64] run [tcg] [--capture S]`. Without `--arch`, `build` and `run` mean the host's architecture (x86-64 on a Linux PC, aarch64 on Apple Silicon); `doctor`, `layout`, `runtime` keep the shared path |
 
@@ -41,6 +42,9 @@ attempted -- saga `mlos-two-hosts`.
 - `mlos-machine` (which `mlsh` and `mlos-snapshot` use only for `rest()`)
   depends on `mlos-fdt`. Moving `rest()` somewhere neutral would drop the
   build dependency too.
+
+- `mem peek` is x86-64 only: aarch64's `boot.rs` passes `peek: None`
+  (one line in that lane's file). The aarch64 lane can supply one.
 
 ## For step `x86-virtio-blk`
 
