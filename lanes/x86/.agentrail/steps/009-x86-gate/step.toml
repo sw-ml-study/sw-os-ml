@@ -1,4 +1,4 @@
-number = 8
+number = 9
 slug = "x86-gate"
 status = "pending"
 description = "`kbuild-x86` and `kclippy-x86` already run; the boot tests now run both archi..."
