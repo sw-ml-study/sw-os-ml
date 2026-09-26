@@ -1,9 +1,10 @@
 number = 9
 slug = "x86-gate"
-status = "pending"
+status = "completed"
 description = "`kbuild-x86` and `kclippy-x86` already run; the boot tests now run both archi..."
 role = "production"
 context_files = []
 created_at = "2026-09-26T17:36:51"
+completed_at = "2026-09-26T23:44:28"
 task_type = "rust-x86"
-commits = []
+commits = ["3c443f3d4ffbc3c53cad072df306ca0f27f1c1c5"]
