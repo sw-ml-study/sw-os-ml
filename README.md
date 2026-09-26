@@ -15,14 +15,14 @@ This is not a Linux or BSD derivative. It is a new kernel.
 
 Blog post: **[Made Visible: MLOS](https://blog.softwarewrighter.com/2026/09/13/made-visible-mlos/)** -- visualizing this OS.
 
-## Status: three of eight gates, and the thesis is untested
+## Status: three of eight gates, and the fourth is measured
 
 | Gate | State |
 | --- | --- |
 | G1 boots to a shell | **done** |
 | G2 holds an object table | **done** |
 | G3 faults, and the fault carries meaning | **done** |
-| G4 known-next-use beats LRU | **not started -- this is the one that matters** |
+| G4 known-next-use beats LRU | **in progress -- this is the one that matters.** Measured in simulation and in the kernel, identically; the real-shape trace and the report remain |
 | G5-G8 sharing, degradation, host resources, distribution | not started |
 
 The three that are met are all *mechanism*. An object table with tiers
@@ -31,13 +31,17 @@ and the sceptic is right so far.
 
 The one thing that makes MLOS not-a-cache is `next_use`: the field saying
 when an object will be wanted again, which no page-based system can hold.
-**Nothing writes it.** It has existed since the object table was built,
-every layout document emits it as `never`, and until a policy acts on it
-this project has demonstrated a *problem* rather than a solution.
+It existed for two milestones with nothing to write it. As of M3 a
+workload declares its access order to the kernel (`ml_stream_declare`),
+the kernel writes the field, and a policy acts on it when the arena is
+full -- in the simulator and, since step 009, in the kernel itself, with
+the two producing identical counts. What remains before gate G4 is met
+is a trace from a real model's shape and the report that states the
+comparison so it can be disputed.
 
-That is deliberate sequencing, not an oversight, and
 [docs/status.md](docs/status.md) is the ground truth -- if it is not in
-that file, it does not work.
+that file, it does not work. It describes `main`; work in flight on
+branches is listed under [Recent, current and planned](#recent-current-and-planned).
 
 ## What has been measured
 
@@ -65,9 +69,10 @@ sweep   acquired 7 of 128 tiles in 364.708 us
 Rm      8/144 KiB of the model = 55 per mille
 ```
 
-That is a faithful picture of the *problem*: memory is a fraction of the
-model, the sweep runs out, and MLOS refuses rather than guessing what to
-throw away. It is not yet a picture of a solution.
+That was a faithful picture of the *problem* at M2: memory is a fraction
+of the model, the sweep runs out, and MLOS refused rather than guessing
+what to throw away. As of M3 step 009 the same shell says `replay
+next-use` and the kernel chooses.
 
 **The claim the project rests on has now been measured, in simulation.**
 Replaying one workload against four residency policies under identical
@@ -155,7 +160,8 @@ What MLOS *drives* is QEMU's virtual hardware, not Apple's: a GICv3
 interrupt controller (Apple Silicon has an AIC, which MLOS never sees), a
 PL011 or virtio console, and virtio-mmio block devices. That is the
 point -- the kernel is portable to any aarch64 machine QEMU can present,
-and a second x86-64 target is already built in CI.
+and every crate above the HAL is built for `x86_64-unknown-none` on
+every gate run. Booting it is the `mlos-x86-64` saga, below.
 
 **The Apple GPU is not used at all.** No Metal, no ANE, nothing. It is
 reached at M6, and not by MLOS driving it: the host does, behind a narrow
@@ -169,17 +175,54 @@ Virtualization.framework (via `vfkit`) boots the same image and produces
 no console output yet: it offers a virtio console and no PL011, and the
 virtio-pci transport that would fix it arrives with M6.
 
-## Where this goes next
+## Recent, current and planned
 
-The simulated comparison is done and it separated, so the work now is
-making it true of the kernel rather than of a model of one:
-`ml_stream_declare` so a workload can hand MLOS its own future, an arena
-that can evict at all (it is still a bump allocator), and the same policy
-crates running in-kernel under TCG. Step 009 has to reproduce the
-simulator's counts **exactly**, not approximately, or the two are not
-measuring the same thing.
+Development is **parallel**: each saga runs on its own branch (a
+`feat/<slug>` branch becomes `pr/<slug>` when it is ready for review,
+per [AGENTS.md](AGENTS.md)), `main` is the integration point, and
+[docs/status.md](docs/status.md) describes `main` only. More than one
+agent may be working at once; the plan is what keeps them from colliding.
 
-Only then is gate G4 met.
+**Recent** (saga [`mlos-nextuse`, M3](docs/plan.md#saga-mlos-nextuse-m3)):
+
+- Step 006, the verdict: in simulation, a policy told when each object is
+  next wanted does 32--71% fewer provider reads than the best baseline,
+  across twenty-eight configurations, never losing.
+  [docs/m3-verdict.md](docs/m3-verdict.md).
+- Step 007: `ml_stream_declare` / `ml_stream_advance`. The kernel writes
+  `next_use` for the first time.
+- Step 008: the arena stops being a bump allocator. First fit, coalescing
+  free list, real eviction.
+- Step 009: the same policy crates run in the kernel under QEMU/TCG and
+  produce the same integers as the simulator, asserted with no tolerance.
+  Finding the last thirteen reads of disagreement turned up four real bugs.
+  **In review as [PR #2](https://github.com/sw-ml-study/sw-os-ml/pull/2)**
+  on branch `pr/in-kernel`; `main` does not have it yet.
+
+**Current, in parallel:**
+
+- M3 steps 010 (`generative-trace`: a trace shaped by a real model's `.spm`
+  sidecar; blocked on a real checkpoint) and 011 (`g4-report`: the
+  measured table, written so it can be disputed -- gate G4). These follow
+  PR #2.
+- Saga [`mlos-x86-64`](docs/plan.md#saga-mlos-x86-64-portability-no-gate):
+  the x86-64 HAL, so the same kernel boots under QEMU `microvm` via PVH,
+  reaches the shell over a 16550, and replays the M3 comparison to the same
+  integers on a second architecture. Independent of M3's remaining steps
+  and running alongside them.
+
+**Planned**, in order, from [docs/plan.md](docs/plan.md):
+
+- Saga [`mlos-two-hosts`](docs/plan.md#saga-mlos-two-hosts-portability-no-gate):
+  a Linux x86-64 machine beside the Mac, each booting both guests (HVF and
+  TCG on the Mac; KVM and TCG on Linux) and running the whole gate.
+  Restores what the deleted CI runner uniquely offered: a machine that is
+  not this one.
+- M4 `mlos-parameter-major` (gate G5): one provider read serves N
+  sessions. M5 `mlos-degradation` (G6): contracts, admission, the
+  degradation ladder. M6 onward: host resources over narrow virtio
+  interfaces, then distribution, heterogeneity, global scheduling, and
+  the ML-MMU last.
 
 ## Development
 
@@ -188,7 +231,10 @@ the primary development host; a Linux/NVIDIA host is the second target,
 where real GPU passthrough becomes possible.
 
 Work is tracked with [agentrail](https://softwarewrighter.com) sagas.
-`agentrail next` prints the current step.
+`agentrail next` prints the current step. Sagas run in parallel on
+separate branches or git worktrees; see
+[Recent, current and planned](#recent-current-and-planned) for what is
+in flight and [docs/plan.md](docs/plan.md) for what comes next.
 
 ---
 
