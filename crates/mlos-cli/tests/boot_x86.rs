@@ -27,6 +27,26 @@ const MLOS: &str = env!("CARGO_BIN_EXE_mlos");
 /// The workspace root, where `target/` is.
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
+/// The QEMU every boot below needs.
+const QEMU: &str = "qemu-system-x86_64";
+
+/// True, with the reason printed, if `qemu` is not installed.
+///
+/// The boots run for both architectures wherever both QEMUs exist; where
+/// this one does not (an Apple Silicon Mac with only the aarch64 QEMU,
+/// say), each boot says so by name and passes, so the same file is green
+/// on both machines instead of red on one. `mlos doctor` names it too.
+fn missing(qemu: &str) -> bool {
+    let found = Command::new(qemu)
+        .arg("--version")
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !found {
+        eprintln!("skipped: {qemu} is not installed (see `mlos doctor`)");
+    }
+    !found
+}
+
 /// Runs `mlos` from the workspace root.
 fn mlos(args: &[&str]) -> Output {
     let out = Command::new(MLOS).args(args).current_dir(ROOT).output();
@@ -128,6 +148,9 @@ fn build_defaults_to_the_host_architecture() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn the_banner_comes_first_and_names_the_architecture() {
+    if missing(QEMU) {
+        return;
+    }
     let out = mlos(&["--arch", "x86-64", "run", "tcg", "--capture", "20"]);
     let said = String::from_utf8_lossy(&out.stdout);
     assert!(
@@ -152,6 +175,9 @@ fn the_banner_comes_first_and_names_the_architecture() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn a_typed_command_runs_in_the_shell_until_ctrl_d() {
+    if missing(QEMU) {
+        return;
+    }
     let (status, console) = boot_with_input("max", "", b"dev\r\x04");
     assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
     assert!(
@@ -167,6 +193,9 @@ fn a_typed_command_runs_in_the_shell_until_ctrl_d() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn mem_and_dev_report_what_pvh_and_the_command_line_said() {
+    if missing(QEMU) {
+        return;
+    }
     let (status, console) = boot_with_input("max", "mlsh.run=mem;dev", b"\x04");
     assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
     for fact in [
@@ -190,6 +219,9 @@ fn mem_and_dev_report_what_pvh_and_the_command_line_said() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn it_falls_back_to_two_megabyte_pages_without_pdpe1gb() {
+    if missing(QEMU) {
+        return;
+    }
     let (status, console) = boot_with_input("qemu64", "", b"\x04");
     assert_eq!(status, Some((0x43 << 1) | 1), "{console}");
     assert!(console.contains("2 MiB pages"), "{console}");
@@ -204,6 +236,9 @@ fn it_falls_back_to_two_megabyte_pages_without_pdpe1gb() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn a_page_fault_provoked_from_the_shell_is_reported() {
+    if missing(QEMU) {
+        return;
+    }
     let script = "mlsh.run=mem peek 0x100000;mem peek 0x40000000";
     let (status, console) = boot_with_input("max", script, b"");
     assert_eq!(status, Some((0x4f << 1) | 1), "{console}");
@@ -282,6 +317,9 @@ fn boot_typing(script: &[(u64, &[u8])]) -> (Option<i32>, String) {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn the_timer_ticks_and_a_late_keystroke_arrives_by_interrupt() {
+    if missing(QEMU) {
+        return;
+    }
     let (status, console) = boot_typing(&[(4, b"ticks\r"), (1, b"\x04")]);
     assert_eq!(status, Some((0x47 << 1) | 1), "{console}");
     assert!(
@@ -306,6 +344,9 @@ fn the_timer_ticks_and_a_late_keystroke_arrives_by_interrupt() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn sweep_is_timed_by_a_measured_tsc() {
+    if missing(QEMU) {
+        return;
+    }
     let (status, console) = boot_with_input("max", "mlsh.run=model 32;sweep", b"\x04");
     assert_eq!(
         status,
@@ -335,6 +376,9 @@ fn sweep_is_timed_by_a_measured_tsc() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn the_model_faults_in_from_virtio_blk_with_its_provenance() {
+    if missing(QEMU) {
+        return;
+    }
     let script = "model 32;get 0 0;get 3 5";
     let out = mlos(&[
         "--arch",
@@ -370,6 +414,9 @@ fn the_model_faults_in_from_virtio_blk_with_its_provenance() {
 #[test]
 #[ignore = "boots a VM; run with --ignored"]
 fn interactive_run_waits_for_the_guest_and_reports_its_end() {
+    if missing(QEMU) {
+        return;
+    }
     let mut run = Command::new(MLOS)
         .args(["--arch", "x86-64", "run", "tcg"])
         .current_dir(ROOT)

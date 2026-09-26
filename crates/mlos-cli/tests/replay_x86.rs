@@ -41,6 +41,9 @@ const POLICIES: [(&str, &dyn Policy); 4] = [
 #[test]
 #[ignore = "boots two VMs; run with --ignored"]
 fn x86_64_counts_what_aarch64_and_the_simulator_counted() {
+    if missing("qemu-system-x86_64") || missing("qemu-system-aarch64") {
+        return;
+    }
     let x86 = thread::spawn(|| guest("x86-64"));
     let arm = guest("aarch64");
     let x86 = x86.join().expect("x86-64 guest");
@@ -64,6 +67,19 @@ fn x86_64_counts_what_aarch64_and_the_simulator_counted() {
             "{name}: x86-64 vs aarch64\n\nx86-64:\n{x86}\n\naarch64:\n{arm}"
         );
     }
+}
+
+/// True, with the reason printed, if `qemu` is not installed: this
+/// comparison needs both guests, and says by name which one it cannot run.
+fn missing(qemu: &str) -> bool {
+    let found = Command::new(qemu)
+        .arg("--version")
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !found {
+        eprintln!("skipped: {qemu} is not installed (see `mlos doctor`)");
+    }
+    !found
 }
 
 /// Boots `arch` under TCG and replays every policy, each on a fresh model.

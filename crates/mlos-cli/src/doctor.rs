@@ -21,7 +21,11 @@ const TOOLS: [(&str, &[(&str, &str)]); 3] = [
     ),
     (
         "emulator",
-        &[("qemu-system-aarch64", "--version"), ("vfkit", "--version")],
+        &[
+            ("qemu-system-aarch64", "--version"),
+            ("qemu-system-x86_64", "--version"),
+            ("vfkit", "--version"),
+        ],
     ),
     (
         "demo recording (optional)",
@@ -30,6 +34,7 @@ const TOOLS: [(&str, &[(&str, &str)]); 3] = [
             ("ttyd", "--version"),
             ("ffmpeg", "-version"),
             ("gifsicle", "--version"),
+            ("gif2webp", "-version"),
         ],
     ),
 ];

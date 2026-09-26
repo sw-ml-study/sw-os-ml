@@ -24,6 +24,7 @@ becomes a column there (step `x86-replay`).
 | Model disk | The existing `mlos-virtio-blk`, unchanged, over `microvm`'s virtio-mmio: **zero lines of new driver code**. `mlos run` attaches the same model image as for aarch64 (`vmm::disk`, `force-legacy=false`). `model` reports `weights from virtio-blk`; `get 0 0` reads `0xa0` and `get 3 5` reads `0xa6` -- the `0xA0` provenance nibble with `layer ^ tensor` under it. It needed only the device window (step `x86-interrupts`). `mlos run --run SCRIPT` drives `mlsh`, as on aarch64 |
 | Replay | `model 32; replay demand|fifo|lru|next-use` under x86-64 TCG prints the same four count lines as the aarch64 guest and the simulator, to the integer, first time -- no kernel change was needed. `tests/replay_x86.rs` boots both guests side by side and asserts x86-64 = aarch64 = simulator. `docs/status.md`'s replay table now has the architecture as columns |
 | Demo | `videos/x86-64.webp`, recorded by `demos/x86-64.tape` (VHS, then `gif2webp`): boot, `dev`, `mem`, `ticks`, `model 32` from virtio-blk, `get 3 5` (`0xa6`), a timed `sweep`, `Ctrl-D`. Recording it found a real bug: interactive `mlos run` (no `--capture`) panicked on an `Instant` overflow and left QEMU running behind the shell; fixed, and tested |
+| Gate | `kbuild-x86` and `kclippy-x86` were already in the gate. `cargo test -p mlos-cli -- --ignored` now boots both architectures wherever both QEMUs exist: 10 x86-64 tests (9 boots and a build) and the side-by-side replay, beside aarch64's. Where `qemu-system-x86_64` is missing, each x86-64 boot prints `skipped: qemu-system-x86_64 is not installed (see mlos doctor)` and passes, so the file is green on a Mac without it rather than red. `mlos doctor` lists `qemu-system-x86_64` (and `gif2webp` for the demo). `sw-checklist` ends the saga at the count `main` has: 9 warnings, none added by this lane |
 | Console | `mlos-uart16550`: COM1 over port I/O, 115200 8N1, polled transmit and receive. FIFO deliberately left off so input sent before the kernel looks is not discarded. Receive interrupt: step `x86-interrupts` |
 | CLI | `mlos [--arch x86-64] build`, `mlos [--arch x86-64] run [tcg] [--capture S]`. Without `--arch`, `build` and `run` mean the host's architecture (x86-64 on a Linux PC, aarch64 on Apple Silicon); `doctor`, `layout`, `runtime` keep the shared path |
 
@@ -59,6 +60,5 @@ attempted -- saga `mlos-two-hosts`.
 ## For step `x86-virtio-blk`
 
 - Done in step `x86-virtio-blk`: no driver change was needed.
-- `mlos doctor` does not check `qemu-system-x86_64` (step `x86-gate`).
 - The replay table in `status.md` has the architecture as columns now;
   the rest of this file folds into `status.md` when the lanes merge.
