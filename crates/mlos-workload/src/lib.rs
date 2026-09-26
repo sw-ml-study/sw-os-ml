@@ -50,14 +50,13 @@
 
 #![forbid(unsafe_code)]
 
-mod kv;
 mod model;
 
 use mlos_objtab::SessionId;
 use mlos_synth::{LAYERS, TILES, model as weights};
 use mlos_trace::{Access, Header};
 
-pub use kv::{BYTES as KV_BYTES, block, meta as kv_meta};
+pub use mlos_synth::kv::{BYTES as KV_BYTES, block, meta as kv_meta};
 
 /// What to call this workload in a trace header.
 pub const MODEL: &str = "synth-8x16+kv";

@@ -5,6 +5,7 @@
 //! Nothing here exploits that yet -- exploiting it is M3 -- but this is
 //! the sweep whose numbers M3 has to improve on.
 
+use mlos_abi::ObjectId;
 use mlos_objman::{Lease, Manager};
 use mlos_objtab::SessionId;
 use mlos_synth::{LAYERS, TILES, model};
@@ -62,15 +63,34 @@ fn walk(held: &mut Manager<'static, CAPACITY>, session: u16) -> (u32, Option<mlo
 /// declaration built from `model::tile` is told in exactly the sense a
 /// process would tell it.
 ///
+/// ONE sweep, not a repeating one. A stream is a finite sequence now, so
+/// a tile behind the cursor reads `Never` -- which is the truth: the
+/// kernel has been told about one pass and nothing beyond it. The shell's
+/// `stream` verb exists to watch that being written, and watching it run
+/// out is part of what there is to see.
+///
+/// Borrows the replay's declaration buffers, because they are the
+/// storage this kernel has for a declared sequence and a stream borrows
+/// rather than owns.
+///
 /// Returns how many objects were declared.
 pub fn declare() -> Option<usize> {
-    let mut order = [mlos_abi::ObjectId(0); (LAYERS * TILES) as usize];
+    let room = crate::state::replay_room();
+    let count = (LAYERS * TILES) as usize;
+    let order = room.declared.get_mut(..count)?;
     for layer in 0..LAYERS {
         for tensor in 0..TILES {
             order[(layer * TILES + tensor) as usize] = model::tile(layer, tensor);
         }
     }
-    with(|held| held.stream.declare(&order).ok().map(|()| order.len()))?
+    mlos_stream::chain(order, room.next, room.seen).ok()?;
+    let (declared, next): (&'static [ObjectId], &'static [u32]) = (room.declared, room.next);
+    with(|held| {
+        held.stream
+            .declare(&declared[..count], next)
+            .ok()
+            .map(|()| count)
+    })?
 }
 
 /// Moves the declared stream on by `steps`.

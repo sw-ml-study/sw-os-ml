@@ -17,7 +17,7 @@ use mlos_policy::Residency;
 
 use crate::Resident;
 
-impl Residency for Resident {
+impl Residency for Resident<'_> {
     fn len(&self) -> usize {
         self.held.len()
     }

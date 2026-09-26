@@ -1,14 +1,12 @@
 //! KV blocks: the half of a decode loop that accumulates.
 //!
-//! Here rather than in `mlos-synth` because `mlos-synth` describes what a
-//! model IS -- a fixed inventory of weights, the same for every run --
-//! and KV is not that. It is produced by running the model, it grows with
-//! the conversation, it belongs to one session, and two sessions asking
-//! the same question hold different KV. It is a property of the WORKLOAD.
-//!
-//! When M4 makes sessions real the kernel will register these and this
-//! will move. Until then nothing in the kernel has ever seen a KV block,
-//! and putting the definition where the only user is keeps that honest.
+//! Moved here from `mlos-workload` in M3 step 009, and the reason is the
+//! whole point of that step. The kernel replays the same trace as the
+//! simulator, so it has to be able to REGISTER a KV block when one is
+//! first asked for -- and it cannot do that from a `std` crate it does
+//! not link. What is a property of the workload is the decode LOOP, which
+//! stays where it was; what a KV block IS belongs beside the model whose
+//! objects it sits among.
 //!
 //! The class is session-scoped: [`ObjectClass::is_session_scoped`] says
 //! so, and it means `Fields::model` carries a session id rather than a

@@ -10,8 +10,10 @@ authors.workspace      = true
 
 [dependencies]
 mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
+mlos-arena  = { path = "../mlos-arena",  version = "0.0.1" }
 mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
 mlos-policy = { path = "../mlos-policy", version = "0.0.1" }
+mlos-stream = { path = "../mlos-stream", version = "0.0.1" }
 mlos-trace  = { path = "../mlos-trace",  version = "0.0.1" }
 
 [dev-dependencies]

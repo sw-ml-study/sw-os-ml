@@ -61,6 +61,12 @@ fn dispatch(args: &[String]) -> io::Result<()> {
 /// confusing failure somewhere further down: a stray argument once reached
 /// QEMU as an accelerator name, and the error the user saw came from a
 /// program they had not typed.
+///
+/// `--console` and `--run` take a value, and the value is dropped here
+/// rather than returned: `run::boot` reads both back positionally. What
+/// this parser owes them is that neither value reaches the accelerator
+/// check -- `virtio` and a shell script are both things QEMU would object
+/// to, confusingly, on the user's behalf.
 fn options(args: &[String], takes_host: bool) -> io::Result<(&str, Option<u64>, bool)> {
     let mut rest = args.iter().skip(1);
     let (mut host, mut seconds, mut debug) = (None, None, false);
@@ -68,9 +74,7 @@ fn options(args: &[String], takes_host: bool) -> io::Result<(&str, Option<u64>, 
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--debug" => debug = true,
-            // `--console virtio` selects the virtio console. Its value is
-            // consumed here so it is not mistaken for an accelerator.
-            "--console" => drop(rest.next()),
+            "--console" | "--run" => drop(rest.next()),
             "--capture" => {
                 let value = rest.next().and_then(|seconds| seconds.parse().ok());
                 seconds = Some(
@@ -127,6 +131,7 @@ Arguments:
 
 Options:
   --capture SECONDS       boot headless for SECONDS and print the console
+  --run SCRIPT            drive mlsh with SCRIPT, as `model 32;replay lru`
   --debug                 halt at reset with a gdb stub on :1234
   -h, --help              print this help
   -V, --version           print version

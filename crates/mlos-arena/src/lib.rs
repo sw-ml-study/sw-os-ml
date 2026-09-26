@@ -77,15 +77,24 @@ pub struct Occupancy {
 }
 
 /// A region that resident objects are placed in.
-pub struct Arena {
-    bytes: &'static mut [u8],
+///
+/// Borrowed rather than owned, and for a lifetime rather than `'static`,
+/// because two things need one: the kernel, over a static buffer, and
+/// `mlos-sim`, over a `Vec` the size of a budget. The simulator used to
+/// count bytes instead and evict until the count fitted, and the kernel
+/// and the simulator disagreed by thirteen reads on a next-use replay --
+/// every one of them an eviction the kernel made because the free bytes
+/// it had were not contiguous. A simulator that does not fragment is not
+/// simulating this arena.
+pub struct Arena<'a> {
+    bytes: &'a mut [u8],
     base: u64,
     free: [Hole; HOLES],
     holes: usize,
     used: usize,
 }
 
-impl Arena {
+impl<'a> Arena<'a> {
     /// What a placement is rounded up to, in bytes.
     ///
     /// Enough for anything a device will DMA into, and it keeps one
@@ -97,10 +106,10 @@ impl Arena {
     /// An arena over `bytes`, entirely free.
     ///
     /// Safe, which is worth saying because it looks like it should not
-    /// be. The address it hands out is the address of memory it holds a
-    /// `&'static mut` to, so it cannot name anything it does not own.
+    /// be. The address it hands out is the address of memory it holds an
+    /// exclusive borrow of, so it cannot name anything it does not own.
     #[must_use]
-    pub fn new(bytes: &'static mut [u8]) -> Self {
+    pub fn new(bytes: &'a mut [u8]) -> Self {
         let (base, len) = (bytes.as_ptr() as u64, bytes.len());
         let mut free = [Hole::default(); HOLES];
         free[0] = Hole { at: 0, len };

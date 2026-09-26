@@ -29,6 +29,7 @@ mod run;
 mod view;
 
 use mlos_abi::ObjectId;
+use mlos_arena::Arena;
 use mlos_objtab::ObjectMeta;
 use mlos_policy::Policy;
 use mlos_trace::Trace;
@@ -50,15 +51,20 @@ pub trait Model {
 }
 
 /// Replays `trace` against one policy under `budget` bytes.
+///
+/// The budget is a real arena -- `mlos-arena`, the crate the kernel
+/// places into -- over a buffer this long, so what fragmentation costs
+/// each policy is counted. See `resident.rs` for the thirteen reads that
+/// made it one.
 pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Policy) -> Outcome {
     let seen = Foresight::read(trace.accesses);
     let run = Run {
         model,
-        budget,
         policy,
         seen: &seen,
     };
-    let mut resident = Resident::default();
+    let mut bytes = vec![0u8; usize::try_from(budget).expect("a budget that fits in memory")];
+    let mut resident = Resident::new(Arena::new(&mut bytes));
     let mut outcome = Outcome::default();
     for (at, access) in trace.accesses.iter().enumerate() {
         run.step(&mut resident, &mut outcome, access.object, at as u32 + 1);

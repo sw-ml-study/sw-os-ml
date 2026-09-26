@@ -10,13 +10,15 @@ use core::{fmt::Write, sync::atomic::Ordering};
 use crate::Facts;
 
 /// Runs one line.
+///
+/// The "needs a model" guard is a match arm rather than an early return
+/// because it is a dispatch decision like the others, and it belongs
+/// where they are.
 pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
     let (verb, args) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
-    if NEEDS_MODEL.contains(&verb) && mlos_lab::with(|_| ()).is_none() {
-        let _ = writeln!(out, "  no model registered (try `model`)");
-        return;
-    }
+    let ready = !NEEDS_MODEL.contains(&verb) || mlos_lab::with(|_| ()).is_some();
     match verb {
+        _ if !ready => _ = writeln!(out, "  no model registered (try `model`)"),
         "" => {}
         "help" | "?" => _ = out.write_str(HELP),
         "mem" => mem(out, facts),
@@ -26,6 +28,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "faults" => crate::report::faults(out),
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
         "stream" => crate::objects::stream(out, args),
+        "replay" => crate::objects::replay(out, args),
         "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::acquire::get(out, args),
@@ -46,8 +49,8 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 ///
 /// A constant, so the check is one line in `dispatch` and the apology
 /// lives in one place -- three copies of it is three places to change.
-const NEEDS_MODEL: [&str; 9] = [
-    "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream",
+const NEEDS_MODEL: [&str; 10] = [
+    "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream", "replay",
 ];
 
 /// What `help` prints.
@@ -62,6 +65,7 @@ const HELP: &str = concat!(
     "layout        the running layout as JSON, for the visualizer\r\n",
     "trace [on|off] residency events as they happened, one per line\r\n",
     "stream [N]    declare the model's access order, or advance it by N\r\n",
+    "replay POLICY replay the recorded workload under one policy\r\n",
     "mem           physical memory map, and what is left\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",

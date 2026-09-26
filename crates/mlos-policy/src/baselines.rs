@@ -85,7 +85,10 @@ impl Policy for Oldest {
                 continue;
             };
             let tick = (self.tick)(&meta);
-            if oldest.is_none_or(|(_, held)| tick < held) {
+            // Ticks are unique -- one acquire per tick -- so the tie-break
+            // never fires here. It is written anyway, so that every policy
+            // in this crate answers independently of enumeration order.
+            if oldest.is_none_or(|(held_id, held)| tick < held || (tick == held && id < held_id)) {
                 oldest = Some((id, tick));
             }
         }

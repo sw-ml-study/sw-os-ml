@@ -84,6 +84,33 @@ pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
     }
 }
 
+/// Replays the recorded workload under one policy, and says what it cost.
+///
+/// The counts here and `mlos-sim`'s for the same trace and budget must
+/// match EXACTLY. They are integers decided by a sequence of decisions,
+/// so a disagreement of one means one of the two is wrong -- which is why
+/// there is no tolerance and no rounding.
+pub fn replay(out: &mut impl Write, args: &str) {
+    let name = args.split_whitespace().next().unwrap_or("demand");
+    if !mlos_lab::choose(name) {
+        let _ = writeln!(
+            out,
+            "  no such policy: {name} (demand, fifo, lru, next-use)"
+        );
+        return;
+    }
+    match mlos_lab::replay() {
+        Ok(done) => {
+            let _ = writeln!(
+                out,
+                "  {name}: {} reads, {} hits, {} bytes, {} evicted, {} refused",
+                done.reads, done.hits, done.bytes, done.evicted, done.refused
+            );
+        }
+        Err(why) => drop(writeln!(out, "  could not replay: {why:?}")),
+    }
+}
+
 /// Declares the model's sweep, or moves it on.
 ///
 /// `stream` declares; `stream N` advances by N. The verb exists so the

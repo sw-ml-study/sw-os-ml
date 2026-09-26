@@ -10,6 +10,7 @@
 #![no_std]
 
 pub mod disk;
+pub mod kv;
 pub mod model;
 pub mod tiers;
 

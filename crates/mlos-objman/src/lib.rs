@@ -13,14 +13,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-mod evict;
+pub(crate) mod evict;
 mod fault;
 mod lease;
 
 use mlos_abi::{Error, ObjectId, Result};
 use mlos_events::{Event, Ring};
 use mlos_metrics::Counters;
-use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table, Tier};
+use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table};
+use mlos_policy::Policy;
 use mlos_provider::Provider;
 use mlos_stream::Stream;
 
@@ -37,7 +38,7 @@ pub struct Manager<'a, const N: usize> {
     pub table: Table<N>,
     /// Where resident objects live. Public because how full it is, and
     /// how much would still fit, is a question anything may ask.
-    pub arena: Arena,
+    pub arena: Arena<'a>,
     providers: [Option<&'a dyn Provider>; MAX_PROVIDERS],
     /// The most recent fault, for a caller to report on.
     pub last_fault: Option<ModelFault>,
@@ -54,6 +55,12 @@ pub struct Manager<'a, const N: usize> {
     /// not the totals -- and the totals can be rebuilt from the sequence
     /// where the reverse is not true.
     pub events: Ring,
+    /// What decides a victim when the arena is full.
+    ///
+    /// `None` is demand paging, which is what MLOS did until M3 step 009:
+    /// a full arena refuses rather than choosing. Attaching one is what
+    /// makes the kernel able to act on the answer step 006 measured.
+    pub policy: Option<&'a dyn Policy>,
     /// What this session has declared it will acquire, and where it is.
     ///
     /// The thing that finally writes `ObjectMeta::next_use`. Empty until
@@ -61,7 +68,13 @@ pub struct Manager<'a, const N: usize> {
     /// for everything -- which is exactly what the table said before
     /// streams existed, so nothing changes for a workload that does not
     /// declare one.
-    pub stream: Stream,
+    pub stream: Stream<'a>,
+    /// How many objects have been thrown out.
+    ///
+    /// Counted here rather than derived, because a replay has to
+    /// attribute evictions to the acquire that caused them and the event
+    /// ring is a fixed size that a long run overflows.
+    pub evictions: u64,
     /// A monotonic count of acquires, for `ObjectMeta`'s two ticks.
     ///
     /// The kernel keeps them even though nothing in the kernel reads them
@@ -80,12 +93,14 @@ pub struct Manager<'a, const N: usize> {
 
 impl<'a, const N: usize> Manager<'a, N> {
     /// A manager over `arena`.
-    pub fn new(arena: Arena) -> Self {
+    pub fn new(arena: Arena<'a>) -> Self {
         Self {
             table: Table::EMPTY,
             arena,
             providers: [None; MAX_PROVIDERS],
             last_fault: None,
+            evictions: 0,
+            policy: None,
             stream: Stream::EMPTY,
             clock: 0,
             events: Ring::EMPTY,
@@ -105,16 +120,26 @@ impl<'a, const N: usize> Manager<'a, N> {
 
     /// Gets an object, faulting it in if it is not resident.
     ///
-    /// The fast path -- a resident object -- is a table lookup, a tier
-    /// comparison and a counter. Everything else is [`Self::service`].
+    /// The fast path -- a resident object -- is a table lookup and a
+    /// counter. Everything else is [`Self::service`].
+    ///
+    /// Residency is `resident_at`, not the tier. The tier says where an
+    /// object LIVES; only the address says whether it is here. The two
+    /// agreed for weight tiles, which start `Cold` and become `Warm` when
+    /// placed, and disagreed the moment a KV block arrived: KV is
+    /// produced by compute rather than storage, so it starts `Warm`, and
+    /// a never-fetched one read as a hit at address zero. Found by the
+    /// kernel and the simulator disagreeing about a replay they were
+    /// meant to agree on exactly.
+    ///
+    /// The stream is asked ONCE, and the answer written into whichever
+    /// path serves the acquire. A position stays true until the object is
+    /// acquired again, so nothing revisits it when the stream advances.
     pub fn acquire(&mut self, id: ObjectId, lease: Lease, by: SessionId) -> Result<Handle> {
         self.clock = self.clock.saturating_add(1);
-        // Asked once, here, and written into whichever path serves the
-        // acquire. A position stays true until the object is acquired
-        // again, so nothing has to revisit it when the stream advances.
         let wanted = self.stream.next_after(id);
         if let Some(meta) = self.table.get(id)
-            && meta.tier <= Tier::Warm
+            && meta.resident_at != 0
         {
             let (address, size) = (meta.resident_at, meta.size);
             let now = self.clock;
