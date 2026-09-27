@@ -1,6 +1,6 @@
 number = 11
 slug = "g4-report"
-status = "pending"
+status = "in-progress"
 description = """
 The measured comparison table. PoC gate G4.
 

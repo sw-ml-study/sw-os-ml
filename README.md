@@ -15,14 +15,14 @@ This is not a Linux or BSD derivative. It is a new kernel.
 
 Blog post: **[Made Visible: MLOS](https://blog.softwarewrighter.com/2026/09/13/made-visible-mlos/)** -- visualizing this OS.
 
-## Status: three of eight gates, and the fourth is measured
+## Status: four of eight gates, and the thesis has been tested
 
 | Gate | State |
 | --- | --- |
 | G1 boots to a shell | **done** |
 | G2 holds an object table | **done** |
 | G3 faults, and the fault carries meaning | **done** |
-| G4 known-next-use beats LRU | **in progress -- this is the one that matters.** Measured in simulation and in the kernel, identically; the real-shape trace and the report remain |
+| G4 known-next-use beats LRU | **done -- this is the one that matters.** 42--77% fewer provider reads than the better of FIFO and LRU on a real 1B model's shape, in the band where any policy can differ; kernel = simulator to the integer. [docs/g4-report.md](docs/g4-report.md) |
 | G5-G8 sharing, degradation, host resources, distribution | not started |
 | Architectures | **two**: aarch64 (Apple Silicon, native under HVF) and x86-64 (QEMU `microvm`, PVH). The same kernel source, the same shell, the same replay counts to the integer |
 
@@ -36,9 +36,9 @@ It existed for two milestones with nothing to write it. As of M3 a
 workload declares its access order to the kernel (`ml_stream_declare`),
 the kernel writes the field, and a policy acts on it when the arena is
 full -- in the simulator and, since step 009, in the kernel itself, with
-the two producing identical counts. What remains before gate G4 is met
-is a trace from a real model's shape and the report that states the
-comparison so it can be disputed.
+the two producing identical counts. Gate G4 is met on that basis:
+[docs/g4-report.md](docs/g4-report.md) states the trace, the budget, the
+policy rules and the commands, and what it does not show.
 
 [docs/status.md](docs/status.md) is the ground truth -- if it is not in
 that file, it does not work. It describes `main`; work in flight on
@@ -109,16 +109,20 @@ of the model, the sweep runs out, and MLOS refused rather than guessing
 what to throw away. As of M3 step 009 the same shell says `replay
 next-use` and the kernel chooses.
 
-**The claim the project rests on has now been measured, in simulation.**
-Replaying one workload against four residency policies under identical
-budgets, a policy told when each object is next wanted does **32% to 71%
-fewer provider reads** than the best of demand paging, FIFO and LRU --
-across twenty-eight configurations, never losing.
-
-That is the encouraging half. The other half: the simulator SUPPLIES that
-knowledge by holding the whole trace, and nothing in the kernel can yet
-be told the future at all. [docs/m3-verdict.md](docs/m3-verdict.md) has
-the table and an honest account of what it does not settle.
+**The claim the project rests on has been measured.** On a decode loop
+shaped by a real 1.08-billion-parameter Llama, a policy told when each
+object is next wanted does **42% to 77% fewer provider reads** than the
+better of FIFO and LRU, and moves a third to a tenth of the bytes, in
+the band of budgets where any policy can differ. Below the band every
+baseline access misses and nothing helps much; above it everything fits
+and nothing differs. Where the band sits is a property of the model and
+the serving regime -- a small grouped-query model at short context is a
+pure weight sweep -- and that is the milestone's second finding. The
+kernel is told the future through `ml_stream_declare`, and it produces
+the same integers as the simulator on both architectures.
+[docs/g4-report.md](docs/g4-report.md) has the tables, the method, and
+what it does not show: the traces are derived from a real checkpoint,
+not recorded from an inference engine.
 
 ## Documents
 
@@ -132,7 +136,8 @@ the table and an honest account of what it does not settle.
 | [docs/layout-handoff.md](docs/layout-handoff.md) | What MLOS emits for the cross-repo visualization, and what it needs back |
 | [docs/external-asks.md](docs/external-asks.md) | What MLOS needs from emufpga, sw-mlpl, demo-extensions, sw-tos and demo-memory -- and what it does without each |
 | [docs/clustering.md](docs/clustering.md) | How MLOS becomes many instances: transports, homogeneous and heterogeneous clusters, and what each measures |
-| [docs/m3-verdict.md](docs/m3-verdict.md) | Does knowing the future beat guessing? The measured comparison, and what it does not settle |
+| [docs/g4-report.md](docs/g4-report.md) | **Gate G4.** Known-next-use against demand, FIFO and LRU on a real model's shape: the tables, the band, PRD Q1 and Q2, how to reproduce it, what it does not show |
+| [docs/m3-verdict.md](docs/m3-verdict.md) | The step 006 verdict on the synthetic model, kept as the record of what was measured before the kernel could run any of it |
 | docs/research.txt | Raw source material the architecture was distilled from |
 
 ## Try it
@@ -223,30 +228,21 @@ agent may be working at once; the plan is what keeps them from colliding.
 
 **Recent:**
 
-- M3 steps 006--009 (saga [`mlos-nextuse`](docs/plan.md#saga-mlos-nextuse-m3)):
-  the simulated verdict (32--71% fewer provider reads than the best
-  baseline, [docs/m3-verdict.md](docs/m3-verdict.md)); `ml_stream_declare`
-  so the kernel writes `next_use`; a real allocator that can evict; and
-  the same policy crates running **in the kernel** under TCG, matching
-  the simulator to the integer. Finding the last thirteen reads of
-  disagreement turned up four real bugs. Merged as PR #2.
+- **M3 is complete and gate G4 is met** (saga
+  [`mlos-nextuse`](docs/plan.md#saga-mlos-nextuse-m3), eleven steps).
+  The simulated verdict; `ml_stream_declare` so the kernel writes
+  `next_use`; a real allocator that can evict; the same policy crates in
+  the kernel matching the simulator to the integer (PR #2); a trace
+  shaped by a real 1B-parameter checkpoint through emufpga's importer
+  (PR #4); and the report, [docs/g4-report.md](docs/g4-report.md).
 - Saga [`mlos-x86-64`](docs/plan.md#saga-mlos-x86-64-portability-no-gate),
   nine steps, done and merged as PR #3: PVH boot, a 16550 console, LAPIC
   and IOAPIC, a TSC clock, virtio-blk with no new driver code, and the
   M3 replay producing the same four count lines on x86-64 as on aarch64
   and in the simulator. It ran in its own lane (`lanes/x86/`) alongside
-  M3 without either touching the other's saga files.
+  M3.
 
-**Current, in parallel:**
-
-- M3 step 010 `generative-trace`, on branch `feat/generative-trace`: a
-  decode-loop trace shaped by a real checkpoint. emufpga's importer now
-  writes a model's tensor inventory and rotating boundary without
-  touching its weights, and the first one is a 24-layer, 1.08-billion-
-  parameter Llama (MiniCPM5-1B). The measurement on that shape is what
-  the step reports.
-- M3 step 011 `g4-report` follows: the table, the trace, the budget and
-  the method, written so it can be disputed. Gate G4.
+**Current:** nothing in flight. The next two sagas can run in parallel.
 
 **Planned**, in order, from [docs/plan.md](docs/plan.md):
 
@@ -256,10 +252,12 @@ agent may be working at once; the plan is what keeps them from colliding.
   Restores what the deleted CI runner uniquely offered: a machine that is
   not this one.
 - M4 `mlos-parameter-major` (gate G5): one provider read serves N
-  sessions. M5 `mlos-degradation` (G6): contracts, admission, the
-  degradation ladder. M6 onward: host resources over narrow virtio
-  interfaces, then distribution, heterogeneity, global scheduling, and
-  the ML-MMU last.
+  sessions. It inherits two findings from G4: state budgets as a fraction
+  of the per-token working set and report where the band is, and page
+  the KV cache rather than one block per token.
+- M5 `mlos-degradation` (G6): contracts, admission, the degradation
+  ladder. M6 onward: host resources over narrow virtio interfaces, then
+  distribution, heterogeneity, global scheduling, and the ML-MMU last.
 
 ## Development
 

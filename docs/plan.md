@@ -17,7 +17,7 @@ on the critical path needs it.
   M0  foundations        docs + saga discipline            <- DONE
   M1  it boots           aarch64 under QEMU/HVF, console, timer
   M2  it holds objects   object table, providers, model fault
-  M3  it knows better    next_use beats LRU on a real trace       (G4)
+  M3  it knows better    next_use beats LRU on a real trace       (G4)  <- DONE
   --  it is portable     x86-64 HAL; both guests on Mac and Linux  (no gate)
   M4  it shares          parameter-major scheduling               (G5)
   M5  it degrades        sessions, contracts, admission, ladder   (G6)
@@ -126,6 +126,16 @@ Scope:
 algorithm is normally unimplementable; a dense transformer hands you
 the future. If the separation is not there, stop and reconsider before
 M4.
+
+**Result, 2026-09-27: G4 met.** [g4-report.md](g4-report.md). On a
+1.08B-parameter Llama's shape, 42--77% fewer provider reads than the
+better baseline in the band where the budget is near the per-token
+working set, and no difference outside it; the kernel reproduces the
+simulator to the integer on aarch64 and x86-64. The traces are derived
+from a real checkpoint's inventory, not recorded from inference, and the
+report says so. Two findings feed forward: state budgets as a fraction of
+the working set and report the band, and paged KV blocks are the
+granularity M4 and M5 inherit.
 
 ### M4 -- It shares (PoC gate G5)
 
@@ -345,10 +355,14 @@ worth doing, and finding that out early is the point.
 9. `in-kernel` -- same policy crates in-kernel under TCG; the numbers
    match the simulator exactly, not approximately.
 10. `generative-trace` -- realism: real tensor sizes and the real
-    consumption order, from emufpga's `.spm` sidecar. **Blocked on a real
-    checkpoint** ([external-asks.md](external-asks.md) emufpga A1).
+    consumption order, from emufpga's `.spm` sidecar. The blocker
+    ([external-asks.md](external-asks.md) emufpga A1) was cleared by a
+    checkpoint already on the machine and a header-only importer mode.
+    **Done.**
 11. `g4-report` -- the measured comparison table, at more than one
-    budget, written so it can be disputed. Gate G4.
+    budget, written so it can be disputed. Gate G4. **Done; met.**
+
+Saga complete 2026-09-27, eleven steps.
 
 Three things this saga must not do, restated from its own plan because
 they are the ways it would fail without noticing: do not make the
