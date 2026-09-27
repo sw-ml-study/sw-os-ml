@@ -3,22 +3,29 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-26, during saga `mlos-nextuse`, after step 009.
+Last updated: 2026-09-27, at the end of saga `mlos-nextuse` (M3).
 
 ---
 
 ## Where we are
 
-**M1 and M2 complete, M3 nine steps of eleven. Three of eight gates
-met; the fourth is measured and awaiting its report.**
+**M1, M2 and M3 complete, and the kernel boots on two architectures.
+Four of eight gates met.** Gate G4 is [g4-report.md](g4-report.md):
+known-next-use does 42--77% fewer provider reads than the better baseline
+on a real 1B model's shape in the band where any policy can differ, and
+the kernel and the simulator agree to the integer.
 
-The kernel boots to a shell as a native aarch64 guest, holds an object
-table, services a model fault from a real block device, and -- as of
-step 009 -- chooses what to evict with the same policy crates the
-simulator runs, producing the same counts to the integer. What it does
-not yet have is the trace from a real model's shape (step 010) and the
-report that states the comparison so it can be disputed (step 011).
-That is where the thesis in [PRD.md](PRD.md) is actually tested.
+The kernel boots to a shell as a native aarch64 guest and as an x86-64
+guest, holds an object table, services a model fault from a real block
+device, and chooses what to evict with the same policy crates the
+simulator runs, producing the same counts to the integer. The comparison
+has been run on a trace shaped by a real checkpoint, a 1.08-billion-
+parameter Llama, and it separates where the budget is near the model's
+per-token working set and collapses where it is not. That is where the
+thesis in [PRD.md](PRD.md) was tested, and it held -- with the caveat,
+stated in the report rather than buried, that the traces are derived from
+a real checkpoint's inventory and the forward pass, not recorded from an
+inference engine.
 
 ## PoC gates
 
@@ -29,7 +36,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | G1 -- it boots, reaches a shell | **done** | M1 |
 | G2 -- it holds an object table | **done** | M2 |
 | G3 -- it faults | **done** | M2 |
-| G4 -- known-next-use beats LRU | **in progress** -- measured in simulation and in the kernel, identically; real-shape trace and report pending | M3 |
+| G4 -- known-next-use beats LRU | **done** -- [g4-report.md](g4-report.md). 42--77% fewer reads in the band on a real model's shape, 37--71% on the synthetic one; kernel = simulator to the integer on both architectures. Traces derived, not recorded, and the report says so | M3 |
 | G5 -- one read serves N sessions | not started | M4 |
 | G6 -- degrades instead of dying | not started | M5 |
 | G7 -- controls a real host resource | not started | M6 |
@@ -42,7 +49,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M0 foundations | **complete** -- saga `ml-os-foundations`, 7 steps |
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
-| M3 it knows better | **9 of 11 steps** -- saga `mlos-nextuse`. [The verdict](m3-verdict.md) is in: known-next-use separates clearly, 32--71% fewer provider reads. The same numbers now come out of the kernel: four policies replayed in-kernel under TCG match the simulator to the integer. Gate G4 waits on the real-shape trace (step 010) and the report (step 011) |
+| M3 it knows better | **complete** -- saga `mlos-nextuse`, 11 steps. Gate G4 met: [g4-report.md](g4-report.md). Known-next-use separates in the band where the budget is near the per-token working set (42--77% on a real 1B model, 37--71% synthetic) and nowhere else; the band's location is a property of the model and the serving regime, which is the milestone's second finding |
 | M4 it shares | not started |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
@@ -86,7 +93,7 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 30 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 32 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
@@ -96,10 +103,14 @@ policy runs only when `replay` asks it to: nothing declares a stream or
 chooses a policy at boot, because nothing but the replay is a workload
 yet.
 
-The workload with reuse in it (step 004) is synthetic in shape. The
-trace from a real model's `.spm` sidecar is step 010, and until it
-exists the 32--71% is a number about a plausible workload rather than a
-measured one.
+The trace from a real model's shape (step 010) is a model OF a decode
+loop over real tensors, not a recording of one: the tensor inventory and
+the rotating boundary come from the checkpoint through emufpga's
+importer, and the loop that reads them follows from the architecture.
+No trace here was recorded from running inference, because nothing here
+runs inference. What the kernel replays in-kernel is still the synthetic
+8x16 model: the guest parses a trace into static arrays and a real
+shape's trace is half a million accesses.
 
 The in-kernel comparison runs on a 2x16 replay trace (4,448 accesses),
 not the verdict's 4x40. The guest parses the whole trace into static
@@ -538,28 +549,17 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-Saga `mlos-nextuse` is open, nine steps, plan in
-[plan.md](plan.md#saga-mlos-nextuse-m3). M3 is the milestone the project
-exists for: a transformer hands the operating system its own future, and
-the claim is that an OS which accepts the gift beats one that guesses.
-Everything built so far is mechanism -- a table, a fault, three tiers, two
-emitters, an event stream. Nothing has decided anything yet.
+Saga `mlos-nextuse` (M3) is complete and gate G4 is met;
+[g4-report.md](g4-report.md) is the artifact. Two things follow from it
+into the plan: measure future gates at budgets stated as a fraction of
+the per-token working set and report where the band is, and let M4 and
+M5 inherit paged KV blocks (`Context::tokens_per_block`) rather than one
+block per token.
 
-Step 006 `verdict`: stop and look at the table. Four policies, several
-budgets, several session counts, and a decision about whether the rest of
-the saga is worth doing. The plan commits to the other outcome too -- if
-the separation is not there, say so and stop before M4.
-
-The saga was reordered on 2026-09-16 to reach a number sooner. Steps 002
-to 005 build the harness, the baselines, a workload with real reuse in
-it, and the known-next-use policy; step 006 stops and looks at the
-table. None of those four needs an emulator or anything from another
-repository. Everything after step 006 is work that is only worth doing
-if the answer is yes.
-
-The emufpga blocker ([external-asks.md](external-asks.md) A1) now sits at
-step 010, where it belongs: a real checkpoint buys REALISM -- real tensor
-sizes and the real consumption order -- and what the measurement needs
-first is FAIRNESS, which the synthetic model can express on its own.
-
-Install QEMU before starting it.
+Next, per [plan.md](plan.md): saga `mlos-two-hosts` (a Linux machine
+beside the Mac, both guests on both, the whole gate on both) can run
+alongside M4 `mlos-parameter-major` (gate G5: one provider read serves N
+sessions). Either starts with `agentrail init` from its section of the
+plan. The gap G4 leaves open -- a trace *recorded* from a real inference
+engine with MLOS under it -- is M4-or-later work and is listed in the
+report's section 5.

@@ -1,0 +1,11 @@
+{
+  "task_type": "report",
+  "state": {
+    "number": 11,
+    "step": "g4-report"
+  },
+  "action": "Generated every number from one test that prints markdown, and pasted rather than typed. Reported the collapse outside the band and the model property behind it as findings rather than omitting them. Read the gate's wording and stated the derived-versus-recorded gap first. Checked the edit script's exit status after last step's silent failure and found the header edits it had dropped.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-27T13:28:38"
+}
