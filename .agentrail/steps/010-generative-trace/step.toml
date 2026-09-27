@@ -1,6 +1,6 @@
 number = 10
 slug = "generative-trace"
-status = "pending"
+status = "in-progress"
 description = """
 A trace with the reuse structure a decode loop actually has.
 

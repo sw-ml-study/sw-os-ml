@@ -51,12 +51,16 @@
 #![forbid(unsafe_code)]
 
 mod model;
+mod real;
+mod shape;
 
 use mlos_objtab::SessionId;
 use mlos_synth::{LAYERS, TILES, model as weights};
 use mlos_trace::{Access, Header};
 
 pub use mlos_synth::kv::{BYTES as KV_BYTES, block, meta as kv_meta};
+pub use real::{Context, MINICPM, MODEL_ID, Real};
+pub use shape::{Shape, Stream};
 
 /// What to call this workload in a trace header.
 pub const MODEL: &str = "synth-8x16+kv";

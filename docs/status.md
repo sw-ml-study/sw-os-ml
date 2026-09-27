@@ -420,6 +420,82 @@ teaching `probe` to tell two block devices apart, in service of a layout
 decision that is free. `/chosen/bootargs` carries the script in
 (`mlsh.run=model 32;replay lru`) and the console carries the counts out.
 
+## A real model's shape
+
+Step 010. The tensor inventory of a real checkpoint --
+`ewinregirgojr/MiniCPM5-1B-Agentic-Tooluse-Merged-FP16`, a 24-layer
+Llama, 1,080,632,832 parameters, 219 tensors, stored F16 -- read from
+its safetensors headers by emufpga's importer and written as a sidecar
+(`emufpga import --sidecar-only`): 169 rotating streams swept once per
+token (seven matrices per layer and the untied 200M-weight output head),
+50 resident (the embedding and the norms). The order file that produced
+it is the Llama forward pass, and emufpga's `spm-order` refuses it if it
+disagrees with the checkpoint. Copies are in
+`crates/mlos-workload/shapes/`; the source of truth is emufpga's
+`layouts/` (external ask A1, delivered). No weight was read by anything.
+
+`mlos-workload::Real` runs the same decode loop over that shape as
+`Decode` runs over the synthetic model: per token, the rotating streams
+in declared order, the session's KV blocks for the layer between the
+value projection and the output projection, the resident streams read
+once at the start. Weights are 2,061 MiB, of which 1,678 MiB are swept
+per token; one token's KV is 24 KiB across all layers, read off the key
+and value projections' widths.
+
+**At short contexts this shape is a weight sweep, and the comparison
+collapses.** Four sessions, forty tokens, no prompt: 54,150 accesses,
+3.8 MB of cache. FIFO and LRU tie exactly at every budget -- a pure
+cycle cannot distinguish them -- and next-use wins by the fraction of
+the sweep the budget holds:
+
+| budget | demand | FIFO | LRU | next-use | vs best baseline |
+| --- | --- | --- | --- | --- | --- |
+| 512 MiB | 436+43,679 | 54,150 | 54,150 | 53,259 | +2% |
+| 1024 MiB | 244+43,083 | 54,150 | 54,150 | 49,555 | +9% |
+| 1536 MiB | 2,605+1,400 | 54,150 | 54,150 | 44,309 | +19% |
+| 1792 MiB | 2,618+100 | 2,619 | 2,619 | 2,619 | +0% |
+
+That is the degenerate case the M3 plan said not to construct, arriving
+from a real model. It is a property of the model, not of the trace:
+MiniCPM's two KV heads make its cache tiny beside its weights, and the
+cache only rivals the sweep at tens of thousands of resident tokens.
+
+**With context, the band appears.** Eight sessions arriving with 2,048
+cached tokens each, forty decode steps, the cache paged sixteen tokens
+to a block: 589,694 accesses, 389 MiB of cache at peak. Below 1.7 GiB
+the per-token working set still exceeds the budget and every baseline
+access misses; between 1.7 and 2.1 GiB LRU beats FIFO -- recency has
+something to be right about, which is the fairness the plan asked for
+-- and next-use beats LRU:
+
+| budget | demand | FIFO | LRU | next-use | vs best baseline |
+| --- | --- | --- | --- | --- | --- |
+| 1536 MiB | 3,067+548,834 | 589,694 | 589,694 | 571,925 | +4% |
+| 1792 MiB | 7,472+497,034 | 521,669 | 512,427 | **301,800** | **+42%** |
+| 2048 MiB | 23,856+47,324 | 124,969 | 124,227 | **29,639** | **+77%** |
+| 2560 MiB | 25,155+0 | 25,155 | 25,155 | 25,155 | +0% |
+
+The same shape of result as the synthetic verdict, at the same place:
+where the budget is a large fraction of the working set. Outside that
+band no policy matters, and saying so is part of the measurement.
+
+**Trace size, and whether anyone will wait.** The decode-only trace
+replays in 2 to 4 seconds per budget for all four policies. The
+long-context trace takes 90 to 380 seconds per budget -- ten minutes for
+the table -- because a victim scan is linear in the resident set and the
+resident set is twenty-five thousand KV blocks. Finding an object on a
+hit was linear too until this step; `mlos-sim` now indexes its resident
+set, which is bookkeeping the kernel's hashed table never paid for and
+the simulator had no business charging. The scan is the policy's cost
+and stays. `cargo test -p mlos-workload --test real -- --ignored
+--nocapture` prints both tables with timings.
+
+Not done here: replaying this trace in the kernel. The guest holds a
+trace in static arrays sized for the synthetic workload, and a real
+shape's weights are two gigabytes against a 32 KiB arena; the in-kernel
+replay stays on the synthetic model, where it proves the simulator
+faithful, and the simulator carries the real shape.
+
 ## Known gaps
 
 Things that are wrong or missing on purpose, recorded so they are not
