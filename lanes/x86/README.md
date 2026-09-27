@@ -1,5 +1,9 @@
 # x86-64 lane
 
+**Done and archived** (2026-09-27): saga `mlos-x86-64`, all nine steps, is
+in `.agentrail-archive/mlos-x86-64-20260927T000059/` here. What the x86-64
+guest does is in [docs/status-x86-64.md](../../docs/status-x86-64.md).
+
 The agentrail saga for `mlos-x86-64` (docs/plan.md) lives here, not in
 the root `.agentrail/`, so it can run alongside the aarch64 lane's active
 saga without either branch touching the other's saga files. Drive it with
