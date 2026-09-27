@@ -24,6 +24,7 @@ Blog post: **[Made Visible: MLOS](https://blog.softwarewrighter.com/2026/09/13/m
 | G3 faults, and the fault carries meaning | **done** |
 | G4 known-next-use beats LRU | **in progress -- this is the one that matters.** Measured in simulation and in the kernel, identically; the real-shape trace and the report remain |
 | G5-G8 sharing, degradation, host resources, distribution | not started |
+| Architectures | **two**: aarch64 (Apple Silicon, native under HVF) and x86-64 (QEMU `microvm`, PVH). The same kernel source, the same shell, the same replay counts to the integer |
 
 The three that are met are all *mechanism*. An object table with tiers
 and a fault handler is, to a fair sceptic, a cache with extra steps --
@@ -42,6 +43,37 @@ comparison so it can be disputed.
 [docs/status.md](docs/status.md) is the ground truth -- if it is not in
 that file, it does not work. It describes `main`; work in flight on
 branches is listed under [Recent, current and planned](#recent-current-and-planned).
+
+## See it run
+
+Two architectures, one kernel. Both recordings are VHS tapes under
+`demos/`, rendered to WebP under `videos/`; the commands typed are the
+ones under [Try it](#try-it).
+
+### aarch64 -- Apple Silicon, QEMU/HVF
+
+![MLOS on aarch64: boot, register the model, a fault then a hit, and the M3 replay under LRU and next-use](videos/aarch64.webp)
+
+A native guest on the M-series cores. `model 32` registers the synthetic
+transformer against a 32 KiB arena, a quarter of the model. The first
+`get 3 7` faults the tile in off virtio-blk; the second is a hit and
+costs nothing. Then `replay lru` and `replay next-use` run the M3
+workload **in the kernel** under two eviction policies -- the same policy
+crates the simulator runs, producing the same integers -- and next-use
+reads less. Recorded by `demos/aarch64.tape`.
+
+### x86-64 -- QEMU `microvm`, TCG
+
+![MLOS on x86-64: boot via PVH, the machine as found, the model from virtio-blk, a timed sweep](videos/x86-64.webp)
+
+The same source, booted through PVH into 32-bit protected mode and
+brought up to long mode by `mlos-hal-x86-64`: COM1, LAPIC and IOAPIC, a
+TSC clock, and the identical virtio-blk driver with zero new lines.
+`dev` and `mem` show what the PVH loader handed over, `model 32` faults
+the model in over virtio-mmio with its provenance nibble, `sweep` is
+timed off the TSC. Recorded by `demos/x86-64.tape` on an x86-64 Linux
+host; on a Mac the same tape runs under TCG. Details in
+[docs/status-x86-64.md](docs/status-x86-64.md).
 
 ## What has been measured
 
@@ -110,9 +142,12 @@ cargo run -p mlos-cli -- run
 ```
 
 `doctor` reports what is installed and what is missing. `run` builds the
-kernel, turns it into a bootable arm64 image and boots it under QEMU with
-the console on your terminal -- `mlsh` is on the other end. Quit with
-`Ctrl-A x`; type `help` inside for what it can tell you.
+kernel for the host's architecture -- aarch64 on Apple Silicon, x86-64
+on a Linux PC -- and boots it under QEMU with the console on your
+terminal; `mlsh` is on the other end. `mlos --arch x86-64 run` picks the
+other one explicitly, under TCG where the host cannot accelerate it.
+Quit with `Ctrl-A x` (`Ctrl-D` on x86-64); type `help` inside for what it
+can tell you.
 
 Inside, `model 8` registers a synthetic transformer against an 8 KiB
 arena, `get 3 7` acquires one weight tile, `sweep` walks the whole model
@@ -145,8 +180,8 @@ the vocabulary and the open questions are in
 
 ## How this uses Apple Silicon
 
-As a **host**, and only as a host. MLOS is an aarch64 kernel, so on an
-M-series Mac it runs as a native guest: QEMU with the `hvf` accelerator
+As a **host**, and only as a host. MLOS boots on two architectures, and
+on an M-series Mac the aarch64 build runs as a native guest: QEMU with the `hvf` accelerator
 hands the guest's ARM instructions to Hypervisor.framework, which runs
 them on the real cores. Nothing translates an instruction set.
 
@@ -160,8 +195,8 @@ What MLOS *drives* is QEMU's virtual hardware, not Apple's: a GICv3
 interrupt controller (Apple Silicon has an AIC, which MLOS never sees), a
 PL011 or virtio console, and virtio-mmio block devices. That is the
 point -- the kernel is portable to any aarch64 machine QEMU can present,
-and every crate above the HAL is built for `x86_64-unknown-none` on
-every gate run. Booting it is the `mlos-x86-64` saga, below.
+and the x86-64 build boots under QEMU `microvm` -- on this Mac under
+TCG, on a Linux PC under KVM once saga `mlos-two-hosts` lands.
 
 **The Apple GPU is not used at all.** No Metal, no ANE, nothing. It is
 reached at M6, and not by MLOS driving it: the host does, behind a narrow
@@ -183,39 +218,38 @@ per [AGENTS.md](AGENTS.md)), `main` is the integration point, and
 [docs/status.md](docs/status.md) describes `main` only. More than one
 agent may be working at once; the plan is what keeps them from colliding.
 
-**Recent** (saga [`mlos-nextuse`, M3](docs/plan.md#saga-mlos-nextuse-m3)):
+**Recent:**
 
-- Step 006, the verdict: in simulation, a policy told when each object is
-  next wanted does 32--71% fewer provider reads than the best baseline,
-  across twenty-eight configurations, never losing.
-  [docs/m3-verdict.md](docs/m3-verdict.md).
-- Step 007: `ml_stream_declare` / `ml_stream_advance`. The kernel writes
-  `next_use` for the first time.
-- Step 008: the arena stops being a bump allocator. First fit, coalescing
-  free list, real eviction.
-- Step 009: the same policy crates run in the kernel under QEMU/TCG and
-  produce the same integers as the simulator, asserted with no tolerance.
-  Finding the last thirteen reads of disagreement turned up four real bugs.
-  **In review as [PR #2](https://github.com/sw-ml-study/sw-os-ml/pull/2)**
-  on branch `pr/in-kernel`; `main` does not have it yet.
+- M3 steps 006--009 (saga [`mlos-nextuse`](docs/plan.md#saga-mlos-nextuse-m3)):
+  the simulated verdict (32--71% fewer provider reads than the best
+  baseline, [docs/m3-verdict.md](docs/m3-verdict.md)); `ml_stream_declare`
+  so the kernel writes `next_use`; a real allocator that can evict; and
+  the same policy crates running **in the kernel** under TCG, matching
+  the simulator to the integer. Finding the last thirteen reads of
+  disagreement turned up four real bugs. Merged as PR #2.
+- Saga [`mlos-x86-64`](docs/plan.md#saga-mlos-x86-64-portability-no-gate),
+  nine steps, done and merged as PR #3: PVH boot, a 16550 console, LAPIC
+  and IOAPIC, a TSC clock, virtio-blk with no new driver code, and the
+  M3 replay producing the same four count lines on x86-64 as on aarch64
+  and in the simulator. It ran in its own lane (`lanes/x86/`) alongside
+  M3 without either touching the other's saga files.
 
 **Current, in parallel:**
 
-- M3 steps 010 (`generative-trace`: a trace shaped by a real model's `.spm`
-  sidecar; blocked on a real checkpoint) and 011 (`g4-report`: the
-  measured table, written so it can be disputed -- gate G4). These follow
-  PR #2.
-- Saga [`mlos-x86-64`](docs/plan.md#saga-mlos-x86-64-portability-no-gate):
-  the x86-64 HAL, so the same kernel boots under QEMU `microvm` via PVH,
-  reaches the shell over a 16550, and replays the M3 comparison to the same
-  integers on a second architecture. Independent of M3's remaining steps
-  and running alongside them.
+- M3 step 010 `generative-trace`, on branch `feat/generative-trace`: a
+  decode-loop trace shaped by a real checkpoint. emufpga's importer now
+  writes a model's tensor inventory and rotating boundary without
+  touching its weights, and the first one is a 24-layer, 1.08-billion-
+  parameter Llama (MiniCPM5-1B). The measurement on that shape is what
+  the step reports.
+- M3 step 011 `g4-report` follows: the table, the trace, the budget and
+  the method, written so it can be disputed. Gate G4.
 
 **Planned**, in order, from [docs/plan.md](docs/plan.md):
 
 - Saga [`mlos-two-hosts`](docs/plan.md#saga-mlos-two-hosts-portability-no-gate):
-  a Linux x86-64 machine beside the Mac, each booting both guests (HVF and
-  TCG on the Mac; KVM and TCG on Linux) and running the whole gate.
+  a Linux x86-64 machine beside the Mac, each booting both guests (HVF
+  and TCG on the Mac; KVM and TCG on Linux) and running the whole gate.
   Restores what the deleted CI runner uniquely offered: a machine that is
   not this one.
 - M4 `mlos-parameter-major` (gate G5): one provider read serves N
