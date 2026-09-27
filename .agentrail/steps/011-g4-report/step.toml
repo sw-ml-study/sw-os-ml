@@ -1,6 +1,6 @@
 number = 11
 slug = "g4-report"
-status = "in-progress"
+status = "completed"
 description = """
 The measured comparison table. PoC gate G4.
 
@@ -8,5 +8,6 @@ The artifact this milestone exis..."""
 role = "meta"
 context_files = []
 created_at = "2026-09-15T20:53:24"
+completed_at = "2026-09-27T13:28:38"
 task_type = "report"
-commits = []
+commits = ["7a9788e3f0d57826e31f080be1ea4bc96d449e13"]
