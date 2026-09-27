@@ -56,3 +56,7 @@ vm/
 # videos/*.webp are tracked demos; the GIF VHS renders on the way to one
 # is not (demos/x86-64.tape converts, then deletes it).
 videos/*.gif
+
+# Raw VHS output on the way to pages/*.gif; scripts/render-demos.sh deletes it.
+videos/*.gif
+videos/*.txt

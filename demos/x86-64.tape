@@ -6,11 +6,9 @@
 # `--arch x86-64` is explicit, so the recording is the same on an Apple
 # Silicon Mac (where plain `mlos run` means aarch64) as on a Linux PC.
 #
-# VHS writes GIF, not WebP, so render and convert:
-#
-#     vhs demos/x86-64.tape
-#     gif2webp -min_size -mixed videos/x86-64.gif -o videos/x86-64.webp
-#     rm videos/x86-64.gif
+# Rendered by scripts/render-demos.sh: VHS writes the raw GIF here and
+# gifsicle optimises it into pages/x86-64.gif, which the README shows from
+# the published site. videos/x86-64.webp is the earlier conversion:
 #
 # Measured, as tour.tape measured: the WebP is 144 KB, the raw VHS GIF
 # 339 KB, a lossless WebP 260 KB, and a gifsicle-optimised GIF 83 KB --

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLOS, running</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1a1a1a; --bg: #fafafa; --muted: #666; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e8e8; --bg: #111; --muted: #999; } }
+  body { margin: 0 auto; max-width: 900px; padding: 24px 16px; font: 16px/1.5 -apple-system, system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+  p.lede, p.cap { color: var(--muted); margin: 0 0 12px; }
+  img { width: 100%; height: auto; border-radius: 6px; display: block; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<h1>MLOS, running</h1>
+<p class="lede">An operating system that treats machine-learning state as its primary virtualized resource, booting as a guest on two architectures. Recordings from <a href="https://github.com/sw-ml-study/sw-os-ml">sw-ml-study/sw-os-ml</a>; the tapes that made them are under <code>demos/</code>.</p>
+
+<h2>aarch64 &mdash; Apple Silicon, QEMU/HVF</h2>
+<p class="cap">Register the synthetic model against a 32 KiB arena, fault a tile in and hit it the second time, then replay the M3 workload in the kernel under LRU and next-use.</p>
+<img src="aarch64.gif" alt="MLOS on aarch64: boot, model 32, get 3 7 twice, replay lru, replay next-use, arena">
+
+<h2>x86-64 &mdash; QEMU microvm, PVH</h2>
+<p class="cap">The same kernel source booted through PVH into long mode: the machine as the loader handed it over, the model faulting in over virtio-blk with its provenance nibble, a sweep timed off the TSC.</p>
+<img src="x86-64.gif" alt="MLOS on x86-64: boot, dev, mem, ticks, model 32, get 3 5, sweep">
+</body>
+</html>

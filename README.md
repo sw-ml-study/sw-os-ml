@@ -47,12 +47,15 @@ branches is listed under [Recent, current and planned](#recent-current-and-plann
 ## See it run
 
 Two architectures, one kernel. Both recordings are VHS tapes under
-`demos/`, rendered to WebP under `videos/`; the commands typed are the
-ones under [Try it](#try-it).
+`demos/`, served as optimised GIFs from
+[sw-ml-study.github.io/sw-os-ml](https://sw-ml-study.github.io/sw-os-ml/)
+(`pages/`, deployed by `scripts/deploy-pages.sh`); a GIF of a terminal is
+smaller than the same recording as WebP, and `scripts/render-demos.sh`
+says by how much. The commands typed are the ones under [Try it](#try-it).
 
 ### aarch64 -- Apple Silicon, QEMU/HVF
 
-![MLOS on aarch64: boot, register the model, a fault then a hit, and the M3 replay under LRU and next-use](videos/aarch64.webp)
+[![MLOS on aarch64: boot, register the model, a fault then a hit, and the M3 replay under LRU and next-use](https://sw-ml-study.github.io/sw-os-ml/aarch64.gif)](https://sw-ml-study.github.io/sw-os-ml/#aarch64)
 
 A native guest on the M-series cores. `model 32` registers the synthetic
 transformer against a 32 KiB arena, a quarter of the model. The first
@@ -64,7 +67,7 @@ reads less. Recorded by `demos/aarch64.tape`.
 
 ### x86-64 -- QEMU `microvm`, TCG
 
-![MLOS on x86-64: boot via PVH, the machine as found, the model from virtio-blk, a timed sweep](videos/x86-64.webp)
+[![MLOS on x86-64: boot via PVH, the machine as found, the model from virtio-blk, a timed sweep](https://sw-ml-study.github.io/sw-os-ml/x86-64.gif)](https://sw-ml-study.github.io/sw-os-ml/#x86-64)
 
 The same source, booted through PVH into 32-bit protected mode and
 brought up to long mode by `mlos-hal-x86-64`: COM1, LAPIC and IOAPIC, a

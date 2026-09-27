@@ -6,13 +6,9 @@
 # simulator runs, producing the same integers (step 009). The last line
 # is the one the milestone exists for: next-use reads less than LRU.
 #
-# VHS writes GIF, not WebP, so render and convert, as x86-64.tape does:
-#
-#     vhs demos/aarch64.tape
-#     gif2webp -min_size -mixed videos/aarch64.gif -o videos/aarch64.webp
-#     rm videos/aarch64.gif
-#
-# The WebP is what ./videos holds and what the README shows.
+# Rendered by scripts/render-demos.sh: VHS writes the raw GIF here, gifsicle
+# optimises it into pages/aarch64.gif, and the README shows it from the
+# published site. The optimised GIF (37 KB) beat the WebP (47 KB).
 
 Output videos/aarch64.gif
 
