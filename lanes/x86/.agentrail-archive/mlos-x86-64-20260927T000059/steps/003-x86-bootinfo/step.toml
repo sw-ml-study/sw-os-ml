@@ -1,0 +1,10 @@
+number = 3
+slug = "x86-bootinfo"
+status = "completed"
+description = "memory map from the PVH table, virtio-mmio slots parsed from the command line..."
+role = "production"
+context_files = []
+created_at = "2026-09-26T17:36:51"
+completed_at = "2026-09-26T18:51:20"
+task_type = "rust-x86"
+commits = ["677d941438620e2ce33e62596eee044e11207aff"]

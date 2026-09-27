@@ -21,7 +21,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         _ if !ready => _ = writeln!(out, "  no model registered (try `model`)"),
         "" => {}
         "help" | "?" => _ = out.write_str(HELP),
-        "mem" => mem(out, facts),
+        "mem" => mem(out, facts, args),
         "dev" => dev(out, facts),
         "sweep" => crate::objects::sweep(out, facts.clock),
         "arena" => crate::report::arena(out),
@@ -67,6 +67,7 @@ const HELP: &str = concat!(
     "stream [N]    declare the model's access order, or advance it by N\r\n",
     "replay POLICY replay the recorded workload under one policy\r\n",
     "mem           physical memory map, and what is left\r\n",
+    "mem peek ADDR read 8 bytes at ADDR; unmapped faults, on purpose\r\n",
     "dev           console, timer and interrupt controller\r\n",
     "ticks         timer ticks since boot\r\n",
     "help          this\r\n",
@@ -78,7 +79,19 @@ const HELP: &str = concat!(
 /// device tree blob are memory the machine has and MLOS may not hand out.
 /// Everything the object manager will ever do starts from this number
 /// being honest.
-fn mem(out: &mut impl Write, facts: &Facts<'_>) {
+///
+/// `mem peek ADDR` reads eight bytes at ADDR instead. On an unmapped
+/// address the CPU faults and the trap report is the answer.
+fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
+    if let Some(addr) = args.strip_prefix("peek") {
+        let addr = u64::from_str_radix(addr.trim().trim_start_matches("0x"), 16);
+        let _ = match (facts.platform.peek, addr) {
+            (Some(peek), Ok(addr)) => writeln!(out, "  {addr:#x}: {:#018x}", peek(addr)),
+            (None, _) => writeln!(out, "  mem peek: not provided on this machine"),
+            (_, Err(_)) => writeln!(out, "  mem peek ADDR   (ADDR in hex)"),
+        };
+        return;
+    }
     for region in facts.info.regions {
         let (base, len, kind) = (region.base, region.len, region.kind);
         let _ = writeln!(out, "  {base:#012x} + {len:#x} {kind:?}");
@@ -94,20 +107,24 @@ fn mem(out: &mut impl Write, facts: &Facts<'_>) {
     );
 }
 
-/// What the device tree said about the devices in use.
+/// The devices in use, as found -- whichever source described them.
+///
+/// Every line comes from `Facts`, none from an assumption about the
+/// architecture: the console kind is the one `boot` chose (a PL011 or
+/// virtio on aarch64, a 16550 on x86-64), and a timer the platform has
+/// not described is reported as absent rather than as irq 0.
 fn dev(out: &mut impl Write, facts: &Facts<'_>) {
-    let _ = writeln!(
-        out,
-        "  console  pl011 @ {:#x}, irq {}",
-        facts.uart, facts.uart_irq
-    );
-    let _ = writeln!(out, "  timer    generic, irq {}", facts.timer_irq);
-    match facts.gic {
-        Some((dist, redist)) => {
-            let _ = writeln!(out, "  gic      v3, dist {dist:#x}, redist {redist:#x}");
+    let (kind, uart, irq) = (facts.console, facts.uart, facts.uart_irq);
+    let _ = writeln!(out, "  console  {kind} @ {uart:#x}, irq {irq}");
+    let _ = match facts.timer_irq {
+        0 => writeln!(out, "  timer    none"),
+        irq => writeln!(out, "  timer    {} {irq}", facts.platform.timer),
+    };
+    let _ = match (facts.gic, facts.platform.irqchip) {
+        (Some((dist, redist)), _) => {
+            writeln!(out, "  gic      v3, dist {dist:#x}, redist {redist:#x}")
         }
-        None => {
-            let _ = out.write_str("  gic      none\r\n");
-        }
-    }
+        (None, "") => writeln!(out, "  gic      none"),
+        (None, chip) => writeln!(out, "  irqchip  {chip}"),
+    };
 }

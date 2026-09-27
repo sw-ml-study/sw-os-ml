@@ -1,0 +1,11 @@
+{
+  "task_type": "rust-x86",
+  "state": {
+    "number": 3,
+    "step": "x86-bootinfo"
+  },
+  "action": "Booted with a disk attached and read the real start_info/cmdline instead of assuming QEMU's behaviour; that surfaced the ACPI/DSDT, BIOS-area and appended-cmdline issues. Kept parsing host-testable in a safe crate. Trial-merged with the aarch64 lane's open PR before committing a shared-file edit.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-26T18:51:20"
+}

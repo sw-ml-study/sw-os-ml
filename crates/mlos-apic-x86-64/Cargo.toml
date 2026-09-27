@@ -1,0 +1,15 @@
+[package]
+name        = "mlos-apic-x86-64"
+version     = "0.0.1"
+description = "x86-64 interrupt controllers and clocks for MLOS: LAPIC, IOAPIC, the TSC."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+mlos-hal-x86-64 = { path = "../mlos-hal-x86-64", version = "0.0.1" }
+
+[lints]
+workspace = true

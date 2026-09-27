@@ -31,3 +31,10 @@ kbuild-arm  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclud
 kbuild-x86  = "build  --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target x86_64-unknown-none"
 kclippy-arm = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target aarch64-unknown-none-softfloat --lib --bins"
 kclippy-x86 = "clippy --workspace --exclude mlos-cli --exclude mlos-elf --exclude mlos-image-map --exclude mlos-layout --exclude mlos-sim --exclude mlos-workload --target x86_64-unknown-none --lib --bins"
+
+# x86-64 kernel: static, not PIE. The PVH entry runs in 32-bit mode with
+# paging off and uses absolute addresses; the target's default PIE
+# relocation model rejects those at link time (R_X86_64_32). The image is
+# loaded at a fixed physical address, so nothing needs relocating.
+[target.x86_64-unknown-none]
+rustflags = ["-C", "relocation-model=static"]

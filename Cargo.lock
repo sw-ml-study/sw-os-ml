@@ -7,6 +7,13 @@ name = "mlos-abi"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-apic-x86-64"
+version = "0.0.1"
+dependencies = [
+ "mlos-hal-x86-64",
+]
+
+[[package]]
 name = "mlos-arena"
 version = "0.0.1"
 dependencies = [
@@ -80,6 +87,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-hal-x86-64"
+version = "0.0.1"
+
+[[package]]
 name = "mlos-image-map"
 version = "0.0.1"
 dependencies = [
@@ -105,11 +116,28 @@ dependencies = [
  "mlos-gic-aarch64",
  "mlos-hal",
  "mlos-hal-aarch64",
+ "mlos-kernel-x86-64",
  "mlos-lab",
  "mlos-machine",
  "mlos-mmu-aarch64",
  "mlos-trap-aarch64",
  "mlos-virtio",
+ "mlsh",
+]
+
+[[package]]
+name = "mlos-kernel-x86-64"
+version = "0.0.1"
+dependencies = [
+ "mlos-apic-x86-64",
+ "mlos-hal",
+ "mlos-hal-x86-64",
+ "mlos-lab",
+ "mlos-machine",
+ "mlos-pvh",
+ "mlos-queue",
+ "mlos-trap-x86-64",
+ "mlos-uart16550",
  "mlsh",
 ]
 
@@ -212,6 +240,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-pvh"
+version = "0.0.1"
+dependencies = [
+ "mlos-hal",
+]
+
+[[package]]
 name = "mlos-queue"
 version = "0.0.1"
 
@@ -282,6 +317,17 @@ dependencies = [
 [[package]]
 name = "mlos-trap-aarch64"
 version = "0.0.1"
+
+[[package]]
+name = "mlos-trap-x86-64"
+version = "0.0.1"
+
+[[package]]
+name = "mlos-uart16550"
+version = "0.0.1"
+dependencies = [
+ "mlos-device",
+]
 
 [[package]]
 name = "mlos-virtio"

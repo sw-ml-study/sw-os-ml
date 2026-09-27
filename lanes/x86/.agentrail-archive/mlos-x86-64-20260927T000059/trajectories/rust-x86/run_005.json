@@ -1,0 +1,11 @@
+{
+  "task_type": "rust-x86",
+  "state": {
+    "number": 5,
+    "step": "x86-interrupts"
+  },
+  "action": "Built in layers and booted after each (device window, IRQ entry, APIC crate, wiring). Measured the idle win instead of asserting it. Chased a triple fault with QEMU -d int to a stack overflow through the page tables, found aarch64 had fixed the same bug, and matched their fix. Grouped new Facts fields to keep the other lane's function under the LOC gate.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-26T22:54:04"
+}

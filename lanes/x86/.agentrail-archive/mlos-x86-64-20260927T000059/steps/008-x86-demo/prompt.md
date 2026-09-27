@@ -1,0 +1,1 @@
+Requested by the user mid-saga: a VHS tape that records the x86-64 guest booting and running some mlsh commands, rendered to an animated WebP in ./videos. Follow the conventions of the existing demos/*.tape. The tape must be reproducible (the command it runs is the real mlos CLI), and the rendered file is the artifact.

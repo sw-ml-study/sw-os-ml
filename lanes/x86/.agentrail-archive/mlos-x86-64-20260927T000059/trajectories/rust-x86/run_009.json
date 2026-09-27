@@ -1,0 +1,11 @@
+{
+  "task_type": "rust-x86",
+  "state": {
+    "number": 9,
+    "step": "x86-gate"
+  },
+  "action": "Added skip-by-name guards and proved them with a QEMU-less PATH; kept doctor changes to table rows.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-26T23:44:28"
+}
