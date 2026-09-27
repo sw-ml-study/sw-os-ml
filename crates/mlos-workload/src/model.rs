@@ -11,7 +11,7 @@ use mlos_objtab::ObjectMeta;
 use mlos_sim::Model;
 use mlos_synth::model as weights;
 
-use crate::Decode;
+use crate::{Decode, Real};
 use mlos_synth::kv;
 
 impl Model for Decode {
@@ -52,4 +52,42 @@ impl Decode {
         let _ = mlos_trace::render(&mut text, header, &held);
         text
     }
+}
+
+impl Model for Real<'_> {
+    /// Weights are the shape's streams, sized by the shape; KV blocks
+    /// are sized by what one token adds to one layer of THIS model's
+    /// cache. Both priced by the byte, because a precomputed scalar
+    /// sized for a kilobyte tile would let a 400 MB head arrive for the
+    /// price of one -- the unit error `tests/verdict.rs` had to correct.
+    fn meta(&self, id: ObjectId) -> Option<ObjectMeta> {
+        let fields = id.fields();
+        match id.class()? {
+            ObjectClass::WeightTile if fields.model == crate::MODEL_ID => {
+                let stream = self
+                    .shape
+                    .streams
+                    .iter()
+                    .find(|s| s.layer == fields.layer && s.tensor == fields.tensor)?;
+                let mut meta = weights::weights();
+                meta.size = stream.bytes;
+                meta.precision = mlos_objtab::Precision::Fp16;
+                meta.reload_cost = fetching(meta.size);
+                Some(meta)
+            }
+            ObjectClass::KvBlock => {
+                let mut meta = kv::meta(fields.model);
+                meta.size = self.shape.kv_block_bytes() * u32::from(self.context.tokens_per_block);
+                Some(meta)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// What fetching `size` bytes costs from the backing tier: three
+/// milliseconds to the first byte, then a gigabyte a second. The same
+/// figure `mlos-synth`'s disk tier charges, applied per object.
+fn fetching(size: u32) -> mlos_objtab::CostNs {
+    mlos_objtab::CostNs(3_000_000u32.saturating_add(size))
 }

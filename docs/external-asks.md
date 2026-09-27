@@ -6,9 +6,11 @@ wanted, where it would live, why MLOS cannot reasonably do it itself, and
 **what MLOS does if the answer is no** -- because an ask with no fallback
 is a plan with a single point of failure.
 
-Nothing here blocks MLOS today. One ask (emufpga A1) blocks M3 step 010,
-which is seven steps away and is about realism rather than about whether
-the measurement can be made at all.
+Nothing here blocks MLOS today. The one ask that did (emufpga A1, M3
+step 010) was delivered on 2026-09-26: `emufpga/layouts/minicpm5-1b.*`,
+a real 1B-parameter Llama's inventory and rotating boundary, produced
+without reading a weight (`extract --manifest-only`, `import
+--sidecar-only`).
 
 ## How to read an ask
 
@@ -28,7 +30,7 @@ research vehicle for streaming weights off sequential storage; MLOS is
 the operating system that would schedule such a stream. They need each
 other's artifacts more than either needs the other's code.
 
-### A1. An order file and sidecar from a real model -- BLOCKING (M3 step 4)
+### A1. An order file and sidecar from a real model -- DELIVERED 2026-09-26 (was BLOCKING, M3 step 010)
 
 **What.** The two small text files that come out of an import: the
 `spm-order` order file with its `[rotating]` and `[resident]` sections,

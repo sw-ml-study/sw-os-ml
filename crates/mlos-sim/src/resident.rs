@@ -6,10 +6,19 @@
 //! would let a policy be written that the kernel cannot host, and the
 //! discovery would come at step 009 after every number had been produced.
 //!
-//! Insertion order is preserved and never rearranged, which is what makes
-//! [`Residency::at`] stable -- a policy asked twice about an unchanged set
-//! must name the same victim, or a replay stops being deterministic and
-//! every comparison becomes an argument.
+//! The policy's view is that `Vec`; the simulator's own lookups are not.
+//! Finding an object on a hit and finding it to remove it go through an
+//! index, because a real model's cache is tens of thousands of blocks
+//! and a linear `find` on every access made a trace that size take
+//! minutes to replay -- while the kernel, whose table is hashed, would
+//! have taken none of that. What the simulator must share with the
+//! kernel is the policy's cost, not its own bookkeeping.
+//!
+//! Removal swaps the last element into the hole, so the order a policy
+//! sees residents in changes as they leave. That is allowed since step
+//! 009: every policy breaks ties on object id, so no answer depends on
+//! enumeration order, and the kernel's hash-slot order was never
+//! insertion order anyway.
 //!
 //! ## The budget is an arena, not a number
 //!
@@ -27,6 +36,8 @@
 //! costs a policy is part of what the policy costs, and a simulator that
 //! left it out would be measuring a kernel nobody has.
 
+use std::collections::HashMap;
+
 use mlos_abi::{ObjectId, Result};
 use mlos_arena::Arena;
 use mlos_objtab::{NextUse, ObjectMeta};
@@ -35,6 +46,8 @@ use mlos_objtab::{NextUse, ObjectMeta};
 pub struct Resident<'a> {
     /// Visible to `view.rs`, which opens the policy's window onto it.
     pub(crate) held: Vec<(ObjectId, ObjectMeta)>,
+    /// Where each resident object sits in `held`.
+    index: HashMap<ObjectId, usize>,
     /// Where the bytes go. `run.rs` asks it whether a placement would
     /// fit, which is the question `Manager::make_room` asks the kernel's.
     pub(crate) arena: Arena<'a>,
@@ -49,6 +62,7 @@ impl<'a> Resident<'a> {
     pub fn new(arena: Arena<'a>) -> Self {
         Self {
             held: Vec::new(),
+            index: HashMap::new(),
             arena,
             cursor: 0,
         }
@@ -62,7 +76,7 @@ impl<'a> Resident<'a> {
     /// an API.
     pub fn touch(&mut self, id: ObjectId, now: u32, next: NextUse) -> bool {
         self.cursor = now;
-        let Some((_, meta)) = self.held.iter_mut().find(|(held, _)| *held == id) else {
+        let Some((_, meta)) = self.index.get(&id).and_then(|at| self.held.get_mut(*at)) else {
             return false;
         };
         meta.used_tick = now;
@@ -97,6 +111,7 @@ impl<'a> Resident<'a> {
         meta.used_tick = now;
         meta.next_use = next;
         meta.reuse_count = meta.reuse_count.saturating_add(1);
+        self.index.insert(id, self.held.len());
         self.held.push((id, meta));
         Ok(())
     }
@@ -107,14 +122,14 @@ impl<'a> Resident<'a> {
     /// object where it was, exactly as `Manager::evict` does. Nothing is
     /// changed, so the accounting cannot say bytes are free that are not.
     pub fn remove(&mut self, id: ObjectId) -> Result<u64> {
-        let at = self
-            .held
-            .iter()
-            .position(|(held, _)| *held == id)
-            .ok_or(mlos_abi::Error::BadObject)?;
+        let at = *self.index.get(&id).ok_or(mlos_abi::Error::BadObject)?;
         let (_, meta) = self.held[at];
         self.arena.release(meta.resident_at, meta.size)?;
-        self.held.remove(at);
+        self.held.swap_remove(at);
+        self.index.remove(&id);
+        if let Some((moved, _)) = self.held.get(at) {
+            self.index.insert(*moved, at);
+        }
         Ok(u64::from(meta.size))
     }
 }
