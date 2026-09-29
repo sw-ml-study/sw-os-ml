@@ -1,0 +1,1 @@
+M3 saga complete: gate G4 met (step 011); step 012 was an ad-hoc sweep moving comment reasoning into docs/notes
