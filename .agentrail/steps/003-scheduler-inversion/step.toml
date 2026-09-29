@@ -1,0 +1,11 @@
+number = 3
+slug = "scheduler-inversion"
+status = "pending"
+description = """
+The parameter-major inversion, `docs/architecture.md` s.6. A scheduler
+that s..."""
+role = "production"
+context_files = []
+created_at = "2026-09-29T13:15:22"
+task_type = "rust"
+commits = []

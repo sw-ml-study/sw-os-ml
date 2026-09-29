@@ -1,0 +1,11 @@
+number = 4
+slug = "latency-escape"
+status = "pending"
+description = """
+The latency escape hatch, `docs/architecture.md` s.6: parameter-major
+schedul..."""
+role = "production"
+context_files = []
+created_at = "2026-09-29T13:15:22"
+task_type = "rust"
+commits = []

@@ -1,0 +1,11 @@
+number = 6
+slug = "g5-report"
+status = "pending"
+description = """
+The G5 report. Sessions by budgets by scheduler by policy: reads and
+bytes mo..."""
+role = "meta"
+context_files = []
+created_at = "2026-09-29T13:15:22"
+task_type = "report"
+commits = []

@@ -1,0 +1,11 @@
+number = 5
+slug = "ps-ss-metrics"
+status = "pending"
+description = """
+`Ps` and `Ss`, `docs/PRD.md` s.5.2: useful parameter applications per
+paramet..."""
+role = "production"
+context_files = []
+created_at = "2026-09-29T13:15:22"
+task_type = "rust"
+commits = []

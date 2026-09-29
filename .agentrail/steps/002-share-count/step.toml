@@ -1,0 +1,11 @@
+number = 2
+slug = "share-count"
+status = "pending"
+description = """
+share_count, maintained. `ObjectMeta::share_count` exists and is set from
+a l..."""
+role = "production"
+context_files = []
+created_at = "2026-09-29T13:15:22"
+task_type = "rust"
+commits = []

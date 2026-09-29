@@ -519,6 +519,12 @@ Steps:
 Steps: `session-objects`, `share-count`, `scheduler-inversion`,
 `latency-escape`, `ps-ss-metrics`, `g5-report`.
 
+Started 2026-09-29 as saga `mlos-parameter-major`, from this outline;
+each step writes its own reasoning into its commit and `docs/status.md`
+as it is worked. M3's rules carry over: measure in the band near the
+per-token working set and say where it is, keep the KV cache paged, and
+keep the kernel and the simulator agreeing to the integer.
+
 ### Saga `mlos-degradation` (M5)
 
 > Vision: make the system able to say "I served you at Q4 with a 4K
