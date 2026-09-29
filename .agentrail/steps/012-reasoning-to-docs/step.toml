@@ -1,0 +1,10 @@
+number = 12
+slug = "reasoning-to-docs"
+status = "completed"
+description = "Move design reasoning out of source comments into docs/notes/<crate>.md, one ..."
+role = "production"
+context_files = []
+created_at = "2026-09-27T15:20:05"
+completed_at = "2026-09-29T12:36:26"
+task_type = "rust"
+commits = ["9d3ddb75ab5d161f1bf0d065ddae075801e48af0"]
