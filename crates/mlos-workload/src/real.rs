@@ -1,48 +1,8 @@
-//! A decode loop over a real model's shape.
+//! The same decode loop as `Decode`, over a real model's shape.
 //!
-//! [`Decode`](crate::Decode) is the same loop over the 8x16 synthetic
-//! model, and everything it argues about sessions and reuse holds here.
-//! What changes is where the objects come from: not `mlos-synth`'s
-//! uniform kilobyte tiles but a [`Shape`] read from emufpga's sidecar --
-//! real tensors, real sizes, and the model's own declaration of which
-//! are swept per token and which are read once. That is the difference
-//! between a trace shaped like inference and a trace shaped like a
-//! guess, which `docs/architecture.md` s.12 names as the risk.
-//!
-//! One token, one session, in this workload:
-//!
-//! 1. Per layer, the rotating streams in declared order -- q, k, v, then
-//!    that session's KV blocks for the layer so far, then o, gate, up,
-//!    down. Attention reads the cache between the projections that feed
-//!    it and the one that consumes it, so that is where the blocks go.
-//! 2. Then the rotating streams outside any layer: the output head.
-//!
-//! ## Context, and why it is a knob
-//!
-//! Measured without one, this shape is a weight sweep with a rounding
-//! error of KV on it: MiniCPM5-1B's two KV heads make one token's cache
-//! 24 KiB across all layers, against 1.68 GB of weights swept to produce
-//! it. Forty tokens of four sessions is 3.8 MB of cache. On that trace
-//! FIFO and LRU tie exactly -- a pure cycle cannot distinguish them --
-//! and next-use wins by construction, which is the degenerate case the
-//! M3 plan said to avoid, arriving from a real model rather than a
-//! synthetic one.
-//!
-//! What makes KV matter is CONTEXT: sessions that arrive with a long
-//! prompt already cached, and cache blocks coarse enough that a real
-//! context is thousands of objects rather than millions. [`Context`]
-//! is both numbers. `Context::DECODE_ONLY` is the bare loop, for
-//! comparing with the synthetic model; a prefix in the thousands with
-//! sixteen or thirty-two tokens per block is what a serving engine
-//! actually holds, and is where recency has something to be right about.
-//!
-//! The resident streams -- embeddings, norms -- are read ONCE, at the
-//! start, by the first session, which is exactly what the sidecar
-//! declares them to be: "read once into RAM". A norm is touched every
-//! layer in the arithmetic, but the sidecar's author put it in RAM for
-//! good and this workload does not second-guess a declaration it was
-//! given. Whether those resident bytes then survive is the policy's
-//! problem, as it would be in a real system.
+//! Invariant: the sidecar's declaration of what rotates and what is read
+//! once is followed, never second-guessed. Design and history:
+//! docs/notes/mlos-workload.md.
 
 use mlos_abi::{Fields, ObjectClass, ObjectId};
 use mlos_objtab::SessionId;
@@ -63,8 +23,7 @@ pub struct Context {
     /// Tokens already cached when a session starts decoding: its prompt.
     pub prefix: u16,
     /// Tokens per KV object. One is a block per position, as
-    /// `mlos-synth` defines it; a serving engine pages the cache in
-    /// sixteen or thirty-two, and so does a table that has to hold it.
+    /// `mlos-synth` defines it.
     pub tokens_per_block: u16,
 }
 

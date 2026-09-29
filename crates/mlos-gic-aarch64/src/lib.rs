@@ -1,21 +1,12 @@
-//! A GICv3 interrupt controller.
+//! A GICv3 interrupt controller, this CPU's view of it.
 //!
-//! Only v3. A GICv2 is a different device with a different programming
-//! model, and QEMU's `virt` will hand you either one depending on the
-//! accelerator -- TCG defaults to v2, HVF to v3 -- so `scripts/boot.sh`
-//! pins `gic-version=3` rather than letting the host decide what the guest
-//! is driving.
-//!
-//! Three pieces, in an order that matters: the distributor routes
-//! system-wide, the redistributor holds this CPU's private interrupts, and
-//! the CPU interface is system registers. Each will accept writes before
-//! the one above it is ready, and ignore them.
+//! Invariant: distributor, then redistributor, then CPU interface; each
+//! accepts writes before the one above it is ready, and ignores them.
+//! Design and history: docs/notes/mlos-gic-aarch64.md.
 
 #![no_std]
-// Empty on any other architecture, so the workspace-wide gate can sweep
-// every crate without a hand-maintained exclude list. The crate says where
-// it applies; a list in .cargo/config.toml would say it somewhere else and
-// then drift, which is exactly what happened before this line existed.
+// Empty on any other architecture, so the workspace gate can sweep every
+// crate without an exclude list.
 #![cfg(target_arch = "aarch64")]
 
 mod cpuif;
@@ -63,11 +54,9 @@ impl Gic {
 }
 
 impl IrqController for Gic {
-    /// Dispatches by interrupt number, because the two kinds live in
-    /// different devices: interrupts below 32 are private to a CPU and
-    /// configured in its redistributor, everything above is shared and
-    /// configured in the distributor. Getting this the wrong way round
-    /// writes to a register that exists and does nothing.
+    /// Dispatches by number: below 32 is this CPU's redistributor, above
+    /// is the distributor. The other way round writes a register that
+    /// exists and does nothing.
     fn enable(&self, irq: Irq) {
         // SAFETY: both windows came from `new`, whose contract covers
         // them. Priority 0 is the most urgent, below the accept-all mask.

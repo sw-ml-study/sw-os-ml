@@ -1,13 +1,9 @@
-//! x86-64 exceptions: the IDT, the entry stubs, and the report.
+//! x86-64 exceptions and interrupts: the IDT, the entry stubs, and the
+//! report.
 //!
-//! The counterpart of `mlos-trap-aarch64`, with the same contract: a
-//! fault is fatal, so the entry saves nothing it would need to return,
-//! captures what the CPU says about why it stopped, and hands that to a
-//! reporter that never returns. Interrupts, vectors 32-255, DO return:
-//! their entry saves the caller-saved registers and calls the `on_irq`
-//! handler with the vector.
-//!
-//! `unsafe` lives here by design (AGENTS.md): the IDT, `lidt`, `cr2`.
+//! Invariant: an exception (vectors 0-31) is fatal and its reporter never
+//! returns; an interrupt (32-255) returns, and its handler acknowledges the
+//! controller itself. Design and history: docs/notes/mlos-trap-x86-64.md.
 
 #![no_std]
 // Empty anywhere but a bare x86-64 target, like `mlos-hal-x86-64`.
@@ -20,9 +16,8 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 
 pub use trap::{Trap, describe};
 
-/// Where to send a trap report. An atomic, and a plain `fn`, for the same
-/// reason as on aarch64: the handler runs at an arbitrary moment and must
-/// not depend on anything it might have borrowed.
+/// Where to send a trap report: a plain `fn`, because the handler runs at
+/// an arbitrary moment and can depend on nothing it might have borrowed.
 static REPORTER: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Where to send an interrupt, as a `fn(vector)`.
@@ -35,8 +30,7 @@ static ON_IRQ: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Call once, on the boot CPU, with interrupts off. Both must be safe to
 /// call from an interrupt: no allocation, no lock the interrupted code
 /// could hold, no assumption about which stack they are on. `on_irq`
-/// must acknowledge the interrupt itself (the EOI is the controller's
-/// business, not this crate's).
+/// must acknowledge the interrupt itself.
 pub unsafe fn install(reporter: fn(&Trap) -> !, on_irq: fn(u8)) {
     REPORTER.store(reporter as *mut (), Ordering::Release);
     ON_IRQ.store(on_irq as *mut (), Ordering::Release);

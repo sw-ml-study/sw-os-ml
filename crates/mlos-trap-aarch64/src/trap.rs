@@ -1,13 +1,11 @@
 //! What the CPU can tell us about why it stopped.
+//!
+//! Invariant: the syndrome registers describe the most recent exception
+//! only. Design: docs/notes/mlos-trap-aarch64.md.
 
 use core::{arch::asm, fmt::Write};
 
 /// The sixteen entries of an aarch64 vector table, in architectural order.
-///
-/// Which one fired is diagnostic on its own. A fault from `CurrentSpx` is
-/// the kernel's own bug; the same fault from `Lower64` is a userspace one,
-/// and long before there is userspace, seeing `Lower64` at all would mean
-/// something is very wrong.
 pub const VECTOR_NAMES: [&str; 16] = [
     "CurrentSp0/sync",
     "CurrentSp0/irq",
@@ -48,8 +46,8 @@ impl Trap {
     /// # Safety
     ///
     /// Call only from an exception handler, before anything else can
-    /// overwrite `ESR_EL1`, `ELR_EL1` or `FAR_EL1` -- taking a second
-    /// exception first would report that one instead.
+    /// overwrite `ESR_EL1`, `ELR_EL1` or `FAR_EL1`; a second exception
+    /// taken first would be reported instead.
     #[must_use]
     pub unsafe fn capture(vector: usize) -> Self {
         let (esr, elr, far, spsr): (u64, u64, u64, u64);
@@ -75,10 +73,8 @@ impl Trap {
         }
     }
 
-    /// The exception class, `ESR_EL1[31:26]`.
-    ///
-    /// `0x25` is a data abort from the current EL -- overwhelmingly the
-    /// one a kernel meets first, and what a wrong page table produces.
+    /// The exception class, `ESR_EL1[31:26]`. `0x25` is a data abort
+    /// from the current EL.
     #[must_use]
     pub const fn exception_class(self) -> u8 {
         ((self.esr >> 26) & 0x3f) as u8
@@ -86,9 +82,6 @@ impl Trap {
 }
 
 /// Writes what the CPU said about a fault.
-///
-/// Lives with `Trap` rather than in the kernel because it is entirely
-/// about this type: which registers matter, and what their bits mean.
 pub fn describe(trap: &Trap, out: &mut impl Write) {
     let name = VECTOR_NAMES.get(trap.vector).copied().unwrap_or("?");
     let _ = writeln!(out, "\n!! trap {} ({name})", trap.vector);

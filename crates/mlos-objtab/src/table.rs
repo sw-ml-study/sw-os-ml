@@ -1,14 +1,14 @@
 //! The table itself.
+//!
+//! Invariant: a removed slot stays `Removed`, never `Vacant`, or the probe
+//! chain through it is cut. Design: docs/notes/mlos-objtab.md.
 
 use mlos_abi::ObjectId;
 
 use crate::{ObjectMeta, probe};
 
-/// One slot.
-///
-/// `Removed` is distinct from `Vacant` on purpose: linear probing walks
-/// until it finds a vacancy, so turning a removed slot into a vacancy
-/// would cut the chain and hide every object that probed past it.
+/// One slot. `Removed` and `Vacant` differ: a probe passes through the
+/// first and stops at the second.
 #[derive(Clone, Copy)]
 enum Slot {
     /// Never used. A probe that reaches one has proved the object absent.
@@ -19,36 +19,21 @@ enum Slot {
     Live(ObjectId, ObjectMeta),
 }
 
-/// A fixed-capacity map from [`ObjectId`] to [`ObjectMeta`].
-///
-/// Fixed because this lives in the kernel and there is no allocator, and
-/// because a table that can grow can grow on the fault path -- which is
-/// the one place that must not allocate.
+/// A fixed-capacity map from [`ObjectId`] to [`ObjectMeta`]. Never
+/// allocates, so the fault path cannot either.
 pub struct Table<const N: usize> {
     slots: [Slot; N],
 }
 
 impl<const N: usize> Table<N> {
-    /// An empty table.
-    ///
-    /// A constant rather than a constructor so it can initialise a
-    /// `static` -- the kernel's table has to exist before there is
-    /// anything to allocate it with.
+    /// An empty table. A constant so it can initialise a `static`.
     pub const EMPTY: Self = Self {
         slots: [Slot::Vacant; N],
     };
 
-    /// The object in slot `index`, if one lives there.
-    ///
-    /// Slot order, which is hash order and therefore arbitrary -- but
-    /// STABLE, which is what a policy needs: asked twice about an
-    /// unchanged table it must name the same victim, or a replay stops
-    /// being deterministic and every comparison becomes an argument.
-    ///
-    /// Indexed rather than iterable because that is the shape
-    /// `mlos-policy`'s `Residency` asks for, and it asks for it because
-    /// a kernel cannot hand out a borrow into a table it is about to
-    /// mutate.
+    /// The object in slot `index`, if one lives there. Slot order is
+    /// arbitrary but stable for an unchanged table, which is what keeps a
+    /// policy's choice deterministic.
     #[must_use]
     pub fn at(&self, index: usize) -> Option<(ObjectId, ObjectMeta)> {
         match self.slots.get(index)? {
@@ -58,9 +43,7 @@ impl<const N: usize> Table<N> {
     }
 
     /// Records an object, replacing any entry already under that id.
-    ///
-    /// `false` if the table is full, which drops the registration rather
-    /// than evicting something the caller did not ask to lose.
+    /// `false` if the table is full; nothing is evicted to make room.
     pub fn insert(&mut self, id: ObjectId, meta: ObjectMeta) -> bool {
         let mut reusable = None;
         for at in probe::sequence(id, N) {
@@ -80,8 +63,8 @@ impl<const N: usize> Table<N> {
         false
     }
 
-    /// Looks an object up. The fast path: an exact match or a proof of
-    /// absence, with no allocation and no call out of the kernel.
+    /// Looks an object up: an exact match or a proof of absence, with no
+    /// allocation.
     #[must_use]
     pub fn get(&self, id: ObjectId) -> Option<&ObjectMeta> {
         for at in probe::sequence(id, N) {
@@ -94,8 +77,7 @@ impl<const N: usize> Table<N> {
         None
     }
 
-    /// Looks an object up for modification -- residency changes, next-use
-    /// updates, lease counting.
+    /// Looks an object up for modification.
     pub fn get_mut(&mut self, id: ObjectId) -> Option<&mut ObjectMeta> {
         for at in probe::sequence(id, N) {
             match &self.slots[at] {

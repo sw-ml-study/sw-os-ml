@@ -1,4 +1,5 @@
-//! Reading and writing, whichever console it is.
+//! Reading and writing, whichever console it is. Design:
+//! docs/notes/mlos-console.md.
 
 use core::fmt;
 

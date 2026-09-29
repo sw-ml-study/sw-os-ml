@@ -1,25 +1,8 @@
 //! Replay an access trace against a policy, and count what it cost.
 //!
-//! The harness every number in M3 comes out of, which makes its own
-//! correctness the first thing to worry about. Two properties carry that
-//! weight:
-//!
-//! **The budget is a property of the RUN, not of the policy.** A
-//! comparison where one policy got more memory is not a comparison, and
-//! it is the easiest mistake to make and the hardest to see afterwards.
-//! [`compare`] takes one budget and applies it to every policy, so the
-//! mistake is not expressible rather than merely discouraged.
-//!
-//! **The same trace and policy give the same counts every time.** Nothing
-//! here consults a clock, a hash seed or an iteration order that could
-//! vary. A test says so, because a harness that were nondeterministic
-//! would make every later number arguable and there would be no way to
-//! tell from the numbers themselves.
-//!
-//! `docs/design.md` s.10 calls this the host-side level of the test
-//! pyramid. It is std, and the policies it runs are not: they are the
-//! `no_std` crates the kernel links, which is what lets step 009 replay
-//! the same trace in the kernel and require the counts to match.
+//! Invariants: every policy in a comparison gets the same budget, and
+//! the same trace and policy give the same counts every time. Design and
+//! history: docs/notes/mlos-sim.md.
 
 #![forbid(unsafe_code)]
 
@@ -39,23 +22,17 @@ use run::Run;
 pub use foresight::{Foresight, wanted_at};
 pub use resident::Resident;
 
-/// Where an object's size and costs come from.
-///
-/// A trace names objects and says nothing about how big they are, on
-/// purpose -- size is a property of the model, not of the workload. This
-/// is the model, and the trace header names which one it must be.
+/// Where an object's size and costs come from: the model the trace
+/// header names.
 pub trait Model {
     /// What the table would know about `id`, or `None` if it is not in
     /// this model -- which means the trace and the model do not match.
     fn meta(&self, id: ObjectId) -> Option<ObjectMeta>;
 }
 
-/// Replays `trace` against one policy under `budget` bytes.
-///
-/// The budget is a real arena -- `mlos-arena`, the crate the kernel
-/// places into -- over a buffer this long, so what fragmentation costs
-/// each policy is counted. See `resident.rs` for the thirteen reads that
-/// made it one.
+/// Replays `trace` against one policy under `budget` bytes. The budget
+/// is a real `mlos-arena` over a buffer this long, so fragmentation
+/// counts.
 pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Policy) -> Outcome {
     let seen = Foresight::read(trace.accesses);
     let run = Run {
@@ -72,11 +49,8 @@ pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Po
     outcome
 }
 
-/// Replays `trace` against every policy under the SAME budget.
-///
-/// One budget argument for all of them, which is the enforcement: a
-/// comparison where the policies had different budgets cannot be
-/// expressed through this function at all.
+/// Replays `trace` against every policy under the same budget; a
+/// comparison with different budgets cannot be expressed here.
 pub fn compare<'a>(
     trace: &Trace<'_>,
     model: &dyn Model,
@@ -100,29 +74,19 @@ pub struct Outcome {
     pub bytes: u64,
     /// Objects thrown away to make room.
     pub evicted: u64,
-    /// Acquires that could not be served at all.
-    ///
-    /// Not a failure: demand paging refuses by design and the cost of
-    /// refusing is part of what the comparison measures. A policy with
-    /// many refusals and few reads has not won.
+    /// Acquires that could not be served at all. Part of the cost, not a
+    /// failure.
     pub refused: u64,
     /// What the reads would have cost, in nanoseconds, as providers charge.
     pub cost: u64,
-    /// Accesses naming objects this model does not have.
-    ///
-    /// Always zero for a matched trace and model, and its own counter
-    /// rather than a refusal because it means something completely
-    /// different: a refusal is a residency decision, and this is the two
-    /// files not being about the same thing.
+    /// Accesses naming objects this model does not have. Zero for a
+    /// matched trace and model; non-zero means the two files disagree.
     pub mismatched: u64,
 }
 
 impl Outcome {
-    /// Acquires served without going to a provider, per thousand.
-    ///
-    /// The ratio to compare policies on. A raw read count is only
-    /// comparable between runs of the same length, and two traces of
-    /// different lengths are exactly what step 010 will bring.
+    /// Acquires served without going to a provider, per thousand of
+    /// those asked. Comparable across traces of different lengths.
     #[must_use]
     pub const fn hit_per_mille(&self) -> u64 {
         match self.hits + self.reads + self.refused {

@@ -1,14 +1,8 @@
-//! A virtio block device.
+//! A virtio block device: read-only, one sector per request.
 //!
-//! Enough to read. Writing is not needed: MLOS treats a block store as
-//! where weights *come from*, and weights are immutable -- the one
-//! property that makes an object shareable across every session using the
-//! model. A tier that can be written to is a tier that has to be
-//! invalidated, and nothing here wants that yet.
-//!
-//! This is what turns "three tiers" from a claim into a fact: with it, a
-//! cold object's bytes genuinely live somewhere other than memory and
-//! have to cross a queue to be used.
+//! Invariant: one request in flight at a time, on the boot core; the
+//! static rings and buffers are reused only after the device has returned
+//! the previous chain. Design and history: docs/notes/mlos-virtio-blk.md.
 
 #![no_std]
 
@@ -28,10 +22,8 @@ pub use request::{SECTOR, Status};
 /// The request queue. A block device has one.
 const REQUESTS: u32 = 0;
 
-/// Rings, and the buffers a request is built in.
-///
-/// Static because the device reads them by physical address: they must
-/// not move, and there is no allocator to promise that any other way.
+/// Rings, and the buffers a request is built in. Static because the
+/// device addresses them physically: they must not move.
 #[repr(C, align(64))]
 struct Rings {
     descriptors: UnsafeCell<[Descriptor; SIZE]>,
@@ -82,7 +74,8 @@ pub struct Block {
 }
 
 impl Block {
-    /// Brings up the block device at `device`.
+    /// Brings up the block device at `device`. `None` if negotiation or
+    /// queue setup fails.
     ///
     /// # Safety
     ///
@@ -108,12 +101,8 @@ impl Block {
         Some(Self { device })
     }
 
-    /// Reads one sector into `into`, which must be a whole sector.
-    ///
-    /// A sector at a time because the static buffer is one sector, and a
-    /// bigger buffer would only move the limit rather than remove it. A
-    /// caller wanting more asks more than once, which is what
-    /// [`Self::read_at`] does.
+    /// Reads one sector into `into`, which must be exactly [`SECTOR`]
+    /// bytes; `BadObject` otherwise, `NoProvider` if the device fails.
     ///
     /// # Safety
     ///
@@ -162,12 +151,9 @@ impl Block {
         }
     }
 
-    /// Builds the three-descriptor chain for a read.
-    ///
-    /// The flags are the contract. The header is device-readable, so it
-    /// carries no `WRITE`; the data and status buffers are
-    /// device-writable, and a device given a header marked writable is
-    /// entitled to scribble on the request that told it what to do.
+    /// Builds the three-descriptor chain for a read. The header carries
+    /// no `WRITE`: the device must not be able to write into the request
+    /// that told it what to do.
     ///
     /// # Safety
     ///

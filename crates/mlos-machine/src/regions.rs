@@ -1,16 +1,12 @@
 //! A fixed-capacity physical memory map.
 //!
-//! Fixed because this is built before there is an allocator -- the map is
-//! what the allocator gets built *from*.
+//! Invariant: built before there is an allocator, so it never grows; a
+//! region that does not fit is dropped, never silently kept. Design:
+//! docs/notes/mlos-machine.md.
 
 use mlos_hal::{MemoryKind, MemoryRegion};
 
 /// How many regions the map can hold.
-///
-/// QEMU `virt` reports one DRAM region, and carving the kernel image and
-/// the device tree blob out of it can turn that one into five. Sixteen
-/// leaves room for a machine with a split map without pretending this is
-/// a growable collection.
 pub const MAX_REGIONS: usize = 16;
 
 /// The physical memory map.
@@ -35,10 +31,6 @@ impl Regions {
     /// Appends every `(base, len)` a `reg` decoder yields, as usable
     /// memory, stopping at the first pair it cannot produce or the first
     /// that does not fit.
-    ///
-    /// Takes a decoder rather than the raw bytes: how many cells a `reg`
-    /// uses is the parent node's business, and the map should not have to
-    /// know about device trees to be filled from one.
     pub fn extend_usable(&mut self, pair: &impl Fn(usize) -> Option<(u64, u64)>) {
         for index in 0.. {
             let Some((base, len)) = pair(index) else {

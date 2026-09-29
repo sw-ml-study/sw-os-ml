@@ -1,8 +1,7 @@
 //! Interrupts: arming the controllers, and what each vector does.
 //!
-//! The x86-64 counterpart of the aarch64 kernel's `handlers.rs` and its
-//! `arm_interrupts`. Two sources, as there: the timer, private to this
-//! CPU, at the 2 Hz the shell counts; and the console's receive line.
+//! Invariant: every vector but the spurious one ends with an EOI. Design
+//! and history: docs/notes/mlos-kernel-x86-64.md.
 
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -16,8 +15,7 @@ pub const TIMER_VECTOR: u8 = 0x30;
 const COM1_VECTOR: u8 = 0x34;
 /// COM1's ISA line: IRQ 4, by PC convention.
 pub const COM1_IRQ: u8 = 4;
-/// Twice a second, as on aarch64: slow enough to read, fast enough that a
-/// few seconds of capture shows time passing.
+/// Twice a second, as on aarch64.
 const TICK_HZ: u32 = 2;
 
 /// Timer ticks since the timer started.
@@ -32,9 +30,9 @@ static LAPIC: AtomicU64 = AtomicU64::new(0);
 /// Returns the clock's rate for `mlsh`, or `None` if there is no LAPIC,
 /// in which case the kernel keeps polling.
 ///
-/// Order is load-bearing, as on aarch64: the IDT is already in, the
-/// controllers come up before anything is routed to them, the rates are
-/// measured before the timer needs one, and `sti` is last.
+/// Order is load-bearing: the IDT is already in, the controllers come up
+/// before anything is routed to them, the rates are measured before the
+/// timer needs one, and `sti` is last.
 pub fn arm(out: &mut Uart16550) -> Option<u32> {
     mlos_apic_x86_64::disable_pic();
     let lapic = Lapic::enable()?;

@@ -1,21 +1,16 @@
-//! A split virtqueue, sized for a console.
+//! A split virtqueue, synchronous: submit one chain, spin until the
+//! device returns it.
 //!
-//! Split, not packed: it is what every device supports, and the layout is
-//! simple enough to reason about without a specification open. Modern
-//! virtio lets the three rings live at three separate addresses, which
-//! spares us the alignment arithmetic the legacy contiguous layout needs.
-//!
-//! Synchronous: submit one buffer, spin until the device returns it.
-//! Console output is not hot, and a driver that cannot block is a driver
-//! that needs an interrupt handler before it can print anything -- which
-//! is the wrong order to build things in.
+//! Invariant: the descriptor and the available ring must be visible to
+//! the device before `QUEUE_NOTIFY` is written; `submit` fences for it.
+//! Design and history: docs/notes/mlos-virtio.md.
 
 use core::sync::atomic::{Ordering, fence};
 
 use crate::regs::{self, reg};
 
-/// Descriptors per queue. Eight is far more than a synchronous console
-/// uses; it is a power of two because the ring index wraps by masking.
+/// Descriptors per queue. A power of two because the ring index wraps by
+/// masking.
 pub const SIZE: usize = 8;
 
 /// A descriptor: where a buffer is and how the device may use it.
@@ -29,16 +24,11 @@ pub struct Descriptor {
     /// [`NEXT`] to continue a chain, [`WRITE`] if the device fills this
     /// buffer rather than reading it, or zero.
     pub flags: u16,
-    /// Next descriptor in a chain. Unused: every buffer here is one
-    /// descriptor.
+    /// Next descriptor in a chain; meaningful only with [`NEXT`] set.
     pub next: u16,
 }
 
 /// Descriptor flag: another descriptor follows in `next`.
-///
-/// Chaining is what a block request needs and a console does not: a read
-/// is a header the device reads, a buffer it writes, and a status byte it
-/// writes, which is three descriptors describing one operation.
 pub const NEXT: u16 = 1;
 
 /// Descriptor flag: the device writes this buffer rather than reading it.
@@ -77,6 +67,7 @@ pub struct UsedRing {
 }
 
 /// Tells the device where a queue's three rings are, and enables it.
+/// `false` if the device cannot give a queue of [`SIZE`].
 ///
 /// # Safety
 ///
@@ -99,17 +90,9 @@ pub unsafe fn configure(base: usize, queue: u32, rings: (u64, u64, u64)) -> bool
     true
 }
 
-/// Publishes the chain beginning at descriptor 0 and waits for it back.
-///
-/// Always descriptor 0, because every driver here submits one operation
-/// at a time and waits for it. The device follows `next` from there, so a
-/// chain of three is submitted exactly like a chain of one.
-///
-/// The fence before the notify is the load-bearing part: the device reads
-/// the descriptor and the ring from memory, so both must be visible
-/// before it is told to look. Without it the device can be pointed at a
-/// descriptor that has not been written yet, which fails intermittently
-/// and only under load.
+/// Publishes the chain beginning at descriptor 0 and waits for it back,
+/// returning how many bytes the device wrote. Always descriptor 0: one
+/// operation is in flight at a time, and the device follows `next`.
 ///
 /// # Safety
 ///
@@ -123,9 +106,9 @@ pub unsafe fn submit(base: usize, queue: u32, available: &mut Available, used: &
     let slot = available.index as usize % SIZE;
     available.ring[slot] = 0;
     // The device reads the descriptor and the ring from memory, so both
-    // must be visible before it is told to look. Without this the device
-    // can be pointed at a descriptor that has not been written yet, which
-    // fails intermittently and only under load.
+    // must be visible before the index advances and the index before the
+    // notify; without the fences the device can be pointed at a descriptor
+    // that has not been written yet, which fails only under load.
     fence(Ordering::SeqCst);
     available.index = available.index.wrapping_add(1);
     fence(Ordering::SeqCst);

@@ -1,14 +1,9 @@
 //! The MLOS inspector shell.
 //!
-//! Closes `docs/PRD.md` gate G1, which asks the proof of concept to reach
-//! a shell. Not a Unix shell, and never will be: MLOS has no filesystem to
-//! navigate and no processes to list. What it has is a memory map it had
-//! to work for, some devices it discovered, and -- at M2 -- an object
-//! table. Those are what a shell here is for.
-//!
-//! Input arrives through [`queue`] rather than directly from the interrupt
-//! handler, because running a command inside a handler holds the interrupt
-//! active and stops the timer.
+//! Invariant: input arrives through the queue and commands run from the
+//! idle loop, never inside the interrupt handler, which would hold the
+//! interrupt active and stop the timer. Design and history:
+//! docs/notes/mlsh.md.
 
 #![no_std]
 
@@ -46,29 +41,14 @@ pub struct Facts<'a> {
     pub virtio: Option<(usize, usize)>,
     /// How many virtio-mmio slots the device tree describes.
     pub virtio_count: u32,
-    /// Reads a free-running counter, and how fast it runs.
-    ///
-    /// The 2 Hz timer tick cannot resolve anything the object manager
-    /// does -- a whole sweep happens between two of them. This is the
-    /// ARM generic timer's counter at 62.5 MHz on QEMU `virt`, which is
-    /// what makes "how much does recording an event cost" a question the
-    /// shell can answer rather than assert.
+    /// Reads a free-running counter, and how fast it runs. Fine enough to
+    /// time a sweep, which the 2 Hz tick is not.
     pub clock: (fn() -> u64, u32),
-    /// `/chosen/bootargs`, verbatim.
-    ///
-    /// The shell reads two settings out of it. `mlsh.run=a;b;c` runs those
-    /// verbs at boot, which is what lets a headless capture drive the
-    /// shell at all: a log file is not a terminal, so no keystroke ever
-    /// reaches the guest. `mlos.rev=<sha>` is the commit the host built
-    /// from, stamped into a layout document's provenance, because the
-    /// kernel has no other way to know what produced it.
-    ///
-    /// `mlsh.run=` takes the REST of the string, so it must come last.
-    /// Its commands take arguments, and arguments have spaces in them.
+    /// `/chosen/bootargs`, verbatim. `mlsh.run=a;b;c` runs those verbs at
+    /// boot and takes the rest of the string, so it must come last;
+    /// `mlos.rev=<sha>` stamps a layout document's provenance.
     pub bootargs: &'a str,
-    /// Ticks so far. Borrowed rather than copied, because it keeps
-    /// changing and the shell should report the count at the moment it
-    /// was asked, not at the moment boot handed these over.
+    /// Ticks so far, borrowed so the count is read when asked for.
     pub ticks: &'a AtomicU32,
     /// What differs by platform beyond addresses and numbers.
     pub platform: Platform,
@@ -88,11 +68,8 @@ pub struct Platform {
     /// by its addresses; empty otherwise.
     pub irqchip: &'static str,
     /// Reads the eight bytes at an address, for `mem peek`, or `None`.
-    ///
     /// Supplied by the kernel because it is `unsafe` underneath and the
-    /// shell is not where `unsafe` lives. An unmapped address faults, and
-    /// that is the point as much as the value is: it is how a trap report
-    /// is provoked on purpose and read back.
+    /// shell is not where `unsafe` lives. An unmapped address faults.
     pub peek: Option<fn(u64) -> u64>,
 }
 
@@ -118,16 +95,12 @@ impl Shell {
         let _ = out.write_str("mlsh> ");
     }
 
-    /// Runs until the machine is switched off, which it never is.
-    ///
-    /// `wfi` rather than a spin: everything that happens from here begins
-    /// with an interrupt, so there is nothing to poll for and no reason to
-    /// burn a core doing it.
+    /// Runs until the machine is switched off, which it never is. `idle`
+    /// is `wfi`: everything from here begins with an interrupt.
     pub fn run(mut self, out: &mut impl Write, facts: &Facts<'_>, idle: fn()) -> ! {
         let _ = out.write_str("\r\n");
-        // `mlsh.run=model;sweep;layout` before the prompt. Echoed as if
-        // typed, so a captured console reads the same as a session
-        // somebody sat through.
+        // Boot-script verbs run before the prompt, echoed as if typed, so
+        // a captured console reads like a session.
         for verb in mlos_machine::rest(facts.bootargs, "mlsh.run=").split(';') {
             if verb.is_empty() {
                 continue;
@@ -142,22 +115,16 @@ impl Shell {
         }
     }
 
-    /// Drains the input queue, echoing and dispatching.
-    ///
-    /// Called from the idle loop, so everything it does happens with
-    /// interrupts enabled and the timer still running.
+    /// Drains the input queue, echoing and dispatching. Called from the
+    /// idle loop, with interrupts enabled.
     pub fn pump(&mut self, out: &mut impl Write, facts: &Facts<'_>) {
         while let Some(byte) = mlos_queue::pop() {
             self.feed(byte, out, facts);
         }
     }
 
-    /// Handles one byte.
-    ///
-    /// Echo happens here rather than in the driver because echo is a
-    /// property of the line being edited: a backspace has to erase a
-    /// character the terminal already drew, and only something that knows
-    /// whether the line is empty can decide whether to.
+    /// Handles one byte. Echo happens here, not in the driver: only the
+    /// line knows whether a backspace has anything to erase.
     fn feed(&mut self, byte: u8, out: &mut impl Write, facts: &Facts<'_>) {
         match byte {
             b'\r' | b'\n' => {

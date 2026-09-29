@@ -1,6 +1,8 @@
 //! Receive: [`Uart16550::read`] takes what has arrived, and
-//! [`Uart16550::enable_receive_interrupt`] makes each arrival raise IRQ 4
-//! -- routed by the IOAPIC, so the kernel can sleep until a key is typed.
+//! [`Uart16550::enable_receive_interrupt`] makes each arrival raise IRQ 4.
+//!
+//! Invariant: `OUT2` must be set in MCR, or the interrupt never reaches
+//! the ISA line. Design: docs/notes/mlos-uart16550.md.
 
 use crate::{Uart16550, port};
 

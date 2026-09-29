@@ -303,6 +303,44 @@ merely counts. A crate whose job is assembly -- a CLI, a demo harness --
 naturally has one module per thing it assembles, and that is not a design
 problem to be refactored away.
 
+## Comments: the invariant in the code, the reasoning in the notes
+
+A comment in this codebase answers one question: **what must hold here,
+and what breaks if it does not.** One to four lines. Everything else a
+module used to say in its opening essay -- why this design and not the
+other, what was tried, which step found which bug -- lives in
+`docs/notes/<crate>.md`, one note per crate, and the module's doc
+comment links to it:
+
+```rust
+//! A fixed region with a coalescing free list.
+//!
+//! Invariant: a release the free list cannot record is refused, never
+//! leaked. Design and history: docs/notes/mlos-arena.md.
+```
+
+Rules:
+
+- **Keep** `// SAFETY:` comments in full; they are the invariant.
+- **Keep** a `///` on every public item, stating its contract: what it
+  takes, what it returns, what it refuses. Not why it exists.
+- **Move** any paragraph that argues, compares alternatives, or explains
+  a decision into the crate's note, under a heading a reader could search
+  for.
+- **Drop** history -- "this used to be", "step 009 found" -- unless it
+  carries a lesson a future change would need; then it goes in the note
+  under `## Lessons`. Commit messages and `docs/status.md` already hold
+  the changelog.
+- A new crate gets its note in the same commit as its first module.
+
+Why: measured on 2026-09-27, 43% of the kernel's non-blank lines were
+comments, and a reader said so. The reasoning was worth keeping and was
+in the wrong place -- a module that opens with three screens of prose
+reads like an article, and the invariant a maintainer actually needs was
+buried in it. `docs/anatomy.md` and `docs/dream.md` are where the
+top-level why lives; the notes are the per-crate why; the code is the
+what.
+
 ## Toolchain and targets
 
 - Host tooling and simulators: the default host triple.

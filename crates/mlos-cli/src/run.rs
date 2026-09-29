@@ -1,27 +1,20 @@
 //! Launching MLOS under a hypervisor.
+//!
+//! Invariant: `mlsh.run=` goes last in the boot arguments, because it
+//! takes the rest of the string. Design and history:
+//! docs/notes/mlos-cli.md.
 
 use std::{fs, io, path::PathBuf, process::Command, thread, time::Duration};
 
 use crate::{image, vmm::command};
 
-/// The hypervisors `mlos run` knows about.
-///
-/// `hvf` and `tcg` are QEMU accelerators; `vz` is a different program
-/// entirely -- Apple's Virtualization.framework, driven through vfkit.
-/// They share a list because from the outside they are the same question:
-/// which thing runs MLOS.
+/// The hypervisors `mlos run` knows about: `hvf` and `tcg` are QEMU
+/// accelerators, `vz` is vfkit.
 pub const HOSTS: [&str; 3] = ["hvf", "tcg", "vz"];
 
-/// Boots the kernel with the console attached to this terminal.
-///
-/// Interactive: `mlsh` is on the other end, and a piped stdin would not
-/// reach it -- a receive FIFO only sees keystrokes from a real terminal.
-/// Quit with `Ctrl-A x` under QEMU, `Ctrl-C` under vfkit.
-///
-/// **`vz` produces no output yet.** Virtualization.framework offers a
-/// virtio console and no PL011, and MLOS drives only the latter. The VM
-/// runs; nothing says so. Requirement N2 closes when the virtio-console
-/// driver lands.
+/// Boots the kernel with the console attached to this terminal. `mlsh`
+/// is on the other end, so stdin must be a real terminal, not a pipe.
+/// `vz` produces no output yet: MLOS has no virtio-console driver.
 pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
     let image = image::build()?;
     let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio, "");
@@ -40,29 +33,10 @@ pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
 }
 
 /// Boots headless for `seconds` and returns whatever the console said.
-///
-/// The console log is named per process. A fixed name means two captures
-/// running at once overwrite each other's, which is exactly what parallel
-/// boot tests do, and it looks like a kernel that sometimes does not
-/// print.
-///
-/// The emulator's own complaints go to a file beside it, because when it
-/// refuses to START the console stays empty and the reason is the only
-/// thing that would help. That cost ten days once: a CI runner reported
-/// `missing "MLOS aarch64" in:` with nothing after the colon, while QEMU
-/// had been saying `failed to find romfile "efi-virtio.rom"` down a pipe
-/// nobody read.
-///
-/// HAVING EXITED is the signal, not having printed nothing. A guest with
-/// no console prints nothing and is fine -- `vz` is exactly that -- but a
-/// guest that had already exited never got as far as trying.
-///
-/// The non-interactive counterpart of [`run`], for tests and for checking
-/// a change still boots. No keystroke reaches the guest -- a file is not a
-/// terminal -- so a shell session is driven through `boot`, which becomes
-/// `/chosen/bootargs` and can carry `mlsh.run=model;sweep;layout`. That is
-/// what makes a runtime snapshot reproducible instead of something a
-/// person has to sit and type.
+/// `boot` becomes `/chosen/bootargs`. The log is named per process so
+/// parallel captures do not collide, and the emulator's stderr is kept:
+/// exiting with an empty console is the failure, an empty console alone
+/// is not.
 pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result<String> {
     let image = image::build()?;
     let log = std::env::temp_dir().join(format!("mlos-console-{}.txt", std::process::id()));
@@ -89,28 +63,10 @@ pub fn capture(host: &str, seconds: u64, virtio: bool, boot: &str) -> io::Result
     }
 }
 
-/// Boots, drives the shell, and writes the runtime layout it printed.
-///
-/// TCG rather than the default accelerator: this produces a file other
-/// repositories render, and a snapshot that came out differently on
-/// somebody else's machine would be worse than no snapshot. TCG is
-/// deterministic, which is the property that matters here and the same
-/// reason the boot tests use it.
-/// Three artifacts from one boot: the snapshot, the events that led to it,
-/// and the access trace those events record. Two boots would not be the
-/// same run and nothing downstream could tell.
-///
-/// The trace is DERIVED from the events rather than recorded separately,
-/// because every acquire is already in the stream and a second recorder
-/// is a second thing to disagree with the first.
-///
-/// `mlsh.run=` goes last in the boot arguments: it takes the rest of the
-/// string, because its commands take arguments and arguments have spaces.
-///
-/// The document goes through the same validator the static emitter uses.
-/// Two emitters that share no code still have to produce one format, and
-/// this is the only place that can tell -- the guest has no allocator to
-/// check itself with, and the file is what other repositories read.
+/// Boots under TCG, drives the shell, and writes the runtime layout it
+/// printed, the events that led to it, and the trace derived from those
+/// events: three artifacts from one boot. The document goes through the
+/// same validator the static emitter uses.
 pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
     use mlos_image_map::runtime::{EVENTS, OUT, SCRIPT, TRACE, events, save, trace};
     let script = format!("mlos.rev={} mlsh.run={SCRIPT}", mlos_image_map::revision());
@@ -125,22 +81,15 @@ pub fn runtime(seconds: u64) -> io::Result<PathBuf> {
     Ok(out)
 }
 
-/// Boots, headless or interactive, according to the arguments.
-///
-/// `--run` is what makes a headless boot a measurement rather than a
-/// smoke test: the guest has no keyboard, so the only way to ask it
-/// anything is to hand the shell a script at boot. `runtime` has done
-/// this with a hardcoded script since M2; this is the same door, opened
-/// to the caller, and it is how the kernel/simulator comparison drives
-/// four replays in one boot.
+/// Boots, headless or interactive, according to the arguments. `--run
+/// SCRIPT` hands the shell a script at boot, the only way to ask a
+/// headless guest anything.
 pub fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, debug) = crate::options(args, true)?;
     // `--console virtio` and `--run SCRIPT`; the parser in main.rs
     // accepts the pairs and the values are read back positionally here.
     let virtio = args.iter().any(|arg| arg == "virtio");
-    // `mlsh.run=` goes LAST in the command line, because it takes the
-    // rest of the string: its commands take arguments and arguments have
-    // spaces. Anything appended after it would be eaten as script.
+    // `mlsh.run=` goes last: it takes the rest of the string.
     let script = args.iter().skip_while(|arg| *arg != "--run").nth(1);
     let bootargs = script.map_or_else(String::new, |script| {
         format!("mlos.rev={} mlsh.run={script}", mlos_image_map::revision())

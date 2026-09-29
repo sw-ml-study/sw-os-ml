@@ -1,4 +1,7 @@
 //! The boot report: banner first, then what the entry and the loader said.
+//!
+//! Invariant: the banner is the first line, with the architecture in it,
+//! as on aarch64. Design: docs/notes/mlos-kernel-x86-64.md.
 
 use core::fmt::Write;
 
@@ -20,17 +23,13 @@ const GIGABYTE_PAGES: u8 = 0x04;
 const TRAPPED: u8 = 0x08;
 
 /// The trap reporter: prints why the CPU stopped, then ends the guest
-/// with the boot bits plus [`TRAPPED`], so `mlos run` and the tests get
-/// an answer instead of a machine that has silently stopped.
+/// with the boot bits plus [`TRAPPED`].
 pub fn fault(trap: &mlos_trap_x86_64::Trap) -> ! {
     mlos_trap_x86_64::describe(trap, &mut Uart16550::at(mlos_uart16550::COM1));
     hal::qemu_exit(crate::CODE.load(core::sync::atomic::Ordering::Relaxed) | TRAPPED)
 }
 
 /// Prints the banner and what was found, and returns it as report bits.
-///
-/// The banner is the first line, with the architecture in it -- the same
-/// shape as the aarch64 kernel's `MLOS aarch64`.
 pub fn report(console: &mut Uart16550, machine: Option<&Machine>) -> u8 {
     let (long_mode, gigabyte) = (hal::long_mode(), hal::gigabyte_pages());
     let _ = writeln!(console, "\nMLOS x86-64");

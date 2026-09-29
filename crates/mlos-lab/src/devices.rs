@@ -1,8 +1,7 @@
-//! What this machine turned out to have.
+//! What this machine turned out to have, probed on first use.
 //!
-//! Probed lazily rather than at boot: nothing needs a disk until a model
-//! is registered, and a machine without one should not pay for the search
-//! or be told about it.
+//! Invariant: the slots are named by the kernel; this crate never reads
+//! a device tree. Design: docs/notes/mlos-lab.md.
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,9 +12,6 @@ use mlos_virtio_blk::Block;
 use crate::state;
 
 /// Where this machine's virtio-mmio slots are, if the kernel has said.
-///
-/// Set at boot rather than discovered here, because the device tree is
-/// the kernel's to read and this crate has no business parsing one.
 static SLOTS: AtomicU64 = AtomicU64::new(0);
 
 /// Tells this crate where to look for devices.

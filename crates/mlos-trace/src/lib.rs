@@ -1,30 +1,8 @@
 //! An access trace: what a workload asked for, in order.
 //!
-//! Not what the system did about it. `mlos-events` records that -- placed,
-//! hit, refused -- and those are properties of the POLICY under test. A
-//! trace is the question; an event stream is one policy's answer to it.
-//! Keeping them apart is what lets the same workload be replayed against
-//! four policies and scored on the same question.
-//!
-//! So a trace carries a session and an `ObjectId` per access and nothing
-//! else. No tiers, no sizes, no costs, no residency. Every one of those is
-//! a property of the system rather than of the workload, and baking one
-//! into the trace would mean each policy was being asked something
-//! slightly different.
-//!
-//! `no_std` and allocation-free, because step 008 replays the same trace
-//! inside the kernel. Parsing fills a caller-provided slice; rendering
-//! writes to a `fmt::Write`. Reading the file off a disk is the host's
-//! business and is three lines wherever it is wanted.
-//!
-//! ## The model is not in the trace, and that is a trap
-//!
-//! An `ObjectId` names an object but does not say how big it is, and a
-//! simulator cannot tell when a budget is full without knowing. Sizes come
-//! from the model the trace was taken against -- `mlos-synth` today, a
-//! `.spm` sidecar at M3 step 4. The header names that model so replaying a
-//! trace against the wrong one is caught rather than silently producing
-//! numbers about nothing.
+//! Invariant: an access is a session and an `ObjectId` and nothing else;
+//! what the system did about it belongs to the event stream. Design and
+//! history: docs/notes/mlos-trace.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -56,22 +34,17 @@ pub struct Access {
 }
 
 impl Access {
-    /// Somewhere to parse into, before anything has been parsed.
-    ///
-    /// Not `Default`: object zero does not decode to a class, on purpose,
-    /// so that an all-zero id is rejected rather than read as object 0 of
-    /// model 0. A constant named for what it is says "buffer fill" where
-    /// `Default` would imply "a reasonable access".
+    /// Somewhere to parse into, before anything has been parsed. Not
+    /// `Default`: object zero decodes to no class, so an all-zero id is
+    /// rejected rather than read as a real access.
     pub const EMPTY: Self = Self {
         session: SessionId(0),
         object: ObjectId(0),
     };
 }
 
-/// What a trace is of, and where it came from.
-///
-/// Borrowed from the text it was parsed out of, so a header costs nothing
-/// and a trace can be parsed in a kernel with no allocator.
+/// What a trace is of, and where it came from. Borrowed from the text
+/// it was parsed out of.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Header<'a> {
     /// The model the ids name. A replay against a different one is wrong.

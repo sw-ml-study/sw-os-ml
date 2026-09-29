@@ -1,8 +1,7 @@
 //! Address translation, described without naming a page size.
 //!
-//! Sizes and level counts are the architecture's business. This interface
-//! speaks in byte ranges; an implementation is free to satisfy a range
-//! with 4 KiB leaves, 2 MiB blocks, or whatever its tables offer.
+//! Invariant: this interface speaks in byte ranges; sizes and level
+//! counts are the implementation's. Design: docs/notes/mlos-hal.md.
 
 /// A physical address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
@@ -12,11 +11,8 @@ pub struct PhysAddr(pub u64);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
 pub struct VirtAddr(pub u64);
 
-/// What a mapping permits.
-///
-/// Plain booleans rather than a bitfield: the bit encodings differ per
-/// architecture, so encoding them here would put architecture above the
-/// HAL, which is exactly what this crate exists to prevent.
+/// What a mapping permits. Booleans, not a bitfield: the encodings are
+/// the architecture's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PageFlags {
     /// Readable.
@@ -25,9 +21,7 @@ pub struct PageFlags {
     pub write: bool,
     /// Executable.
     pub execute: bool,
-    /// Device memory: uncached, and not speculatively accessed. Wrong
-    /// memory type on an MMIO range is the classic way a driver appears
-    /// to work until it does not.
+    /// Device memory: uncached, and not speculatively accessed.
     pub device: bool,
 }
 
@@ -50,9 +44,8 @@ pub trait PageTable {
     /// # Safety
     ///
     /// The caller guarantees the physical range is owned by whoever is
-    /// asking, and that creating this alias does not violate an
-    /// invariant some other mapping relies on. Nothing here can check
-    /// that.
+    /// asking, and that this alias violates no invariant another mapping
+    /// relies on. Nothing here can check that.
     unsafe fn map(
         &mut self,
         va: VirtAddr,
@@ -74,7 +67,7 @@ pub trait PageTable {
     /// # Safety
     ///
     /// The tables must map, at minimum, the currently executing code and
-    /// its stack. Getting this wrong faults on the instruction after the
-    /// switch, with no way to report it.
+    /// its stack; otherwise the instruction after the switch faults with
+    /// no way to report it.
     unsafe fn activate(&self);
 }

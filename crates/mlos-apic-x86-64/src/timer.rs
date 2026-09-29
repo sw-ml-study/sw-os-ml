@@ -1,4 +1,7 @@
 //! The LAPIC timer, and the acknowledgement every interrupt ends with.
+//!
+//! Invariant: `timer_rate` counts with the timer masked, and `start_timer`
+//! is given what it counted. Design: docs/notes/mlos-apic-x86-64.md.
 
 use crate::{Lapic, clock};
 

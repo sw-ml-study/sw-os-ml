@@ -1,19 +1,8 @@
-//! Checking a rendered document against the contract.
+//! Checking a rendered document against the contract, as text.
 //!
-//! Against the TEXT, not against the types that produced it. Two emitters
-//! write this format -- a host-side one with `Vec`s and a `no_std` one
-//! streaming to a console -- and they share no code that could be checked
-//! once. What they DO share is the bytes a consumer reads, so that is what
-//! is checked, and the runtime emitter gets the same gate as the static
-//! one without either of them knowing about the other.
-//!
-//! Deliberately about SHAPE and not about numbers. The regions in a layout
-//! change whenever the kernel grows a section or a sweep gets further, and
-//! a test pinned to those figures would be rewritten every time instead of
-//! ever failing usefully. What must never change is that columns stay
-//! index-aligned, that regions tile each space exactly once, and that ids
-//! are unique -- because a consumer draws a solid stack of cells and picks
-//! on the id, and each of those breaks silently.
+//! Invariant: columns are index-aligned, ids are unique and non-zero,
+//! edges name real regions, and regions tile each space exactly once.
+//! Shape only, never numbers. Design: docs/notes/mlos-layout.md.
 
 use std::collections::HashSet;
 

@@ -1,14 +1,8 @@
-//! The machine, as the device tree describes it.
+//! The machine, as the device tree describes it: memory, CPUs, console,
+//! interrupt controller, virtio, and where the blob itself sits.
 //!
-//! Answers exactly the questions MLOS asks at boot -- where is memory, how
-//! many CPUs, where is the console, and where is the blob itself -- and
-//! stops.
-//!
-//! Architecture-neutral: nothing here is aarch64-specific, because a
-//! device tree is not. It lives outside `mlos-hal-aarch64` for that reason
-//! and because that crate had no module budget left, which is the
-//! `sw-checklist` gate doing what AGENTS.md says it should -- forcing the
-//! split at the point the concern actually separates.
+//! Invariant: architecture-neutral; nothing here is aarch64-specific.
+//! Design and history: docs/notes/mlos-machine.md.
 
 #![no_std]
 
@@ -21,22 +15,9 @@ use mlos_hal::MemoryKind;
 
 pub use regions::{MAX_REGIONS, Regions};
 
-/// Everything after `key` in a boot-args string, to the end of it.
-///
-/// Here rather than in the shell because boot arguments are a device-tree
-/// property and this crate is what reads one.
-///
-/// To the END, not to the next space, because the values differ in what
-/// they need: `mlos.rev=abc123` is one token, while
-/// `mlsh.run=model;trace off;sweep` is three commands and two of them take
-/// an argument. Whitespace-splitting here would keep `model;trace` and
-/// throw the rest away. So the rule is the permissive one and the caller
-/// narrows it -- `split_whitespace().next()` for a setting that is a
-/// single token.
-///
-/// The cost is that a setting whose value has spaces in it must come LAST.
-/// That is a real constraint, and it is stated wherever such a setting is
-/// written rather than only here.
+/// Everything after `key` in a boot-args string, to the end of it, not
+/// to the next space; the caller narrows a single-token setting. A
+/// setting whose value contains spaces must therefore come last.
 #[must_use]
 pub fn rest<'a>(bootargs: &'a str, key: &str) -> &'a str {
     match bootargs.split_once(key) {
@@ -71,24 +52,8 @@ pub struct Machine {
 }
 
 impl Machine {
-    /// Marks `[base, base + len)` as holding the kernel image.
-    ///
-    /// The tree describes what the MACHINE has; it knows nothing about
-    /// what a loader put into it. Combining those two facts is this
-    /// type's job, not its caller's.
-    /// Reads the device tree the loader left at `dtb`.
-    ///
-    /// The blob's own extent is recorded as it is parsed. Firmware
-    /// structures are real memory -- several kilobytes here, and much more
-    /// on a machine with ACPI -- and on a system whose whole point is
-    /// accounting for resident bytes, leaving them permanently unavailable
-    /// would be an odd place to start.
-    ///
-    /// # Safety
-    ///
-    /// `dtb` must be what the boot protocol supplied: a device tree blob
-    /// whose declared length is readable. Anything else is rejected by the
-    /// header check rather than believed.
+    /// Marks `[base, base + len)` as holding the kernel image, which the
+    /// tree cannot know about.
     #[must_use]
     pub fn reserving(self, base: u64, len: u64) -> Self {
         Self {
@@ -97,11 +62,14 @@ impl Machine {
         }
     }
 
-    /// Reads the device tree the loader left at `dtb`.
+    /// Reads the device tree the loader left at `dtb`, recording the
+    /// blob's own extent as reclaimable.
     ///
     /// # Safety
     ///
-    /// `dtb` must be what the boot protocol supplied.
+    /// `dtb` must be what the boot protocol supplied: a device tree blob
+    /// whose declared length is readable. Anything else is rejected by the
+    /// header check rather than believed.
     pub unsafe fn probe(dtb: *const u8) -> Option<Self> {
         // SAFETY: forwarded from this function's contract.
         let fdt = unsafe { Fdt::from_ptr(dtb) }?;
@@ -115,11 +83,6 @@ impl Machine {
     }
 
     /// Turns a finished walk into a machine, reserving the blob itself.
-    ///
-    /// Firmware structures are real memory -- several kilobytes here, and
-    /// much more on a machine with ACPI -- and on a system whose whole
-    /// premise is accounting for resident bytes, writing them off
-    /// permanently would be an odd place to start.
     fn from_scan(scan: &scan::Scan<'static>, base: u64, size: u64) -> Self {
         let machine = Self {
             regions: scan.regions,
@@ -129,8 +92,8 @@ impl Machine {
             virtio: scan.virtio,
             virtio_count: scan.virtio_count,
             bootargs: scan.bootargs,
-            // Only a v3 layout is understood; a v2 reports a CPU
-            // interface in that second range, a different device.
+            // Only a v3 layout is understood; a v2's second range is a
+            // different device.
             gic: scan.gic_v3.then_some(scan.gic_reg).flatten(),
             blob: (base, size),
         };

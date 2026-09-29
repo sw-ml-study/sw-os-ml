@@ -1,23 +1,13 @@
-//! The vector table.
+//! The vector table: sixteen 128-byte entries, aligned to 2048.
 //!
-//! Sixteen entries, each 128 bytes, the whole table aligned to 2048 --
-//! `VBAR_EL1` has no bits for anything finer. The linker script places
-//! `.text.vectors` on that boundary.
-//!
-//! Every entry does the same two things: load its own index and branch.
-//! That is all 128 bytes needs to hold, and keeping the assembly to the
-//! irreducible minimum is deliberate -- code reached only when something
-//! has already gone wrong is code that gets tested least.
+//! Invariant: `VBAR_EL1` has no bits below 2048, so `.text.vectors` must
+//! start on that boundary and entry 0 must be its first byte. Design:
+//! docs/notes/mlos-trap-aarch64.md.
 
 use crate::{irq, report};
 
-/// Caller-saved state, plus the two registers `eret` consumes.
-///
-/// `x0`-`x18`, `x29`, `x30`, `ELR_EL1` and `SPSR_EL1`: 23 values, rounded
-/// to 24 slots because the stack pointer must stay 16-byte aligned.
-/// Callee-saved registers are absent on purpose -- the handler is
-/// `extern "C"`, so the compiler already preserves them, and saving them
-/// twice costs every interrupt for the benefit of none.
+/// Caller-saved state plus `ELR_EL1` and `SPSR_EL1`: 23 values in 24
+/// slots, so the stack pointer stays 16-byte aligned.
 const FRAME: usize = 192;
 
 /// The macros hard-code the frame size; this is what keeps the constant
@@ -49,8 +39,8 @@ macro_rules! save {
     };
 }
 
-/// Pops it again, restoring `ELR_EL1` and `SPSR_EL1` last but one so
-/// `eret` returns to exactly the instruction that was interrupted.
+/// Pops it again, restoring `ELR_EL1` and `SPSR_EL1` before `x0` and
+/// `x1` so `eret` returns to exactly the interrupted instruction.
 macro_rules! restore {
     () => {
         concat!(
@@ -82,8 +72,8 @@ macro_rules! vector {
     };
 }
 
-/// An IRQ entry. Unlike a fault, this one has to come back: it saves the
-/// interrupted context, dispatches, restores, and `eret`s.
+/// An IRQ entry: saves the interrupted context, dispatches, restores,
+/// and `eret`s.
 macro_rules! interrupt {
     () => {
         concat!(
@@ -96,11 +86,8 @@ macro_rules! interrupt {
     };
 }
 
-/// The table `VBAR_EL1` points at.
-///
-/// Naked and in its own section: the compiler must emit nothing before
-/// the first entry, because `VBAR_EL1` addresses the table itself and
-/// anything at offset 0 that is not entry 0 is taken as entry 0.
+/// The table `VBAR_EL1` points at. Naked and in its own section so the
+/// compiler emits nothing before entry 0.
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.vectors")]

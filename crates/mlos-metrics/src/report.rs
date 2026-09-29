@@ -1,4 +1,6 @@
 //! Reading the counters out.
+//!
+//! Design: docs/notes/mlos-metrics.md.
 
 use mlos_abi::ObjectClass;
 
@@ -19,15 +21,7 @@ pub struct Report {
 
 impl Report {
     /// `Rm`: resident bytes over model bytes, in parts per thousand.
-    ///
-    /// Per mille rather than a float, because this is read in a kernel
-    /// with no floating point and printed by a shell with no formatter.
-    /// The ratio matters more than the precision: 3/1000 resident is the
-    /// interesting fact, not whether it is 0.31% or 0.34%.
-    ///
-    /// `None` when nothing is registered -- a ratio with no denominator
-    /// is not zero, it is unanswerable, and reporting zero would read as
-    /// "nothing is resident" rather than "nothing exists".
+    /// `None` when nothing is registered: no denominator, no ratio.
     #[must_use]
     pub const fn residency_per_mille(&self) -> Option<u32> {
         if self.registered == 0 {
@@ -47,11 +41,8 @@ impl Report {
         total
     }
 
-    /// The class that faulted most, and how often.
-    ///
-    /// The single most useful line of a report: it names what the system
-    /// is actually struggling with, which is the question a total never
-    /// answers.
+    /// The class that faulted most, and how often. `None` when nothing
+    /// has faulted.
     #[must_use]
     pub fn worst(&self) -> Option<(ObjectClass, u32)> {
         ObjectClass::ALL

@@ -3,42 +3,9 @@
 
 //! A fixed region with a coalescing free list.
 //!
-//! Its own crate because it knows nothing about objects: it hands out
-//! runs of bytes and takes them back, and `mlos-objman` is what decides
-//! which object goes in one. `mlos-objman` was at four modules when
-//! eviction arrived, and AGENTS.md says to make the sibling crate rather
-//! than push a fifth concern into a crate that is full.
-//!
-//! Where a faulted-in object is put, and taken out of.
-//!
-//! It was a bump allocator until M3 step 008, deliberately: until a policy
-//! could decide what to throw away, the honest behaviour when memory ran
-//! out was to say so, and a general allocator would have let the manager
-//! quietly succeed at the point where the interesting question -- what
-//! should have been evicted -- was the one being dodged. Step 006
-//! answered that question, so this is where acting on it becomes
-//! possible.
-//!
-//! ## A sorted free list, coalesced on release
-//!
-//! Free extents are kept sorted by address and merged with their
-//! neighbours the moment one is returned. Merging on release rather than
-//! on demand is what keeps the list short: a thousand evictions of
-//! adjacent tiles leave one hole, not a thousand.
-//!
-//! Fixed capacity, because there is no allocator. A release that would
-//! need a `HOLES + 1`th extent is REFUSED rather than silently leaking
-//! the memory -- see [`Arena::release`]. That is the failure mode worth
-//! being loud about: memory that has been evicted and cannot be reused is
-//! worse than memory that was never freed, because the accounting says it
-//! is available.
-//!
-//! ## First fit, not best fit
-//!
-//! First fit is what a kernel can afford and it is not obviously worse.
-//! Best fit leaves a trail of slivers too small for anything; first fit
-//! leaves larger fragments nearer the end. `tests/fragmentation.rs`
-//! measures what actually happens rather than trusting either story.
+//! Invariant: a release the free list cannot record is refused, never
+//! leaked, and the bytes stay the caller's. Design and history:
+//! docs/notes/mlos-arena.md.
 
 mod holes;
 
@@ -46,18 +13,12 @@ use mlos_abi::{Error, Result};
 
 use holes::Hole;
 
-/// How many separate free extents the arena can track.
-///
-/// Generous for a workload of uniform tiles, which coalesce into a
-/// handful of runs. A workload of ragged sizes could exhaust it, and
-/// [`Arena::release`] says so rather than losing the bytes.
+/// How many separate free extents the arena can track. A release that
+/// would need one more is refused by [`Arena::release`].
 pub const HOLES: usize = 64;
 
-/// What the arena looks like right now.
-///
-/// One call rather than four accessors, because every caller that wants
-/// one of these wants at least two, and a `largest` that disagreed with
-/// the `used` it was read beside would be worse than either alone.
+/// What the arena looks like right now, read in one call so the fields
+/// agree with each other.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Occupancy {
     /// Where the arena's bytes begin, so a `resident_at` can be turned
@@ -68,24 +29,13 @@ pub struct Occupancy {
     pub used: u64,
     /// Bytes the arena holds in total.
     pub capacity: u64,
-    /// The largest single run of free bytes.
-    ///
-    /// The fragmentation number. When this is far below `capacity -
-    /// used`, the arena has free memory it cannot give to anything, and a
-    /// policy evicting perfectly into it has not helped.
+    /// The largest single run of free bytes: what can actually be placed.
     pub largest: u64,
 }
 
-/// A region that resident objects are placed in.
-///
-/// Borrowed rather than owned, and for a lifetime rather than `'static`,
-/// because two things need one: the kernel, over a static buffer, and
-/// `mlos-sim`, over a `Vec` the size of a budget. The simulator used to
-/// count bytes instead and evict until the count fitted, and the kernel
-/// and the simulator disagreed by thirteen reads on a next-use replay --
-/// every one of them an eviction the kernel made because the free bytes
-/// it had were not contiguous. A simulator that does not fragment is not
-/// simulating this arena.
+/// A region that resident objects are placed in. Borrowed for a
+/// lifetime, so the kernel's static buffer and the simulator's `Vec` can
+/// both back one.
 pub struct Arena<'a> {
     bytes: &'a mut [u8],
     base: u64,
@@ -95,19 +45,12 @@ pub struct Arena<'a> {
 }
 
 impl<'a> Arena<'a> {
-    /// What a placement is rounded up to, in bytes.
-    ///
-    /// Enough for anything a device will DMA into, and it keeps one
-    /// object's tail out of the next one's cache line. Public because a
-    /// layout emitter draws the arena in these units, and two statements
-    /// of the same granularity would be one too many.
+    /// What a placement is rounded up to, in bytes. Public because the
+    /// layout emitter draws the arena in these units.
     pub const ALIGN: u32 = 16;
 
-    /// An arena over `bytes`, entirely free.
-    ///
-    /// Safe, which is worth saying because it looks like it should not
-    /// be. The address it hands out is the address of memory it holds an
-    /// exclusive borrow of, so it cannot name anything it does not own.
+    /// An arena over `bytes`, entirely free. Safe: every address it hands
+    /// out is inside memory it exclusively borrows.
     #[must_use]
     pub fn new(bytes: &'a mut [u8]) -> Self {
         let (base, len) = (bytes.as_ptr() as u64, bytes.len());
@@ -123,13 +66,8 @@ impl<'a> Arena<'a> {
     }
 
     /// Reserves `size` bytes, returning where they are and room to fill.
-    ///
-    /// Both, in one call, because they are one decision. Separating them
-    /// is what let the fault path allocate and then forget to fetch.
-    ///
-    /// `NoBudget` when no single run is large enough -- which after
-    /// evictions means "not enough CONTIGUOUS room", a different thing
-    /// from "not enough room" and the reason `Occupancy::largest` exists.
+    /// `NoBudget` when no single run is large enough, which after
+    /// evictions is stricter than "not enough free bytes".
     pub fn place(&mut self, size: u32) -> Result<(u64, &mut [u8])> {
         let want = (size as usize).next_multiple_of(Self::ALIGN as usize);
         let index = self.free[..self.holes]
@@ -150,12 +88,8 @@ impl<'a> Arena<'a> {
     }
 
     /// Gives `size` bytes at `address` back, merging with any neighbours.
-    ///
-    /// `NoBudget` when the free list is full, and the bytes are NOT taken
-    /// -- the caller still owns them and the object is still resident.
-    /// Losing them would leave the accounting claiming memory that
-    /// nothing can ever hand out, which is a worse failure than refusing
-    /// to evict.
+    /// `NoBudget` when the free list is full, and then nothing changes:
+    /// the caller still owns the bytes and the object is still resident.
     pub fn release(&mut self, address: u64, size: u32) -> Result<()> {
         let at = usize::try_from(address.checked_sub(self.base).ok_or(Error::BadObject)?)
             .map_err(|_| Error::BadObject)?;

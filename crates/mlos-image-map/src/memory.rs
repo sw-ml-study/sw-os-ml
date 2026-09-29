@@ -1,10 +1,7 @@
 //! The two memory spaces: guest RAM, and the arena inside it.
 //!
-//! Every figure is read back from the linked kernel rather than restated.
-//! `linker/aarch64.ld` decides where `.text` ends and `.bss` begins, and
-//! it will decide differently after the next commit; an emitter carrying
-//! its own copy of those numbers would be wrong without being noticed,
-//! which is exactly the failure a memory map is supposed to expose.
+//! Invariant: section extents come from the linked ELF and the `Image`
+//! header, never from a copy kept here. Design: docs/notes/mlos-image-map.md.
 
 use std::{fs, io, path::Path};
 
@@ -17,12 +14,8 @@ use crate::{RAM_BASE, RAM_BYTES, space};
 /// Page size, and the block a RAM map is drawn in.
 const PAGE: u64 = 4096;
 
-/// Kernel sections worth drawing, and what a viewer colours them by.
-///
-/// `text`, `data`, `bss` and `stack` are sw-mlpl's existing palette words,
-/// used verbatim so MLOS's RAM map renders through the palette SWTOS
-/// already needs. `rodata` is the one addition, and it is not MLOS-
-/// specific -- every OS map wants it.
+/// Kernel sections worth drawing, and the palette word each is coloured
+/// by. The words are sw-mlpl's; `rodata` is the one MLOS added.
 const SECTIONS: [(&str, &str); 4] = [
     (".text", "text"),
     (".rodata", "rodata"),
@@ -31,14 +24,8 @@ const SECTIONS: [(&str, &str); 4] = [
 ];
 
 /// Guest RAM, from the bottom of the machine's DRAM to the top of what
-/// `mlos run` gives it.
-///
-/// The boot stack is deduced rather than read: it is whatever lies between
-/// the end of `.bss` and the end of the image, one page-aligned step on --
-/// the `ALIGN(4096)` the linker script puts before `__stack_bottom`. It
-/// has no section of its own to look up, and the alternative would be
-/// carrying a copy of its size here, where nothing would notice it going
-/// stale.
+/// `mlos run` gives it. The boot stack is deduced: from the end of `.bss`
+/// rounded to a page (the linker's `ALIGN(4096)`) to the end of the image.
 pub fn sysram(elf: &Path, image: &Path) -> io::Result<(Space, Vec<Region>)> {
     let (offset, size) = header(image)?;
     let ids = &mut Where::Sysram.ids();
@@ -58,13 +45,8 @@ pub fn sysram(elf: &Path, image: &Path) -> io::Result<(Space, Vec<Region>)> {
     Ok((space(Where::Sysram, "guest RAM", PAGE, RAM_BYTES), regions))
 }
 
-/// The object arena, as a space of its own.
-///
-/// Physically it is a static inside the kernel image, which `sysram`
-/// already accounts for as part of `.data`. It gets its own space anyway
-/// because residency is the thing being looked at, and a 32 KiB box inside
-/// a 512 MiB one is not a picture of anything. Statically it is entirely
-/// free; step 009 fills it with what is actually resident.
+/// The object arena, as a space of its own, entirely free. Physically it
+/// is inside `.data`, which `sysram` already accounts for.
 pub fn dram() -> io::Result<(Space, Vec<Region>)> {
     let capacity = mlos_lab::ARENA_BYTES as u64;
     let mut regions = Vec::new();
@@ -103,10 +85,8 @@ fn region(
     }
 }
 
-/// `text_offset` and `image_size` from the arm64 `Image` header.
-///
-/// The header the loader reads, so these are the numbers that decide where
-/// the kernel actually lands -- not a guess at them.
+/// `text_offset` and `image_size` from the arm64 `Image` header: the
+/// numbers the loader itself uses.
 fn header(image: &Path) -> io::Result<(u64, u64)> {
     let bytes = fs::read(image)?;
     let at = |offset: usize| -> io::Result<u64> {

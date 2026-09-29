@@ -1,32 +1,9 @@
-//! Known-next-use: evict what is wanted furthest away.
+//! Known-next-use: evict what is wanted furthest away per unit of
+//! recovery cost.
 //!
-//! The policy this project exists to test. Belady's rule is normally
-//! unimplementable because it needs the future; a dense transformer hands
-//! it over, because the order it will read its own weights follows from
-//! its own structure.
-//!
-//! Three things it must get right that a naive reading would not.
-//!
-//! **Cost is half the decision.** Belady's rule assumes every miss costs
-//! the same, which is true for pages and false for everything MLOS holds.
-//! A weight tile cannot be recomputed at any price; an activation is
-//! cheaper to rebuild than to keep. The furthest-away object is the wrong
-//! victim if it is also the dearest to get back, so what is maximised is
-//! **distance per unit of recovery cost** rather than distance.
-//!
-//! **A guess is not knowledge.** `NextUse::At` is exact -- a declared
-//! stream said so. `NextUse::Probability` is a router's
-//! distribution, and acting on it as though it were a distance would
-//! licence evicting something the system was merely unsure about as
-//! though it knew. Both are turned into a horizon, and the probabilistic
-//! one is then HALVED, so a hint has to be twice as good as knowledge
-//! before it wins. That is the discount made explicit rather than left in
-//! a comment.
-//!
-//! **`Never` is not infinity.** An object nothing has declared a future
-//! for is the obvious victim, and it is obvious because nothing KNOWS
-//! about it -- not because nothing will want it. It gets the furthest
-//! horizon, and that is a decision with a reason rather than a maximum.
+//! Invariant: a probabilistic horizon is discounted against a known one,
+//! and `Never` is a chosen horizon, not infinity. Design and history:
+//! docs/notes/mlos-policy.md.
 
 use mlos_abi::ObjectId;
 use mlos_objtab::{NextUse, ObjectMeta};
@@ -40,22 +17,15 @@ pub struct KnownNextUse;
 pub const NEXT_USE: KnownNextUse = KnownNextUse;
 
 /// The horizon given to an object nothing has declared a future for.
-///
-/// Large enough to outrank any real distance in this workload and far
-/// enough from `u32::MAX` that multiplying by a scale cannot overflow.
+/// Outranks any real distance; `UNDECLARED * SCALE` must not overflow.
 const UNDECLARED: u64 = 1 << 40;
 
 /// How much a probabilistic horizon is discounted against a known one.
 const HINT: u64 = 2;
 
-/// Fixed-point scale for the distance-per-cost ratio.
-///
-/// Recovery costs are nanoseconds and run to millions, so a smaller scale
-/// truncates the whole ratio to zero for anything expensive: the first
-/// version used a thousand, every weight tile nearer than four thousand
-/// steps scored exactly zero, and the policy was choosing between ties by
-/// table position. Large enough that the distance still resolves after
-/// the division, small enough that the multiply cannot overflow.
+/// Fixed-point scale for the distance-per-cost ratio. Must exceed the
+/// recovery costs in play (nanoseconds, millions) or the ratio truncates
+/// to zero for every expensive object.
 const SCALE: u64 = 1_000_000;
 
 impl Policy for KnownNextUse {
@@ -71,11 +41,7 @@ impl Policy for KnownNextUse {
             };
             let score = evictability(&meta, now);
             // Ties go to the lower id, so the answer does not depend on
-            // the order the residents were offered in. It did: the kernel
-            // offers hash-slot order and the simulator insertion order,
-            // and the two evicted different `Never` blocks of the same
-            // session -- harmless in a byte-counting simulator, and five
-            // reads apart once fragmentation was real on both sides.
+            // the order the residents were offered in.
             if best.is_none_or(|(held_id, held)| score > held || (score == held && id < held_id)) {
                 best = Some((id, score));
             }
@@ -84,17 +50,9 @@ impl Policy for KnownNextUse {
     }
 }
 
-/// How good a victim this is: higher is more evictable.
-///
-/// Distance per unit of recovery cost, so an object that is far away but
-/// ruinous to get back can still be worth keeping over one that is nearer
-/// and cheap.
-///
-/// The cost is the CHEAPER of fetching it again and rebuilding it.
-/// `CostNs::IMPOSSIBLE` is what weights carry for recompute -- there is no
-/// computation that produces a trained weight -- so taking the minimum is
-/// what makes an activation, cheap to rebuild and expensive to store, a
-/// better victim than a tile at the same distance.
+/// How good a victim this is: higher is more evictable. Distance per unit
+/// of recovery cost, where recovery is the cheaper of reload and
+/// recompute.
 fn evictability(meta: &ObjectMeta, now: u32) -> u64 {
     let (reload, recompute) = (meta.reload_cost.0, meta.recompute_cost.0);
     let recovery = match reload.min(recompute) {
@@ -108,13 +66,11 @@ fn evictability(meta: &ObjectMeta, now: u32) -> u64 {
 fn horizon(next: NextUse, now: u32) -> u64 {
     match next {
         NextUse::Never => UNDECLARED,
-        // A position minus where the stream has got to. Saturating
-        // because a position already passed means the object is wanted
-        // now, which is a distance of zero and the worst possible victim.
+        // Saturating: a position already passed means wanted now, which
+        // is a distance of zero and the worst possible victim.
         NextUse::At(position) => u64::from(position.saturating_sub(now)),
-        // A router's distribution, not a distance. An expert wanted with
-        // probability p each step is expected about 1/p steps away -- and
-        // then halved, because being unsure is not the same as knowing.
+        // Expected about 1/p steps away, then discounted: a hint is not
+        // knowledge.
         NextUse::Probability(chance) => match chance {
             0 => UNDECLARED / HINT,
             odds => u64::from(u16::MAX) / u64::from(odds) / HINT,

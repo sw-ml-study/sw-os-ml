@@ -1,8 +1,7 @@
 //! `mlos` -- build, run and diagnose MLOS.
 //!
-//! Replaces `scripts/boot.sh` and `scripts/image.sh`, which were fine
-//! until more than one thing needed them and a stale image started
-//! producing confusing results.
+//! Invariant: an argument the parser does not recognise is rejected here,
+//! before it can reach a VMM. Design and history: docs/notes/mlos-cli.md.
 
 mod doctor;
 mod image;
@@ -52,22 +51,10 @@ fn dispatch(args: &[String]) -> io::Result<()> {
 }
 
 /// Pulls the host, the capture duration and the debug flag out of the
-/// arguments, rejecting anything it does not recognise.
-///
-/// `takes_host` is false for commands that accept no positional argument,
-/// so `mlos doctor oops` is told it passed an unexpected argument rather
-/// than that it chose a bad accelerator.
-///
-/// Rejecting, not ignoring. A tolerant parser turns a typo into a
-/// confusing failure somewhere further down: a stray argument once reached
-/// QEMU as an accelerator name, and the error the user saw came from a
-/// program they had not typed.
-///
-/// `--console` and `--run` take a value, and the value is dropped here
-/// rather than returned: `run::boot` reads both back positionally. What
-/// this parser owes them is that neither value reaches the accelerator
-/// check -- `virtio` and a shell script are both things QEMU would object
-/// to, confusingly, on the user's behalf.
+/// arguments, rejecting anything it does not recognise. `takes_host` is
+/// false for verbs with no positional argument. The values of `--console`
+/// and `--run` are skipped, not returned: `run::boot` reads them back
+/// positionally, and neither may reach the accelerator check.
 fn options(args: &[String], takes_host: bool) -> io::Result<(&str, Option<u64>, bool)> {
     let mut rest = args.iter().skip(1);
     let (mut host, mut seconds, mut debug) = (None, None, false);
@@ -92,12 +79,8 @@ fn options(args: &[String], takes_host: bool) -> io::Result<(&str, Option<u64>, 
     Ok((host.unwrap_or("hvf"), seconds, debug))
 }
 
-/// Checks an accelerator name before it can reach QEMU.
-///
-/// Worth doing rather than letting QEMU object, because QEMU objects to
-/// the wrong thing: a stray `#` arrived here as an accelerator, and what
-/// the user saw was `invalid accelerator #` from a program they had never
-/// typed.
+/// Checks an accelerator name against `run::HOSTS` before it can reach
+/// QEMU.
 fn accelerator(name: &str) -> io::Result<&str> {
     if run::HOSTS.contains(&name) {
         return Ok(name);
@@ -108,12 +91,9 @@ fn accelerator(name: &str) -> io::Result<&str> {
     )))
 }
 
-/// How long to let the guest run before reading its console.
-///
-/// Generous, and TCG is slow: a sweep faults thirty-odd tiles off a
-/// virtio-blk device before the layout is printed, and a snapshot that
-/// timed out half way through would be a valid document describing a
-/// system that never existed.
+/// How long to let the guest run before reading its console. Must cover
+/// a whole sweep under TCG: a snapshot cut off half way is a valid
+/// document of a system that never existed.
 const RUNTIME_SECONDS: u64 = 12;
 
 /// What `mlos --help` prints.

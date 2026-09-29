@@ -1,16 +1,7 @@
-//! Where an ELF64 file's sections land in memory.
+//! Where an ELF64 file's sections land in memory. Section headers only.
 //!
-//! Exists because the layout emitter must not guess. `docs/plan.md`'s
-//! visualization steps promise that every figure comes from the artifact
-//! that produced it, and the kernel's `.text`/`.rodata`/`.data`/`.bss`
-//! extents are decided by `linker/aarch64.ld` at link time. Reading them
-//! back out of the linked file is the only way to report them and still be
-//! right after the next commit changes their sizes.
-//!
-//! Section headers only, and deliberately nothing else. Symbols, relocs
-//! and program headers are all readable the same way and none of them are
-//! needed yet; a reader that stops at what is used is one that can be
-//! checked by eye.
+//! Invariant: little-endian ELF64 only, and a truncated file is an error
+//! naming the offset, never a panic. Design: docs/notes/mlos-elf.md.
 
 #![forbid(unsafe_code)]
 
@@ -35,11 +26,8 @@ pub struct Section {
     pub size: u64,
 }
 
-/// Every section in the ELF64 file at `path`.
-///
-/// Includes the non-allocated ones (`.debug_*`, `.symtab`) with `addr`
-/// zero; filtering them is the caller's business, since which sections
-/// matter depends on what the caller is mapping.
+/// Every section in the ELF64 file at `path`, including non-allocated
+/// ones with `addr` zero. Filtering is the caller's business.
 pub fn sections(path: &Path) -> io::Result<Vec<Section>> {
     let bytes = fs::read(path)?;
     let (offset, stride, count, names) = table(&bytes)?;
@@ -63,7 +51,7 @@ pub fn sections(path: &Path) -> io::Result<Vec<Section>> {
 }
 
 /// Reads the section header table's own geometry, rejecting anything that
-/// is not a little-endian 64-bit ELF -- the only kind MLOS links.
+/// is not a little-endian 64-bit ELF.
 fn table(bytes: &[u8]) -> io::Result<(usize, usize, usize, usize)> {
     let head = bytes.get(..6).ok_or_else(|| io::Error::other("not an ELF"));
     if head? != b"\x7fELF\x02\x01" {
@@ -95,10 +83,8 @@ fn at(
     ))
 }
 
-/// The NUL-terminated name at `at` in the section-name string table.
-///
-/// A missing terminator yields the rest of the table rather than an error:
-/// a section whose name is odd is not a reason to refuse to draw the map.
+/// The NUL-terminated name at `at` in the section-name string table. A
+/// missing terminator yields the rest of the table, not an error.
 fn label(text: &[u8], at: u32) -> String {
     let rest = text.get(at as usize..).unwrap_or_default();
     let end = rest

@@ -1,10 +1,7 @@
 //! The disk space: the model's weights where they are actually stored.
 //!
-//! Also where MLOS's region vocabulary is defined, because this is the
-//! only module that turns an [`ObjectClass`] into a word a viewer colours
-//! by. Both matches here are exhaustive with no wildcard arm, so adding a
-//! class or a tier to the ABI is a compile error in this file rather than
-//! a region that silently renders as nothing.
+//! Invariant: ids, words and `state` come from `mlos-spaces`, the same
+//! functions the runtime emitter uses. Design: docs/notes/mlos-image-map.md.
 
 use std::{fs, io, path::Path};
 
@@ -17,11 +14,8 @@ use mlos_virtio_blk::SECTOR;
 
 use crate::space;
 
-/// The disk image as a space, with one region per stored tile.
-///
-/// Capacity is the image file's real size, not the model's: if they
-/// disagree, the difference shows up as free space or as an error from
-/// `fill`, and either is better than an emitter that assumes.
+/// The disk image as a space, with one region per stored tile. Capacity
+/// is the image file's real size, not the model's.
 pub fn disk(path: &Path) -> io::Result<(Space, Vec<Region>)> {
     let capacity = fs::metadata(path)?.len();
     let meta = model::weights();
@@ -47,13 +41,8 @@ pub fn disk(path: &Path) -> io::Result<(Space, Vec<Region>)> {
     Ok((named, regions))
 }
 
-/// One stored object, placed where `Disk::sector_of` puts it.
-///
-/// `state` comes from the same function the runtime emitter uses, rather
-/// than being written as the constant it happens to be here. Nothing has
-/// run, so every object reads `never` -- and that is the difference the
-/// two documents exist to show, which makes it worth deriving rather than
-/// asserting.
+/// One stored object, placed where `Disk::sector_of` puts it. `state` is
+/// derived, not asserted, even though statically it is always `never`.
 fn region(id: ObjectId, meta: &ObjectMeta) -> io::Result<Region> {
     let named = |what: &str| io::Error::other(format!("{what} for object {:#018x}", id.0));
     let fields = id.fields();

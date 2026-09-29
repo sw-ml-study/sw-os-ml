@@ -1,10 +1,8 @@
 //! The PVH entry, and what it leaves behind for Rust to ask about.
 //!
-//! PVH is the x86-64 counterpart of `-kernel Image` on arm64: QEMU finds
-//! a `XEN_ELFNOTE_PHYS32_ENTRY` note in the ELF, loads the segments at
-//! their physical addresses, and jumps to the note's address in 32-bit
-//! protected mode with paging off and a `hvm_start_info` in `%ebx`. No
-//! firmware and no image conversion -- the same trade M1 made.
+//! Invariant: the entry arrives in 32-bit protected mode, paging off, with
+//! the `hvm_start_info` pointer in `%ebx`. Design and history:
+//! docs/notes/mlos-hal-x86-64.md.
 
 use core::arch::{asm, global_asm};
 
@@ -21,10 +19,6 @@ unsafe extern "C" {
 const START_INFO_MAGIC: u32 = 0x336e_c578;
 
 /// True if the boot map used 1 GiB pages, false if it fell back to 2 MiB.
-///
-/// Reported rather than hidden: page size changes TLB reach, and someone
-/// comparing `sweep` timings across CPUs will eventually need to know.
-/// QEMU's default CPU lacks `pdpe1gb`; `-cpu max` has it.
 #[must_use]
 pub fn gigabyte_pages() -> bool {
     // SAFETY: a byte in `.bss`, written only by `entry.s` before `mlos_main`.

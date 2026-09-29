@@ -1,7 +1,7 @@
-//! Bring-up: find out what this machine is, say so, then map it.
+//! Bring-up: find out what this machine is, say so, map it, arm it.
 //!
-//! Its own module so the entry point stays a single decision -- run this,
-//! and if it declines, stop.
+//! Invariant: vectors, then controller, then timer, then unmask; each
+//! step is quiet when wrong. Design and history: docs/notes/mlos-kernel.md.
 
 use mlos_device::{Irq, IrqController, Timer};
 use mlos_gic_aarch64::Gic;
@@ -15,12 +15,9 @@ use mlsh::{Facts, Shell};
 use crate::{banner, handlers};
 
 /// Probes the device tree, opens the console it names, reports the
-/// machine, then turns on translation.
-///
-/// `None` if the device tree cannot be read or names no console. That is
-/// deliberate rather than a fallback: a machine we cannot read is one we
-/// cannot run on, and limping along on a guessed console address would
-/// hide the failure instead of showing it.
+/// machine, turns on translation, arms interrupts, and runs the shell.
+/// `None` if the tree cannot be read or names no console: there is no
+/// fallback address.
 ///
 /// # Safety
 ///
@@ -52,15 +49,8 @@ pub unsafe fn bring_up(dtb: *const u8) -> Option<()> {
     );
 }
 
-/// Installs the vector table, brings up the interrupt controller, and
-/// starts the timer.
-///
-/// Order is load-bearing throughout, and each step is quiet when wrong:
-/// vectors before anything can trap, the controller before an interrupt
-/// has anywhere to go, the timer before it is unmasked, and the unmask
-/// last. Unmasking early with a half-built controller behind it fires
-/// immediately and repeatedly, which is far harder to read than a machine
-/// that simply never ticks.
+/// Installs the vector table, brings up the interrupt controller, starts
+/// the timer, and unmasks last. The order is load-bearing.
 ///
 /// # Safety
 ///
@@ -73,8 +63,7 @@ unsafe fn arm_interrupts(console: &mut Terminal, machine: &Machine) -> Option<()
     // SAFETY: forwarded to `route`, whose contract this is.
     let (gic, uart_irq) = unsafe { route(console, machine) }?;
 
-    // Twice a second: slow enough to read on a console, fast enough that
-    // a boot capture of a few seconds shows time actually passing.
+    // Twice a second.
     let interval = GenericTimer.frequency().0 / 2;
     banner::interrupts(console, GenericTimer.frequency().0, TIMER_PPI, uart_irq);
 
@@ -108,9 +97,6 @@ unsafe fn route(console: &Terminal, machine: &Machine) -> Option<(Gic, u32)> {
 /// Everything the shell can report on, gathered once.
 fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
     // Where the virtio slots are, so the object manager can find a disk.
-    // Here because this is where the shell's dependencies are gathered,
-    // and because the device tree is the kernel's to read -- nothing above
-    // it should be parsing one.
     if let Some((base, size)) = machine.virtio {
         mlos_lab::set_slots(base, size, machine.virtio_count);
     }

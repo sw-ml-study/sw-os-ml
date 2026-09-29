@@ -1,14 +1,9 @@
-//! The resident tier.
+//! The resident tier as a provider: a `read` is a copy from a physical
+//! address.
 //!
-//! Barely a provider, and that is the point. Its `handle` is a physical
-//! address and its `read` is a copy, so it is the one provider that
-//! cannot fail for reasons of its own. It exists because everything above
-//! it should not have to know that resident memory is a special case:
-//! a fault on a `Warm` object and a fault on a `Cold` one take the same
-//! path, and only the cost differs.
-//!
-//! `unsafe` lives here because reading from a physical address is exactly
-//! what this crate is for (AGENTS.md, "Hard constraints").
+//! Invariant: no read leaves the window the provider was constructed
+//! over; `bounds::within` proves it before the copy. Design and history:
+//! docs/notes/mlos-provider-dram.md.
 
 #![no_std]
 
@@ -20,11 +15,8 @@ use mlos_provider::{Cost, Located, Provider};
 
 mod bounds;
 
-/// A window of physical memory that objects may live in.
-///
-/// Bounded on purpose. A provider that will read any address it is handed
-/// turns a corrupt table entry into an arbitrary memory read; one that
-/// knows its own extent turns the same entry into an error.
+/// A window of physical memory that objects may live in. A read outside
+/// it is an error, never a memory access.
 pub struct Dram {
     id: ProviderId,
     base: u64,
@@ -60,12 +52,7 @@ impl Provider for Dram {
         Ok(want as u32)
     }
 
-    /// Free, near enough.
-    ///
-    /// Not literally -- a resident read still costs a cache miss -- but
-    /// the number exists so eviction can compare tiers, and against three
-    /// milliseconds of NVMe the difference is noise. Reporting a real
-    /// figure here would be false precision.
+    /// Zero: resident memory is free, near enough, next to any other tier.
     fn cost(&self, object: Located) -> Cost {
         let _ = object;
         Cost {

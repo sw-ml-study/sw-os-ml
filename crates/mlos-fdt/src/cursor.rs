@@ -1,9 +1,7 @@
 //! A bounds-checked reader over a device tree's structure block.
 //!
-//! Everything in a DTB is big-endian and four-byte aligned, and every read
-//! here is checked. This blob arrives from firmware: it is the first
-//! untrusted input the kernel ever sees, and a parser that indexes without
-//! checking turns a malformed one into arbitrary memory access.
+//! Invariant: everything is big-endian and four-byte aligned, and no read
+//! indexes without checking. Design: docs/notes/mlos-fdt.md.
 
 /// A position in a byte slice.
 pub struct Cursor<'a> {
@@ -33,10 +31,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Reads a NUL-terminated string, then advances past the padding.
-    ///
-    /// Rejects non-UTF-8 rather than replacing it: node names in a device
-    /// tree are ASCII by specification, so anything else means the blob is
-    /// not what it claims to be.
+    /// `None` if it is not UTF-8.
     pub fn cstr(&mut self) -> Option<&'a str> {
         let rest = self.data.get(self.pos..)?;
         let len = rest.iter().position(|&b| b == 0)?;

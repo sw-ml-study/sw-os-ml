@@ -1,10 +1,7 @@
 //! One residency transition, and how to describe one.
 //!
-//! Constructors rather than a struct literal at each call site, because
-//! the fault path is not where the shape of an event should be decided.
-//! It is also what lets the fault path record ONCE, after the outcome is
-//! known, instead of recording a hope and amending it -- an amendment is a
-//! second thing to remember on a path that already has two exits.
+//! Invariant: an event is built once, after the outcome is known, never
+//! recorded and amended. Design: docs/notes/mlos-events.md.
 
 use mlos_abi::{Error, ObjectId};
 use mlos_objtab::{CostNs, ObjectMeta, SessionId, Tier};
@@ -21,11 +18,6 @@ pub struct Event {
     /// Which object.
     pub object: ObjectId,
     /// Who asked for it.
-    ///
-    /// Carried so an access trace derived from a stream can say who made
-    /// each acquire rather than assume. There is one session today; the
-    /// assumption would be right and would stop being right at M4,
-    /// silently, in a file somebody was measuring from.
     pub session: SessionId,
     /// Where in the arena it went, for [`Kind::Placed`].
     pub offset: u64,
@@ -62,11 +54,8 @@ impl Event {
         }
     }
 
-    /// An object that could not be had, and why.
-    ///
-    /// `bytes` is zero: nothing moved. The cost is kept, because what a
-    /// refusal WOULD have cost is the number an admission policy is
-    /// deciding against.
+    /// An object that could not be had, and why. `bytes` is zero because
+    /// nothing moved; `cost` is what the fetch would have charged.
     #[must_use]
     pub const fn refused(
         object: ObjectId,
@@ -88,12 +77,7 @@ impl Event {
         }
     }
 
-    /// An object thrown away to make room.
-    ///
-    /// The kind that was reserved from the start and emitted by nothing
-    /// until M3 step 008, because until then a full arena refused rather
-    /// than choosing. `bytes` is what came back, which is the number that
-    /// makes a residency curve add up.
+    /// An object thrown away to make room. `bytes` is what came back.
     #[must_use]
     pub const fn evicted(object: ObjectId, by: SessionId, meta: &ObjectMeta) -> Self {
         Self {
@@ -109,11 +93,8 @@ impl Event {
         }
     }
 
-    /// An object that was already resident when it was wanted.
-    ///
-    /// The cheap case, and the one a residency policy exists to produce
-    /// more of. No cost, because nothing was fetched -- which is the
-    /// point of recording it at all.
+    /// An object that was already resident when it was wanted. No cost:
+    /// nothing was fetched.
     #[must_use]
     pub const fn hit(object: ObjectId, by: SessionId, bytes: u32) -> Self {
         Self {

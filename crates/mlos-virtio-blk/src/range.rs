@@ -1,19 +1,13 @@
-//! Reading more than one sector.
-//!
-//! Separate because it is arithmetic over a device, not a device
-//! operation: it turns a byte range into a sequence of sector reads and
-//! has no business knowing how any single one of them works.
+//! Reading more than one sector: a byte range as a sequence of sector
+//! reads. Design: docs/notes/mlos-virtio-blk.md.
 
 use mlos_abi::{Error, Result};
 
 use crate::{Block, SECTOR};
 
 impl Block {
-    /// Reads `into.len()` bytes starting at byte `offset`.
-    ///
-    /// Sector-aligned offsets only, which every caller here has: objects
-    /// are placed on sector boundaries precisely so this never has to
-    /// read-modify-return a partial sector.
+    /// Reads `into.len()` bytes starting at byte `offset`, which must be
+    /// sector-aligned; `BadObject` otherwise. Returns the bytes read.
     ///
     /// # Safety
     ///

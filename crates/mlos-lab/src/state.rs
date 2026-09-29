@@ -1,10 +1,8 @@
-//! The one manager, its arena, and where they live.
+//! The one manager, its arena, the replay buffers, and where they live.
 //!
-//! Statics because the kernel has no allocator and the manager must
-//! outlive every command that touches it. Their own module because that
-//! is where the `unsafe` is: everything else in this crate is ordinary
-//! code, and keeping the two apart is what makes "where is the unsafe"
-//! answerable by looking at a file name.
+//! Invariant: every static here is touched only from the shell loop on
+//! the boot core, and this module holds all of the crate's `unsafe`.
+//! Design and history: docs/notes/mlos-lab.md.
 
 use core::cell::UnsafeCell;
 
@@ -28,13 +26,7 @@ struct Statics {
 unsafe impl Sync for Statics {}
 
 /// Room for the replay trace, the accesses parsed out of it, and the
-/// declaration made from those.
-///
-/// Statics because the kernel has no allocator and these are far too
-/// large for a stack that already nearly lost to a 40 KiB `Manager`.
-/// This is the storage a `Stream` borrows: the declaration is as long as
-/// the workload, so it cannot live inside the manager and it cannot be
-/// grown.
+/// declaration made from those. The storage a `Stream` borrows.
 struct Replay {
     text: UnsafeCell<[u8; crate::replay::TEXT]>,
     accesses: UnsafeCell<[Access; crate::replay::ACCESSES]>,
@@ -66,16 +58,11 @@ pub struct Room {
     pub declared: &'static mut [ObjectId],
     /// Where each declared access is next wanted.
     pub next: &'static mut [u32],
-    /// Scratch for building that chain -- one slot per distinct object.
+    /// Scratch for building that chain; one slot per distinct object.
     pub seen: &'static mut [(ObjectId, u32)],
 }
 
-/// All of it at once.
-///
-/// One accessor rather than five because a replay needs all of them and
-/// handing them out separately would let one be borrowed while the others
-/// were not -- which is the shape of exactly the aliasing this module
-/// exists to keep in one place.
+/// All of it at once, so no buffer can be borrowed while another is not.
 pub fn replay_room() -> Room {
     // SAFETY: single-threaded access from the shell loop; see `Statics`.
     unsafe {

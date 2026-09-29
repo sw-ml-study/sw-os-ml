@@ -1,17 +1,12 @@
 //! `virtio_mmio.device=` entries on the kernel command line.
 //!
-//! QEMU `microvm` announces each virtio-mmio transport this way instead of
-//! in a device tree -- the same convention Linux reads -- as
-//! `virtio_mmio.device=SIZE@BASE:IRQ`, SIZE in bytes with an optional
-//! `K`/`M` suffix, BASE in hex.
+//! Invariant: an entry is `virtio_mmio.device=SIZE@BASE:IRQ`, SIZE in bytes
+//! with an optional `K`/`M` suffix, BASE in hex; a malformed one is skipped,
+//! never guessed at. Design: docs/notes/mlos-pvh.md.
 
 /// The lowest transport's base and size, and how many transports there
-/// are: the shape `mlos_lab::set_slots` takes, the same as the device
-/// tree's `virtio_mmio@` nodes give on aarch64.
-///
-/// `None` if the command line names none. Malformed entries are skipped
-/// rather than trusted: a slot at a misread address is worse than a
-/// missing one.
+/// are: the shape `mlos_lab::set_slots` takes. `None` if the command line
+/// names none; malformed entries are skipped.
 #[must_use]
 pub fn virtio_slots(cmdline: &str) -> Option<(usize, usize, u32)> {
     let mut found: Option<(usize, usize, u32)> = None;
@@ -25,13 +20,10 @@ pub fn virtio_slots(cmdline: &str) -> Option<(usize, usize, u32)> {
     found
 }
 
-/// The command line up to where the loader's own additions begin.
-///
-/// `mlsh.run=` takes the REST of the line, because its commands have
-/// spaces in them -- and QEMU `microvm` appends `virtio_mmio.device=`
-/// entries AFTER whatever the user passed. Without this, the last shell
-/// command would be handed the device list as its argument. Cut at the
-/// first entry that follows `mlsh.run=`; a line without one is whole.
+/// The command line up to the first `virtio_mmio.device=` entry that
+/// follows `mlsh.run=`, which QEMU appended after the user's arguments and
+/// `mlsh.run=` would otherwise read as its own. A line without one is
+/// returned whole.
 #[must_use]
 pub fn user_args(cmdline: &str) -> &str {
     let Some(run) = cmdline.find("mlsh.run=") else {

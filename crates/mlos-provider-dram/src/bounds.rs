@@ -1,18 +1,15 @@
 //! Proving a read stays inside the window.
 //!
-//! Its own module because it is the only thing here that can be wrong in
-//! a way that matters. The inputs come from a table an object's own
-//! metadata populated, and treating that as trusted is how a wrong `size`
-//! becomes a read of somebody else's memory.
+//! Invariant: every arithmetic step is checked, because the inputs come
+//! from table metadata and are not trusted. Design:
+//! docs/notes/mlos-provider-dram.md.
 
 use mlos_abi::{Error, Result};
 use mlos_provider::Located;
 
-/// Where an object's bytes start, if the request is inside the window.
-///
-/// Every arithmetic step is checked. The inputs come from a table an
-/// object's own metadata populated, and treating that as trusted is
-/// how a wrong `size` becomes a read of somebody else's memory.
+/// Where an object's bytes start, if `[handle + offset, + want)` lies
+/// wholly inside `[base, base + length)`; `BadObject` otherwise, including
+/// on overflow.
 pub fn within(base: u64, length: u64, object: Located, offset: u32, want: usize) -> Result<u64> {
     let start = object
         .handle

@@ -1,32 +1,23 @@
-//! The Arm PL011 UART.
+//! The Arm PL011 UART, split by direction: polled transmit,
+//! interrupt-driven receive.
 //!
-//! Its own crate rather than a module of `mlos-hal-aarch64`, because a
-//! PrimeCell UART is not an aarch64 thing -- it turns up wherever Arm IP
-//! does, and a RISC-V board with one would want exactly this code.
-//!
-//! Split by direction: transmit is polled, receive is interrupt-driven,
-//! and the two have almost nothing in common beyond a base address.
+//! Invariant: nothing here reprograms the UART; the loader's baud rate
+//! and enables are relied on as found. Design: docs/notes/mlos-pl011.md.
 
 #![no_std]
 
 mod rx;
 mod tx;
 
-/// A PL011 UART at a known base address.
-///
-/// No initialisation: the loader has already configured the baud rate and
-/// enabled the transmitter, and reprogramming it during bring-up is a good
-/// way to lose the console at exactly the moment it becomes useful.
+/// A PL011 UART at a known base address, used as the loader left it.
 #[derive(Clone, Copy)]
 pub struct Pl011 {
     base: usize,
 }
 
 impl Pl011 {
-    /// A UART at `base`.
-    ///
-    /// The caller is asserting that a PL011 lives there. Nothing verifies
-    /// it, because the only way to ask is to touch it.
+    /// A UART at `base`. Nothing verifies one is there: the caller is
+    /// asserting it, and every access in this crate relies on that.
     #[must_use]
     pub const fn at(base: usize) -> Self {
         Self { base }

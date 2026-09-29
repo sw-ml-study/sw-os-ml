@@ -1,26 +1,16 @@
 //! Making a space's regions tile it exactly.
 //!
-//! A consumer draws a space as a solid stack of cells, so every byte of
-//! capacity has to belong to some region. Anything the producer did not
-//! account for shows up here as padding or free space -- which is not
-//! bookkeeping, it is the interesting part: the gap between two sections
-//! is alignment cost, and the gap at the end is headroom, and a viewer
-//! that shows neither is flattering the system it draws.
-//!
-//! Padding and free are distinct kinds on purpose. SWTOS's emitter makes
-//! the same distinction, and folding them together would hide exactly the
-//! number a layout is usually being looked at to find.
+//! Invariant: every byte of a space belongs to exactly one region; gaps
+//! become `padding` (between) or `free` (after), never nothing. Design:
+//! docs/notes/mlos-layout.md.
 
 use std::io;
 
 use crate::Region;
 
 /// Sorts `regions`, inserts padding between them and free after them, and
-/// checks that the result covers `[0, capacity)` exactly once.
-///
-/// Overlap is an error rather than something to reconcile: two regions
-/// claiming a byte means the producer is wrong about its own layout, and a
-/// picture drawn from it would be confidently misleading.
+/// checks that the result covers `[0, capacity)` exactly once. Overlap and
+/// overrun are errors, not reconciled.
 pub fn fill(
     space: &str,
     capacity: u64,

@@ -1,12 +1,8 @@
 //! The TSC as a clock: how fast it runs, found out rather than assumed.
 //!
-//! `CPUID.15H` gives the TSC's ratio to a crystal whose frequency it also
-//! gives, when the CPU reports it; then the rate is READ. Otherwise it is
-//! CALIBRATED: counted across a known interval of the 8254 PIT, which
-//! runs at 1.193182 MHz on every PC. `docs/plan.md` named the ACPI PM
-//! timer for this, but `microvm` runs with ACPI off (the virtio slots are
-//! on the command line only then) and has no PM timer; the PIT is there.
-//! Which it was is reported, because a calibrated clock is not a read one.
+//! Invariant: the rate is read from `CPUID.15H` when the CPU reports it,
+//! otherwise counted against the 8254 PIT, and which it was is reported.
+//! Design and history: docs/notes/mlos-apic-x86-64.md.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -16,8 +12,7 @@ use mlos_hal_x86_64::port::{inb, outb, rdtsc};
 /// `mlsh`'s clock takes. Zero below 4.29 GHz; set by [`tsc_rate`].
 static SHIFT: AtomicU32 = AtomicU32::new(0);
 
-/// How long a calibration counts for. Long enough that one PIT tick of
-/// slop is under 0.002%, short enough not to be noticed at boot.
+/// How long a calibration counts for.
 pub const CALIBRATION_MS: u32 = 50;
 /// The 8254's input clock.
 const PIT_HZ: u64 = 1_193_182;

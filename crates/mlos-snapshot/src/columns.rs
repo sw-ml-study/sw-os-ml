@@ -1,14 +1,8 @@
-//! Writing columns to a console, one pass each.
+//! Writing columns to a console, one pass each, with no buffer.
 //!
-//! The host emitter builds a `Vec` per column and joins it. There is no
-//! allocator here, so a column is written as it is walked: open the
-//! bracket, write a separator before every item but the first, close it.
-//! Separator-before rather than comma-after is what keeps the JSON valid
-//! without knowing in advance how many rows there are.
-//!
-//! Errors are dropped rather than propagated. The sink is a console: if it
-//! has stopped accepting bytes there is nowhere to report that to, and a
-//! half-written document is already in front of whoever is reading it.
+//! Invariant: the separator goes before every item but the first, so the
+//! JSON is valid without knowing the row count. Write errors are dropped.
+//! Design: docs/notes/mlos-snapshot.md.
 
 use core::fmt::{Display, Write};
 
@@ -41,14 +35,9 @@ pub fn nums<T>(
     });
 }
 
-/// A column of strings, quoted, written by `of`.
-///
-/// Nothing MLOS puts in one of these needs escaping -- they are built out
-/// of decimal numbers and fixed words -- and a `no_std` escaper with
-/// nowhere to build the escaped string would have to go character by
-/// character for no benefit. `tests/document.rs` pins the vocabulary, so a
-/// value that would need escaping is a test failure rather than malformed
-/// JSON in somebody else's parser.
+/// A column of strings, quoted but not escaped, written by `of`. Every
+/// value must be a fixed word or a decimal number; `tests/document.rs`
+/// pins that.
 pub fn text<T>(
     out: &mut impl Write,
     name: &str,

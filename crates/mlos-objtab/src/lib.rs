@@ -1,14 +1,8 @@
-//! The ML object table.
+//! The ML object table: what the kernel knows about each piece of model
+//! state, where a conventional kernel has a page table.
 //!
-//! Where a conventional kernel has a page table, MLOS has this. A page
-//! table entry answers "where is this page and is it dirty". An entry here
-//! answers "what would getting this back cost, when is it next wanted, and
-//! how many sessions are waiting on it" -- which are the questions every
-//! decision in `docs/PRD.md` turns on.
-//!
-//! Pure data structure: no `unsafe`, no allocation, no I/O, and therefore
-//! testable on the host without a VM. Providers fetch; policies decide;
-//! this only remembers.
+//! Invariant: a pure data structure. No allocation, no I/O, no decisions;
+//! it only remembers. Design and history: docs/notes/mlos-objtab.md.
 
 #![no_std]
 #![forbid(unsafe_code)]

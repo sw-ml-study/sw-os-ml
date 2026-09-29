@@ -1,25 +1,22 @@
 //! Claims on an object, and what they mean.
+//!
+//! Invariant: a handle's address is valid only while its lease is held.
+//! Design: docs/notes/mlos-objman.md.
 
 use mlos_abi::ObjectId;
 
-/// How long a consumer needs an object, and how strongly.
-///
-/// Leases rather than reference counts, because a count says only *how
-/// many* while a lease says *what kind*. A policy that cannot tell a
-/// pinned object from a speculatively prefetched one has to treat the
-/// prefetch as sacred, which defeats the point of prefetching.
+/// How long a consumer needs an object, and how strongly. A kind, not a
+/// count, so a policy can tell a pin from a prefetch.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Lease {
     /// Resident until released; counts against the session's budget.
     Pin,
     /// Resident for one operation; may be revoked between operations.
     Borrow,
-    /// Will be consumed in order, once. The holder promises not to look
-    /// back, which is what lets the object be dropped as it passes.
+    /// Will be consumed in order, once; the holder promises not to look
+    /// back.
     Streaming,
-    /// Fetched on a guess. Free to drop, and a speculative lease that is
-    /// never upgraded is exactly what a prefetch miss *is* -- which is
-    /// how `Ph` gets counted.
+    /// Fetched on a guess. Free to drop.
     Speculative,
 }
 
@@ -36,12 +33,8 @@ impl Lease {
 pub struct Handle {
     /// Which object.
     pub id: ObjectId,
-    /// Where its bytes are, right now.
-    ///
-    /// "Right now" is the whole point: the address is valid while the
-    /// lease is held and means nothing afterwards. A consumer that stores
-    /// it past a release has assumed the thing this design exists to
-    /// prevent -- that where an object lives is a property of the object.
+    /// Where its bytes are, right now. Valid while the lease is held and
+    /// meaningless afterwards.
     pub address: u64,
     /// How many bytes.
     pub size: u32,

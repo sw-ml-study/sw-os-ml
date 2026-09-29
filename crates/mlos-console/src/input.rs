@@ -1,14 +1,10 @@
-//! Receiving, and what it costs that only one console can.
+//! Receiving, where the console can. Design: docs/notes/mlos-console.md.
 
 use crate::Terminal;
 
 impl Terminal {
-    /// Takes one byte, if the console can receive and one is waiting.
-    ///
-    /// `None` from a virtio console means "not implemented", not "nothing
-    /// arrived" -- receive needs a second queue and an interrupt, and
-    /// nothing can be typed at MLOS under Virtualization.framework until
-    /// it exists. Recorded as a gap in `docs/status.md`.
+    /// Takes one byte, if one is waiting. Always `None` from a virtio
+    /// console, which cannot receive yet.
     #[must_use]
     pub fn read(&self) -> Option<u8> {
         match self {

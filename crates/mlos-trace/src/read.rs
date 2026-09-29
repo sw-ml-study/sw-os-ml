@@ -1,13 +1,8 @@
 //! Parsing a trace back.
 //!
-//! Into a caller-provided slice, never into a `Vec`: the kernel replays
-//! the same traces at step 008 and has no allocator. The header carries
-//! the count so a caller can size that slice before it starts.
-//!
-//! Strict about everything it can be strict about. A trace is an input to
-//! a measurement, and a parser that quietly skipped a line it did not
-//! understand would produce a shorter trace and a plausible wrong number
-//! rather than an error.
+//! Invariant: into a caller-provided slice sized from the header's count,
+//! and a line it does not understand is an error, never skipped. Design:
+//! docs/notes/mlos-trace.md.
 
 use mlos_abi::ObjectId;
 use mlos_objtab::SessionId;

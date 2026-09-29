@@ -1,14 +1,12 @@
 //! Folding a device tree walk into a machine description.
+//!
+//! Invariant: a node's properties precede its children, so one current
+//! node name is enough. Design: docs/notes/mlos-machine.md.
 
 use crate::regions::Regions;
 use mlos_fdt::{Event, reg_pair, string};
 
 /// Walk state.
-///
-/// Property events always arrive between a node's own `Node` event and its
-/// first child's, because the specification requires every property to
-/// precede every subnode. That is what makes a single "current node name"
-/// correct rather than a bug waiting for a deeper tree.
 pub struct Scan<'a> {
     depth: usize,
     node: &'a str,
@@ -23,32 +21,21 @@ pub struct Scan<'a> {
     /// The console's interrupt number, if the tree gives one.
     pub uart_irq: Option<u32>,
     /// The lowest `virtio_mmio@` window, and how many follow it.
-    ///
-    /// QEMU lays out 32 identical slots whether or not anything is
-    /// plugged in, so the count matters more than any single address:
-    /// finding the console means probing them.
     pub virtio: Option<(usize, usize)>,
     /// How many `virtio_mmio@` nodes were seen.
     pub virtio_count: u32,
     /// `/chosen/bootargs`, which says which console was asked for.
     pub bootargs: Option<&'a str>,
-    /// Whether the interrupt controller claimed `arm,gic-v3`.
-    ///
-    /// Kept apart from [`Self::gic_reg`] because a device tree does not
-    /// order a node's properties: in QEMU's own blob `reg` comes *before*
-    /// `compatible`, so deciding what the ranges mean while reading them
-    /// reads the wrong answer. They are combined once the walk is over.
+    /// Whether the interrupt controller claimed `arm,gic-v3`. Combined
+    /// with [`Self::gic_reg`] after the walk: property order is not fixed.
     pub gic_v3: bool,
-    /// The interrupt controller's two `reg` ranges, whatever they mean.
-    ///
-    /// For a GICv3 these are the distributor and the redistributor, in
-    /// that order: one system-wide, one per-CPU. A GICv2 puts a CPU
-    /// interface in the second range instead, which is a different device
-    /// at a different offset -- hence the `compatible` check.
+    /// The interrupt controller's two `reg` ranges: distributor and
+    /// redistributor on a v3, something else on a v2.
     pub gic_reg: Option<(u64, u64)>,
 }
 
 impl<'a> Scan<'a> {
+    /// Folds one walk event.
     pub fn event(&mut self, event: Event<'a>) {
         match event {
             Event::Node { name } => {
@@ -65,9 +52,6 @@ impl<'a> Scan<'a> {
     }
 
     /// Folds one property, ignoring everything not asked about.
-    ///
-    /// `/chosen/bootargs` is read here because it says which console was
-    /// asked for, in the same `console=` form Linux uses.
     fn prop(&mut self, name: &str, value: &'a [u8]) {
         let cell = |index: usize| -> Option<u32> {
             let at = index * 4;
@@ -79,9 +63,8 @@ impl<'a> Scan<'a> {
             (2, "reg") => self.reg(value),
             (2, "bootargs") if self.node == "chosen" => self.bootargs = string(value),
             (2, "interrupts") if self.node.starts_with("pl011@") && self.uart_irq.is_none() => {
-                // <kind, number, flags>. Kind 0 is a shared interrupt,
-                // whose numbering starts at 32 -- the device tree counts
-                // from the start of the SPI range, the GIC does not.
+                // <kind, number, flags>. Kind 0 is a shared interrupt; the
+                // tree numbers from the SPI base, the GIC from 32.
                 let kind = cell(0);
                 self.uart_irq = (kind == Some(0)).then(|| cell(1)).flatten().map(|n| n + 32);
             }
@@ -92,20 +75,8 @@ impl<'a> Scan<'a> {
         }
     }
 
-    /// Handles a `reg` property, according to which node carries it.
-    ///
-    /// One function rather than three because `reg` means "where this
-    /// device is" regardless of the device, and the cells that decode it
-    /// come from the same parent either way.
-    ///
-    /// The console is the FIRST `pl011@` node, not the last. A machine can
-    /// have more than one -- two `-serial` backends make QEMU instantiate
-    /// a second at 0x9040000 -- and overwriting as the walk goes picks
-    /// whichever comes last, which is not the console. The exact answer is
-    /// `/chosen/stdout-path`, but that node comes *after* the UARTs in
-    /// QEMU's tree, so honouring it needs candidates resolved at the end
-    /// of the walk rather than a single field. Recorded as a gap in
-    /// `docs/status.md`; first-wins is right for every tree QEMU emits.
+    /// Handles a `reg` property, according to which node carries it. The
+    /// console is the first `pl011@` node, not the last.
     fn reg(&mut self, value: &[u8]) {
         let (cells, sizes) = (self.address_cells, self.size_cells);
         let pair = |index| reg_pair(value, cells, sizes, index);
@@ -115,8 +86,7 @@ impl<'a> Scan<'a> {
             self.uart_base = pair(0).map(|(base, _)| base as usize);
         } else if self.node.starts_with("virtio_mmio@") {
             self.virtio_count += 1;
-            // The lowest window: the slots are uniform and contiguous, so
-            // one base and one size describe all of them.
+            // The lowest window: the slots are uniform and contiguous.
             if let Some((base, size)) = pair(0) {
                 let seen = self.virtio.map_or(usize::MAX, |(base, _)| base);
                 if (base as usize) < seen {
@@ -124,8 +94,7 @@ impl<'a> Scan<'a> {
                 }
             }
         } else if self.node.starts_with("intc@") {
-            // Both ranges or neither: half an interrupt controller is
-            // worse than none, because it looks initialised.
+            // Both ranges or neither: half a controller looks initialised.
             if let (Some((first, _)), Some((second, _))) = (pair(0), pair(1)) {
                 self.gic_reg = Some((first, second));
             }
@@ -136,7 +105,7 @@ impl<'a> Scan<'a> {
 impl Default for Scan<'_> {
     /// Cells start at the specification's defaults; the root node's own
     /// `#address-cells` and `#size-cells` overwrite them before any `reg`
-    /// is read, because a node's properties precede its children.
+    /// is read.
     fn default() -> Self {
         Self {
             depth: 0,

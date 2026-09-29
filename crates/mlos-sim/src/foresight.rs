@@ -1,32 +1,8 @@
 //! Knowing the future, because the whole trace is already here.
 //!
-//! This is what makes a simulator a simulator. Belady's rule is normally
-//! unimplementable because it needs to know when an object will next be
-//! wanted; a replay harness holds the entire access sequence, so it can
-//! simply look.
-//!
-//! **That is not cheating, and it is not the experiment either.** The
-//! claim `docs/PRD.md` makes is that a transformer HANDS the operating
-//! system this knowledge -- a declared stream says which objects come
-//! next, in order -- so the kernel can have it without a trace. Step 007's
-//! `ml_stream_declare` is where that arrives. Until then the simulator
-//! supplies it, and the numbers say what a policy WOULD do given
-//! knowledge the kernel is about to be given.
-//!
-//! **The chain itself is `mlos_stream::chain`, which the kernel also
-//! calls.** It used to be a second implementation living here, and a
-//! second implementation of "when is this next wanted" is a second
-//! answer: step 009 put the two side by side on one trace and they
-//! disagreed by 27 reads. What remains here is the part that is genuinely
-//! the simulator's -- allocating buffers the size of the trace, which is
-//! exactly what the kernel cannot do.
-//!
-//! No object's next use is looked up by identity. `ObjectMeta` already
-//! records `used_tick` -- when it was last wanted -- and an object that
-//! has not been wanted since is still sitting at that point in the trace.
-//! So the next occurrence after any resident object's last use is a
-//! single indexed read, and the map from object to position that would
-//! otherwise be needed does not have to exist.
+//! Invariant: the chain is `mlos_stream::chain`, the same one the kernel
+//! runs; only the buffer allocation is the simulator's. Design and
+//! history: docs/notes/mlos-sim.md.
 
 use mlos_abi::ObjectId;
 use mlos_objtab::NextUse;
@@ -42,10 +18,7 @@ pub struct Foresight {
 
 impl Foresight {
     /// Chains the whole trace, recording where each object turns up next.
-    ///
-    /// Sized from the trace so the buffers cannot be too small, which is
-    /// the only failure `chain` has. The kernel sizes its statics by
-    /// guess instead, and finds out loudly when the guess is wrong.
+    /// Buffers are sized from the trace, so `chain` cannot fail.
     #[must_use]
     pub fn read(accesses: &[Access]) -> Self {
         let objects: Vec<ObjectId> = accesses.iter().map(|access| access.object).collect();
@@ -55,9 +28,9 @@ impl Foresight {
         Self { next }
     }
 
-    /// Where the object last wanted at `tick` turns up next.
-    ///
-    /// `tick` is one-based, as `ObjectMeta::used_tick` records it.
+    /// Where the object last wanted at `tick` turns up next, as a
+    /// zero-based trace index. `tick` is one-based, as
+    /// `ObjectMeta::used_tick` records it.
     #[must_use]
     pub fn after(&self, tick: u32) -> Option<u32> {
         match *self.next.get(tick.checked_sub(1)? as usize)? {
@@ -67,28 +40,14 @@ impl Foresight {
     }
 }
 
-/// Where the object being acquired at `tick` is next wanted.
-///
-/// One lookup, at acquire time, and never revisited -- the object is not
-/// wanted again before the position this returns, so the answer stays
-/// true until the next acquire rewrites it. An earlier version wrote
-/// DISTANCES instead and had to walk every resident object on every
-/// access to keep them current; a kernel could not afford that, and the
-/// step that said so is the reason `NextUse` carries a position.
-///
-/// `after` answers in trace INDICES and the caller counts one-based
-/// ticks. Mixing the two is what made the first version wrong, and wrong
-/// in the worst available way: an object whose next use was the very next
-/// access fell through to `Never` and became the MOST evictable thing in
-/// the table. Belady was being told to throw away exactly what it was
-/// about to need, and it lost to LRU by three times.
+/// Where the object being acquired at `tick` is next wanted, as a
+/// one-based tick a policy can compare against `Residency::now`. Looked
+/// up once, at acquire time; the answer holds until the next acquire.
 #[must_use]
 pub fn wanted_at(seen: &Foresight, tick: u32) -> NextUse {
     match seen.after(tick) {
-        // Indices are zero-based and ticks are one-based, so the position
-        // a policy compares against `Residency::now` is the index plus
-        // one. Getting this wrong is invisible in every test but the
-        // measurement.
+        // Indices are zero-based and ticks are one-based; off by one here
+        // makes the next access the most evictable object.
         Some(at) => NextUse::At(at + 1),
         None => NextUse::Never,
     }

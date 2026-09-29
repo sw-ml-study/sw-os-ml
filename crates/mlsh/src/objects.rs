@@ -1,17 +1,12 @@
 //! The verbs that make the object manager do something.
 //!
-//! Separate from `report`, which only looks. The distinction matters more
-//! here than it usually would: `sweep` and `get` change residency, so
-//! running one changes what the other reports, and knowing which is which
-//! is the difference between exploring a system and disturbing it.
+//! Invariant: nothing in `report` changes residency; everything here may.
+//! Design: docs/notes/mlsh.md.
 
 use core::fmt::Write;
 
-/// Registers the synthetic model, optionally with a different budget.
-///
-/// `model` for the default, `model 8` for eight kibibytes -- which is the
-/// knob worth having, because the whole subject is what happens when
-/// memory is smaller than the model.
+/// Registers the synthetic model, optionally with a different budget:
+/// `model` for the default, `model 8` for eight kibibytes.
 pub fn model(out: &mut impl Write, args: &str) {
     let budget = args
         .split_whitespace()
@@ -43,23 +38,9 @@ fn registered(out: &mut impl Write, objects: u32, bytes: u64, budget: usize) {
     let _ = writeln!(out, "  weights    from {source}");
 }
 
-/// Sweeps the model, faulting every tile in.
-///
-/// Timed, because a sweep is the only workload MLOS has and the elapsed
-/// figure is how every later claim about overhead gets checked. The
-/// generic timer runs at tens of megahertz, so a sweep is thousands of
-/// counts rather than the zero the 2 Hz tick would report.
-///
-/// Fixed point to the nanosecond, not rounded microseconds. A sweep that
-/// faults is milliseconds and a sweep that only hits is a few
-/// microseconds, and a unit that reads the first one well throws the
-/// second one away -- which is exactly the sweep that can measure what
-/// anything on the fault path costs.
-///
-/// Stopping early is not a failure. The arena is smaller than the model,
-/// nothing evicts yet, and running out is the honest outcome -- it is the
-/// problem M3 exists to solve, and how far the sweep got is the number
-/// that will be compared.
+/// Sweeps the model, faulting every tile in, and reports the elapsed
+/// time to the nanosecond. Stopping early is not a failure; how far it
+/// got is the number.
 pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
     let (now, hz) = clock;
     let started = now();
@@ -85,11 +66,8 @@ pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
 }
 
 /// Replays the recorded workload under one policy, and says what it cost.
-///
-/// The counts here and `mlos-sim`'s for the same trace and budget must
-/// match EXACTLY. They are integers decided by a sequence of decisions,
-/// so a disagreement of one means one of the two is wrong -- which is why
-/// there is no tolerance and no rounding.
+/// The counts must match `mlos-sim`'s for the same trace and budget
+/// exactly: no tolerance, no rounding.
 pub fn replay(out: &mut impl Write, args: &str) {
     let name = args.split_whitespace().next().unwrap_or("demand");
     if !mlos_lab::choose(name) {
@@ -111,12 +89,8 @@ pub fn replay(out: &mut impl Write, args: &str) {
     }
 }
 
-/// Declares the model's sweep, or moves it on.
-///
-/// `stream` declares; `stream N` advances by N. The verb exists so the
-/// one field no page-based system can hold -- when an object is next
-/// wanted -- can be watched being written, in `objs` and in the layout
-/// document, by something other than a test.
+/// Declares the model's sweep (`stream`), or advances it by N
+/// (`stream N`).
 pub fn stream(out: &mut impl Write, args: &str) {
     match args.split_whitespace().next().and_then(|n| n.parse().ok()) {
         Some(steps) => match mlos_lab::advance(steps) {
