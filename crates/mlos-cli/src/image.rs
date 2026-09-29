@@ -1,16 +1,16 @@
 //! Building the kernel and turning it into a bootable image.
+//!
+//! Invariant: a failed build stops here rather than reusing a stale
+//! artifact. Design and history: docs/notes/mlos-cli.md.
 
 use std::{io, path::PathBuf, process::Command};
 
 /// Where the kernel and its flat image land.
 pub const TARGET: &str = "aarch64-unknown-none-softfloat";
 
-/// Builds the kernel and objcopies it to a flat arm64 `Image`.
-///
-/// The `Image`, not the ELF. QEMU jumps straight to an ELF's entry point
-/// and skips the arm64 boot protocol, so `x0` arrives as zero instead of a
-/// device tree pointer -- which is how MLOS spent step 004 not knowing
-/// where its own device tree was.
+/// Builds the kernel and objcopies it to a flat arm64 `Image`. The
+/// `Image`, not the ELF: QEMU boots an ELF by its entry point and skips
+/// the arm64 boot protocol, so `x0` would not hold the device tree.
 pub fn build() -> io::Result<PathBuf> {
     let elf = PathBuf::from("target")
         .join(TARGET)
@@ -34,11 +34,8 @@ pub fn build() -> io::Result<PathBuf> {
     Ok(image)
 }
 
-/// Finds the `llvm-objcopy` that ships with the active toolchain.
-///
-/// Rather than requiring one on `PATH`: the toolchain's own is guaranteed
-/// to match the LLVM that produced the object files, and a mismatched
-/// system objcopy fails in ways that look like a linker bug.
+/// Finds the `llvm-objcopy` that ships with the active toolchain, so it
+/// matches the LLVM that produced the object files.
 pub fn objcopy() -> io::Result<PathBuf> {
     let ask = |args: &[&str]| -> io::Result<String> {
         let out = Command::new("rustc").args(args).output()?;
@@ -59,8 +56,7 @@ pub fn objcopy() -> io::Result<PathBuf> {
         .join("bin/llvm-objcopy"))
 }
 
-/// Runs a command, failing loudly rather than continuing with a stale
-/// artifact -- a stale image boots happily and looks almost right.
+/// Runs a command, failing rather than continuing with a stale artifact.
 fn run(program: &str, args: &[&str]) -> io::Result<()> {
     let status = Command::new(program).args(args).status()?;
     if status.success() {
@@ -70,22 +66,10 @@ fn run(program: &str, args: &[&str]) -> io::Result<()> {
 }
 
 /// Writes a disk image holding the synthetic model's weights, then the
-/// replay trace.
-///
-/// Laid out by id: tile `(layer, tensor)` at sector
+/// replay trace. Tile `(layer, tensor)` is at sector
 /// `(layer * TILES + tensor) * TILE_BYTES / 512`, filled with
-/// `0xA0 | (layer ^ tensor)`. The low nibble is the same pattern the stub
-/// provider fabricates, on purpose -- so when the guest reads it back
-/// from a real device, the bytes being *right* is not the news. The high
-/// nibble is: the stub writes `layer ^ tensor` alone, so `0xA0` in a byte
-/// can only have come off the disk, and provenance becomes checkable
-/// rather than merely arithmetic.
-///
-/// The trace follows the weights at `mlos_synth::disk::TRACE_AT`, as an
-/// eight-byte little-endian length then the text. One device rather than
-/// two, because a second virtio-blk would mean teaching `probe` to tell
-/// block devices apart -- machinery in service of a layout decision that
-/// is free: the model occupies a fixed extent, so what follows is spare.
+/// `0xA0 | (layer ^ tensor)`; the trace follows at
+/// `mlos_synth::disk::TRACE_AT` as an eight-byte LE length then the text.
 pub fn disk() -> io::Result<PathBuf> {
     use mlos_synth::{LAYERS, TILE_BYTES, TILES};
 

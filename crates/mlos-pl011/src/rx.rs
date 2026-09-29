@@ -1,5 +1,8 @@
-//! Receive: interrupt-driven, because polling for a keystroke means
-//! either burning a core or missing it.
+//! Receive: interrupt-driven.
+//!
+//! Invariant: a receive interrupt is both cleared and drained. Clearing
+//! alone re-raises it; draining alone leaves the line asserted. Design:
+//! docs/notes/mlos-pl011.md.
 
 use core::ptr;
 
@@ -8,8 +11,7 @@ use mlos_device::Console;
 use crate::Pl011;
 
 /// Data register. Reading takes a byte; the upper bits carry framing and
-/// parity errors, discarded here -- a research kernel on an emulated UART
-/// has no better answer than "ignore it".
+/// parity errors, discarded here.
 const DR: usize = 0x00;
 /// Flag register.
 const FR: usize = 0x18;
@@ -21,10 +23,9 @@ const IMSC: usize = 0x38;
 const ICR: usize = 0x44;
 /// `IMSC` bit 4: receive interrupt.
 const IMSC_RX: u32 = 1 << 4;
-/// `IMSC` bit 6: receive timeout -- fires when the FIFO holds something
-/// but has stopped filling. Without it a lone keystroke waits for enough
-/// friends to reach the FIFO trigger level, which for a person typing is
-/// forever.
+/// `IMSC` bit 6: receive timeout, raised when the FIFO holds something
+/// but has stopped filling. Without it a lone keystroke waits for the
+/// FIFO trigger level.
 const IMSC_RT: u32 = 1 << 6;
 
 impl Pl011 {
@@ -40,12 +41,9 @@ impl Pl011 {
         }
     }
 
-    /// Enables the receive and receive-timeout interrupts.
-    ///
-    /// Clears any pending interrupt first: the FIFO may already hold
-    /// something from before we were listening, and unmasking on top of a
-    /// latched interrupt fires immediately, before there is a handler to
-    /// drain it.
+    /// Enables the receive and receive-timeout interrupts, clearing any
+    /// pending interrupt first: unmasking on top of a latched one fires
+    /// before there is a handler to drain it.
     pub fn enable_receive_interrupt(&self) {
         // SAFETY: as above.
         unsafe {
@@ -54,22 +52,16 @@ impl Pl011 {
         }
     }
 
-    /// Acknowledges whatever the device is reporting.
-    ///
-    /// Separate from draining the FIFO, and both are required: clearing
-    /// without draining re-raises immediately, draining without clearing
-    /// leaves the controller believing the line is still asserted.
+    /// Acknowledges whatever the device is reporting. The FIFO must be
+    /// drained as well; clearing alone re-raises immediately.
     pub fn clear_interrupt(&self) {
         // SAFETY: as above.
         unsafe { ptr::write_volatile((self.base() + ICR) as *mut u32, u32::MAX) };
     }
 
-    /// Drains the receive FIFO, echoing what arrived.
-    ///
-    /// A bring-up convenience, not a line discipline: it has no notion of
-    /// a line, a buffer or a cursor. Step 012's reader replaces it. The
-    /// loop matters even so -- a receive timeout can deliver several bytes
-    /// at once, and stopping after one leaves the rest latched.
+    /// Clears the interrupt and drains the receive FIFO, echoing what
+    /// arrived. Loops because a receive timeout can deliver several bytes,
+    /// and stopping after one leaves the rest latched.
     pub fn drain_echo(&self) {
         self.clear_interrupt();
         while let Some(byte) = self.read() {

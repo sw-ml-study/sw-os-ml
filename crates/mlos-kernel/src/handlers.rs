@@ -1,7 +1,8 @@
 //! What the kernel does when an interrupt arrives.
 //!
-//! Everything here runs at an arbitrary moment on an arbitrary stack, so
-//! nothing here allocates, takes a lock, or borrows anything.
+//! Invariant: everything here runs at an arbitrary moment on an arbitrary
+//! stack, so nothing here allocates, takes a lock, or borrows anything.
+//! Design and history: docs/notes/mlos-kernel.md.
 
 use core::{
     cell::UnsafeCell,
@@ -13,10 +14,8 @@ use mlos_device::IrqController;
 use mlos_gic_aarch64::Gic;
 use mlos_hal_aarch64::GenericTimer;
 
-/// A value published once at boot and read from interrupt context.
-///
-/// Not a lock: there is nothing to contend with. It is written on the boot
-/// core with interrupts still masked, and only read afterwards.
+/// A value published once at boot, on the boot core with interrupts
+/// masked, and only read afterwards.
 pub(crate) struct Published<T>(pub(crate) UnsafeCell<Option<T>>);
 
 // SAFETY: written once before interrupts are unmasked, read-only after.
@@ -52,15 +51,8 @@ pub unsafe fn publish(console: Terminal, gic: Gic, interval: u32, irqs: (u32, u3
 }
 
 /// Services one interrupt: acknowledge, dispatch by source, complete.
-///
-/// The claim/complete pair brackets everything. Until `complete`, the
-/// controller delivers nothing more at this priority, so a path that
-/// returns early without it stops the system dead.
-///
-/// Rearming the timer is load-bearing in the other direction: it asserts
-/// its output for as long as its countdown is negative, so a handler that
-/// acknowledges without rearming is re-entered the instant it returns,
-/// forever -- a livelock that reads as a hang.
+/// Every claim must reach `complete` or delivery at this priority stops;
+/// the timer must be rearmed or the handler is re-entered forever.
 pub fn on_irq() {
     // SAFETY: published before interrupts were unmasked, never written
     // again, so this is a shared read of an initialised value.
@@ -80,11 +72,8 @@ pub fn on_irq() {
     gic.complete(irq);
 }
 
-/// Moves everything waiting in the console into the shell's queue.
-///
-/// Queue and leave. Echoing and dispatching happen in the idle loop: a
-/// command run in here would hold the interrupt active, silencing the
-/// console for as long as it took and stopping the timer with it.
+/// Moves everything waiting in the console into the shell's queue. Queue
+/// only: dispatching here would hold the interrupt active.
 fn queue_input() {
     // SAFETY: published before interrupts were unmasked, never rewritten.
     let Some(console) = (unsafe { (*CONSOLE.0.get()).as_ref() }) else {

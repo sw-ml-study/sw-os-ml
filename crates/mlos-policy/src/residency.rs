@@ -1,27 +1,20 @@
 //! What a policy is allowed to see.
 //!
-//! Its own module because it is the half of the interface the KERNEL has
-//! to satisfy, over an open-addressed table, while the simulator
-//! satisfies it over a `Vec`. Everything about the shape of this trait is
-//! a constraint on the kernel rather than a convenience for the policy.
+//! Invariant: the shape of this trait is a constraint on the kernel, which
+//! satisfies it over an open-addressed table without materialising
+//! anything. Design: docs/notes/mlos-policy.md.
 
 use mlos_abi::ObjectId;
 use mlos_objtab::ObjectMeta;
 
-/// The resident set, as a policy is allowed to see it.
-///
-/// Indexed rather than iterable so the kernel can satisfy it over an
-/// open-addressed table without materialising anything. A policy that
-/// wants the whole set walks `0..len()`, and pays for it.
+/// The resident set, as a policy is allowed to see it. Indexed, not
+/// iterable; a policy that wants the whole set walks `0..len()`.
 pub trait Residency {
     /// How many objects are resident.
     fn len(&self) -> usize;
 
-    /// The `index`th resident object, in a stable order.
-    ///
-    /// Stable, not sorted: the order must not change between two calls
-    /// with nothing in between, or a policy would return different
-    /// victims for the same state and the replay would stop being
+    /// The `index`th resident object, in an order that is stable across
+    /// two calls with nothing in between; otherwise a replay is not
     /// deterministic.
     fn at(&self, index: usize) -> Option<(ObjectId, ObjectMeta)>;
 
@@ -30,14 +23,7 @@ pub trait Residency {
         self.len() == 0
     }
 
-    /// Where the declared stream has got to.
-    ///
-    /// Here rather than passed to [`victim`](crate::Policy::victim)
-    /// because it is a fact the table's owner holds, and
-    /// `docs/design.md` s.2 says a policy reads what the table owns. It
-    /// is what turns `NextUse::At` -- a position -- into the distance a
-    /// policy actually compares, and doing that subtraction here, for the
-    /// few objects being weighed, is what lets advancing the stream stay
-    /// a single increment.
+    /// The current tick, on the same one-based counter `NextUse::At` and
+    /// `used_tick` are measured on.
     fn now(&self) -> u32;
 }

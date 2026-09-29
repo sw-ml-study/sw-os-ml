@@ -1,10 +1,7 @@
 //! The redistributor: one per CPU, and where PPIs are configured.
 //!
-//! Private peripheral interrupts -- the timer among them -- are not
-//! configured in the distributor. Each CPU has its own copy, in the
-//! redistributor's second 64 KiB frame. Looking for them in the
-//! distributor is a common way to write a GICv3 driver that silently
-//! never delivers anything.
+//! Invariant: private interrupts are configured here, in the SGI frame,
+//! never in the distributor. Design: docs/notes/mlos-gic-aarch64.md.
 
 use core::ptr;
 
@@ -24,7 +21,7 @@ const ISENABLER0: usize = SGI_FRAME + 0x0100;
 /// `GICR_IPRIORITYR`, in the SGI frame: one byte per interrupt.
 const IPRIORITYR: usize = SGI_FRAME + 0x0400;
 
-/// Brings this CPU's redistributor out of sleep.
+/// Brings this CPU's redistributor out of sleep, and waits until it is.
 ///
 /// # Safety
 ///
@@ -35,8 +32,8 @@ pub unsafe fn wake(base: usize) {
     unsafe {
         let value = ptr::read_volatile(waker) & !PROCESSOR_SLEEP;
         ptr::write_volatile(waker, value);
-        // The redistributor acknowledges by clearing ChildrenAsleep.
-        // Configuring it before it has woken is configuring nothing.
+        // Awake means ChildrenAsleep clear; configuring before that
+        // configures nothing.
         while ptr::read_volatile(waker.cast_const()) & CHILDREN_ASLEEP != 0 {
             core::hint::spin_loop();
         }
@@ -44,14 +41,13 @@ pub unsafe fn wake(base: usize) {
 }
 
 /// Routes one PPI to this CPU as a Group 1 interrupt and unmasks it.
-///
-/// `priority` is numerically lower for more urgent, and must be below
-/// `ICC_PMR_EL1` or the CPU interface will never present it.
+/// `priority` is lower for more urgent and must be below `ICC_PMR_EL1`,
+/// or the CPU interface never presents it.
 ///
 /// # Safety
 ///
 /// `base` must be this CPU's redistributor window, and `intid` a private
-/// interrupt (16..32) -- shared interrupts live in the distributor.
+/// interrupt (16..32).
 pub unsafe fn enable_ppi(base: usize, intid: u32, priority: u8) {
     // SAFETY: caller guarantees the window and the interrupt's range.
     unsafe {

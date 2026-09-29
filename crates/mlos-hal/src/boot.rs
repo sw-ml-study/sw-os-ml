@@ -1,20 +1,18 @@
 //! What the loader and firmware told us about this machine.
 //!
-//! Produced once, by architecture-specific code, from whatever the
-//! platform offers -- a device tree on aarch64, ACPI tables on x86-64 --
-//! and immutable afterwards. The kernel never learns which it was.
+//! Invariant: produced once by architecture-specific code and immutable
+//! afterwards; the kernel never learns which firmware described it.
+//! Design: docs/notes/mlos-hal.md.
 
 /// What a region of physical memory is good for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MemoryKind {
     /// Free for the kernel to allocate from.
     Usable,
-    /// Holds the kernel image. Not allocatable, but not reclaimable
-    /// either -- we are running out of it.
+    /// Holds the kernel image. Not allocatable, not reclaimable.
     Kernel,
     /// Firmware structures, the device tree, loader scratch. Reclaimable
-    /// once parsed, which is worth doing: on a machine sized by its
-    /// residency budget, tens of megabytes is real.
+    /// once parsed.
     Reclaimable,
     /// Memory-mapped device registers. Never allocate, never cache.
     Device,
@@ -33,11 +31,8 @@ pub struct MemoryRegion {
     pub kind: MemoryKind,
 }
 
-/// The machine, as described at boot.
-///
-/// `regions` is a borrowed slice rather than an owned collection because
-/// there is no allocator yet when this is built -- the memory map is what
-/// the allocator is built *from*.
+/// The machine, as described at boot. Borrows its map: there is no
+/// allocator yet to own one.
 #[derive(Clone, Copy, Debug)]
 pub struct BootInfo<'a> {
     /// The physical memory map, in ascending address order.
@@ -53,10 +48,7 @@ impl<'a> BootInfo<'a> {
         Self { regions, cpu_count }
     }
 
-    /// Total allocatable bytes.
-    ///
-    /// The number every residency budget in `docs/PRD.md` is a fraction
-    /// of, so it is computed once from the map rather than guessed.
+    /// Total allocatable bytes: the sum of every `Usable` region.
     #[must_use]
     pub fn usable_bytes(&self) -> u64 {
         self.regions

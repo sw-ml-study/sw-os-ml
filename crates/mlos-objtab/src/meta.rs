@@ -1,17 +1,11 @@
 //! What the kernel knows about one piece of model state.
 //!
-//! Every field here exists to answer a question a page-based operating
-//! system cannot ask. A page table entry says where a page is and whether
-//! it is dirty. This says how expensive the object would be to get back,
-//! when it will next be wanted, and how many sessions are waiting on it
-//! -- and those are the inputs to every decision in `docs/PRD.md`.
+//! Invariant: a policy holds no state this record does not own, so the
+//! same policy code runs in the kernel and the simulator. Design:
+//! docs/notes/mlos-objtab.md.
 
-/// How an object's numbers are stored.
-///
-/// Not decoration: precision is a *choice the kernel can make*. Demoting
-/// cold KV from FP16 to Q4 is rung 2 of the degradation ladder, and it is
-/// the reason an ML workload can be made cheaper under pressure where an
-/// ordinary process cannot.
+/// How an object's numbers are stored. A choice the kernel can make, not
+/// a fixed property.
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Precision {
@@ -40,40 +34,21 @@ pub enum Tier {
     /// A block store. Fetched on fault.
     Cold = 3,
     /// Never resident: consumed as it passes.
-    ///
-    /// The tier a page-based system cannot express. A streamed object is
-    /// not "in memory" in a way you could point at; it is a scheduled flow
-    /// that compute is arranged around.
     Stream = 4,
     /// No bytes stored at all -- recomputed, regenerated or dropped.
     Archive = 5,
 }
 
-/// When an object will next be wanted.
-///
-/// The field that does not exist in any page-based operating system, and
-/// the one that makes this whole design worth building. Three-way rather
-/// than a number because the two kinds of knowledge differ in kind, not
-/// degree: a dense layer sweep yields an exact distance, an MoE router
-/// yields a distribution. A policy may act on `Distance` with certainty
-/// and on `Probability` only as a hint, and collapsing them to one number
-/// would silently license the wrong decision.
+/// When an object will next be wanted. Three-way, not a number: a policy
+/// may act on `At` with certainty and on `Probability` only as a hint.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum NextUse {
     /// Not known to be wanted again.
     #[default]
     Never,
-    /// Wanted again at exactly this position in a declared stream.
-    ///
-    /// A POSITION, not a distance, and the difference is the whole
-    /// reason `ml_stream_advance` can be O(1). A distance is measured
-    /// from somewhere, so advancing a stream by one step would make every
-    /// resident object's distance wrong and the kernel would have to walk
-    /// the table to fix them -- a per-token cost over the very structure
-    /// it would be walking. A position is measured from the stream's
-    /// origin and does not move when the cursor does, so advancing is a
-    /// single increment and the subtraction happens once, in the policy,
-    /// for the handful of objects it actually compares.
+    /// Wanted again at exactly this position in a declared stream. A
+    /// position from the stream's origin, not a distance from the cursor,
+    /// so advancing the stream does not invalidate it.
     At(u32),
     /// Wanted with this likelihood, as a fraction of `u16::MAX`.
     Probability(u16),
@@ -84,11 +59,8 @@ pub enum NextUse {
 pub struct CostNs(pub u32);
 
 impl CostNs {
-    /// Cannot be done at any price.
-    ///
-    /// Weights have no recompute cost: there is no computation that
-    /// produces them. Eviction must be able to tell "expensive" from
-    /// "impossible", because it may choose the first and never the second.
+    /// Cannot be done at any price. Eviction may choose "expensive" and
+    /// never this.
     pub const IMPOSSIBLE: Self = Self(u32::MAX);
 }
 
@@ -98,7 +70,7 @@ impl CostNs {
 pub enum Mutability {
     /// Weights. Identical for every session, so one copy serves all.
     Immutable = 1,
-    /// Shared until written, then private. How a model fork stays cheap.
+    /// Shared until written, then private.
     CowOverlay = 2,
     /// KV, activations, adapters.
     Mutable = 3,
@@ -121,25 +93,14 @@ pub struct ObjectMeta {
     pub precision: Precision,
     /// Where it is now.
     pub tier: Tier,
-    /// Where it goes back to when it is evicted.
-    ///
-    /// `tier` moves -- an object faulted in becomes `Warm` -- so evicting
-    /// needs somewhere to put it back, and guessing `Cold` would send a
-    /// recomputable activation to a block store that never had it. Set
-    /// once, when the object is registered, and never changed.
+    /// Where it goes back to when it is evicted. Set once at registration
+    /// and never changed; `tier` is what moves.
     pub home: Tier,
     /// Who can produce it.
     pub provider: ProviderId,
-    /// Where its *home* is, as that provider understands "where".
-    ///
-    /// Opaque on purpose: a DRAM address, a block number, a recipe for
-    /// recomputing it. The table records which provider to ask and what
-    /// to tell it; only the provider knows what the number means.
-    ///
-    /// Distinct from [`Self::resident_at`], and both are needed. The home
-    /// is where the object comes from and does not change when it is
-    /// evicted; the residency is where it happens to be now. Collapsing
-    /// them would mean an object could only be fetched once.
+    /// Where its home is, as that provider understands "where". Opaque to
+    /// the table; distinct from [`Self::resident_at`], and unchanged by
+    /// eviction.
     pub handle: u64,
     /// Where it is in memory right now, or zero if it is not.
     pub resident_at: u64,
@@ -148,28 +109,14 @@ pub struct ObjectMeta {
     /// How often it has been wanted, for frequency-aware caching.
     pub reuse_count: u16,
     /// When it became resident, on a monotonic acquire counter.
-    ///
-    /// Insertion order, which is the only thing FIFO knows. Here rather
-    /// than inside a policy because `docs/design.md` s.2 makes it a rule
-    /// that a policy holds no state the table does not own -- a FIFO
-    /// keeping its own queue could not be one piece of code running both
-    /// in the kernel and in the simulator, and that sameness is the only
-    /// thing making the comparison worth anything.
     pub placed_tick: u32,
     /// When it was last wanted, on the same counter.
-    ///
-    /// Recency, which is what LRU knows and all it knows. Distinct from
-    /// `placed_tick` for exactly the case the two disagree about: an
-    /// object placed early and used recently.
     pub used_tick: u32,
     /// What fetching it again would cost.
     pub reload_cost: CostNs,
     /// What recomputing it would cost, or [`CostNs::IMPOSSIBLE`].
     pub recompute_cost: CostNs,
     /// How many live leases refer to it.
-    ///
-    /// The number parameter-major scheduling is built on: four sessions
-    /// waiting on one layer should cause one read, not four.
     pub share_count: u16,
     /// Whether it can change.
     pub mutability: Mutability,

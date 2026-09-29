@@ -1,12 +1,8 @@
 //! Carving occupied ranges out of the memory map.
 //!
-//! The device tree describes what the *machine* has. It knows nothing
-//! about what a loader put into it -- the kernel image, the blob itself --
-//! so those two facts have to be combined somewhere, and this is where.
-//!
-//! Without it, `BootInfo::usable_bytes` reports memory that is already
-//! occupied, and the first allocator to trust it hands out the ground the
-//! kernel is standing on.
+//! Invariant: the tree describes the machine, not what the loader put in
+//! it; without this, `usable_bytes` counts the ground the kernel stands
+//! on. Design: docs/notes/mlos-machine.md.
 
 use mlos_hal::{MemoryKind, MemoryRegion};
 

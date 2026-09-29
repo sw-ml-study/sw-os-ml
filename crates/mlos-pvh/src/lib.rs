@@ -1,14 +1,8 @@
 //! What the PVH loader hands an x86-64 guest, read from bytes.
 //!
-//! On x86-64 this is the device tree's counterpart (`docs/plan.md`, saga
-//! `mlos-x86-64`): `hvm_start_info` carries the memory map, and the
-//! command line carries both `mlsh.run=` and -- on QEMU `microvm` -- one
-//! `virtio_mmio.device=` per transport. So `BootInfo` is filled from two
-//! sources here where aarch64 fills it from one.
-//!
-//! Parsing only, from byte slices, with no `unsafe`: turning a physical
-//! address into a slice is `mlos-hal-x86-64`'s job, and keeping it there
-//! is what lets every rule in this crate be tested on the host.
+//! Invariant: parsing only, from byte slices, with no `unsafe`; turning a
+//! physical address into a slice is `mlos-hal-x86-64`'s job. Design and
+//! history: docs/notes/mlos-pvh.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -42,11 +36,8 @@ pub struct StartInfo {
 }
 
 impl StartInfo {
-    /// Reads a start info from its first [`HEADER_LEN`] bytes.
-    ///
-    /// `None` if the magic is wrong or the version predates the memory
-    /// map: a machine without a map is one whose RAM we would be guessing
-    /// at, and MLOS does not guess.
+    /// Reads a start info from its first [`HEADER_LEN`] bytes. `None` if
+    /// the magic is wrong or the version predates the memory map.
     #[must_use]
     pub fn parse(bytes: &[u8]) -> Option<Self> {
         let u32_at = |at: usize| Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?));

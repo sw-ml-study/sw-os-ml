@@ -1,17 +1,8 @@
 //! A real model's tensor inventory, read from emufpga's sidecar.
 //!
-//! The thing `docs/architecture.md` s.12 says a trace must not be
-//! without: a shape taken from a real checkpoint rather than invented.
-//! The sidecar is what `emufpga import` writes beside a `.spm` -- one
-//! line per stream with rows, columns and element count, and a
-//! `rotating-streams` line saying how many of them are swept once per
-//! operation and rewound. Everything after that boundary is read once
-//! into RAM. That is an access pattern declared by the model's own
-//! forward pass, and this module only reads it.
-//!
-//! Kilobytes of text. The weights themselves are never opened here, and
-//! never will be: what a residency policy needs to know about a model is
-//! what it IS, not its bytes.
+//! Invariant: the streams before the `rotating-streams` boundary rotate,
+//! the rest are read once, and the module only reads that declaration.
+//! Design: docs/notes/mlos-workload.md.
 
 /// One stream of the sidecar: a tensor, where it sits, and how it is used.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,8 +30,8 @@ pub struct Stream<'a> {
 pub struct Shape<'a> {
     /// What the sidecar said it was for.
     pub name: &'a str,
-    /// Every stream, in sidecar order -- which is consumption order for
-    /// the rotating region, because that is what the order file is.
+    /// Every stream, in sidecar order, which is consumption order for
+    /// the rotating region.
     pub streams: Vec<Stream<'a>>,
     /// How many layers the names spoke of. Streams outside any layer
     /// carry this as theirs.
@@ -53,12 +44,8 @@ pub struct Shape<'a> {
 const OUTSIDE: u16 = u16::MAX;
 
 impl<'a> Shape<'a> {
-    /// Reads a sidecar.
-    ///
-    /// `bytes_per_element` is the caller's to say: the sidecar counts
-    /// elements and does not know what they will be stored as. Two for
-    /// the checkpoint's own F16; a policy comparison at another
-    /// precision changes that one number and nothing else.
+    /// Reads a sidecar. `bytes_per_element` is the caller's to say: the
+    /// sidecar counts elements and does not know their storage width.
     pub fn parse(text: &'a str, bytes_per_element: u32) -> Result<Self, &'static str> {
         let mut rotating = None;
         let mut streams = Vec::new();
@@ -134,13 +121,9 @@ impl<'a> Shape<'a> {
         }
     }
 
-    /// What one token adds to one layer's KV cache, in bytes.
-    ///
-    /// Read off the model rather than assumed: the key and value
-    /// projections' output widths ARE the per-token cache row, so the
-    /// number is `rows(k_proj) + rows(v_proj)` elements of layer zero.
-    /// Zero for a shape with no attention in it, which a caller should
-    /// treat as "this is not a decoder".
+    /// What one token adds to one layer's KV cache, in bytes:
+    /// `rows(k_proj) + rows(v_proj)` elements of layer zero. Zero for a
+    /// shape with no attention in it.
     #[must_use]
     pub fn kv_block_bytes(&self) -> u32 {
         self.streams

@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 12,
+    "step": "reasoning-to-docs"
+  },
+  "action": "Measured the comment share and how much was history before deciding what the fix was. Wrote the rule, converted one crate by hand, then fanned out six agents by layer with a mechanical self-check (no non-comment changed lines) and no builds, gating the whole workspace once at the end. Verified SAFETY counts and code line counts independently of the agents' reports.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-29T12:36:26"
+}

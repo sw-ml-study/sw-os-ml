@@ -1,8 +1,7 @@
-//! The virtio-mmio register block.
+//! The virtio-mmio register block, version 2 ("modern") only.
 //!
-//! Version 2 ("modern") only. Version 1 is a different memory layout with
-//! a different queue-address convention, and supporting both would double
-//! this file to serve hardware that no longer ships.
+//! Invariant: every access is volatile; a register's value is not a
+//! function of what was last written. Design: docs/notes/mlos-virtio.md.
 
 use core::ptr;
 
@@ -11,11 +10,7 @@ pub const MAGIC: u32 = 0x7472_6976;
 /// The only version this driver speaks.
 pub const VERSION: u32 = 2;
 
-/// Register offsets.
-///
-/// Only the ones this driver uses. The interrupt registers are absent
-/// because transmit spins for completion rather than waiting for one --
-/// they arrive with receive, which needs a handler anyway.
+/// Register offsets; only the ones the drivers use.
 pub mod reg {
     /// Magic value, must read as [`super::MAGIC`].
     pub const MAGIC: usize = 0x000;

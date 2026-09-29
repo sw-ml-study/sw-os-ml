@@ -1,18 +1,17 @@
 //! The CPU interface, which on GICv3 is system registers rather than MMIO.
+//!
+//! Invariant: until `ICC_SRE_EL1.SRE` is set, writes to the other
+//! `ICC_*` registers are silently ignored. Design:
+//! docs/notes/mlos-gic-aarch64.md.
 
 use core::arch::asm;
 
-/// Accept every priority. The redistributor sets per-interrupt priorities;
-/// masking here as well would be a second place to look when an interrupt
-/// does not arrive.
+/// Accept every priority; the redistributor's per-interrupt priorities
+/// are the only mask.
 const ACCEPT_ALL: u64 = 0xff;
 
-/// Enables this CPU's interface for Group 1 interrupts.
-///
-/// `ICC_SRE_EL1.SRE` comes first and needs its own `isb`: until it is set,
-/// the other `ICC_*` registers are not architecturally accessible, and
-/// writes to them are ignored rather than faulting -- which looks exactly
-/// like a controller that was configured and does nothing.
+/// Enables this CPU's interface for Group 1 interrupts. `SRE` first, with
+/// its own `isb`, or nothing after it takes effect.
 ///
 /// # Safety
 ///
@@ -36,10 +35,8 @@ pub unsafe fn enable() {
     }
 }
 
-/// Takes the highest-priority pending Group 1 interrupt.
-///
-/// Returns the raw `ICC_IAR1_EL1` value. 1023 is the architectural
-/// "spurious" answer, meaning nothing was pending after all.
+/// Takes the highest-priority pending Group 1 interrupt: the raw
+/// `ICC_IAR1_EL1` value, 1023 when nothing was pending.
 #[must_use]
 pub fn acknowledge() -> u32 {
     let intid: u64;
@@ -50,11 +47,8 @@ pub fn acknowledge() -> u32 {
 }
 
 /// Signals that the handler for an acknowledged interrupt has finished.
-///
-/// Must pair with every [`acknowledge`] that returned a real interrupt.
-/// Skipping it leaves the interrupt active and the controller will not
-/// deliver another at that priority -- a hang that looks like the timer
-/// stopped.
+/// Must pair with every [`acknowledge`] that returned a real interrupt,
+/// or nothing more is delivered at that priority.
 pub fn end_of_interrupt(intid: u32) {
     // SAFETY: write of a previously acknowledged interrupt id.
     unsafe { asm!("msr icc_eoir1_el1, {}", in(reg) u64::from(intid), options(nostack)) };

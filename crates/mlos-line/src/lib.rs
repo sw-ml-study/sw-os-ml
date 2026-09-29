@@ -1,16 +1,13 @@
 //! One line of input, in a fixed buffer.
 //!
-//! Its own crate because nothing about it is shell-specific: anything
-//! reading a line from a console needs a buffer, a backspace and a limit.
-//! `mlsh` is only the first such reader.
+//! Invariant: the buffer never grows. A shell that can be made to
+//! allocate by holding down a key has a denial of service in it. Design:
+//! docs/notes/mlos-line.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
 
-/// The longest command line. Nothing here takes arguments yet, so this is
-/// generous; it is fixed because there is no allocator, and it will still
-/// be fixed when there is -- a shell that can be made to allocate by
-/// holding down a key is a shell with a denial of service in it.
+/// The longest command line, in bytes.
 const CAPACITY: usize = 96;
 
 /// A line being typed.
@@ -42,10 +39,6 @@ impl Line {
     }
 
     /// The line so far, or `""` if it is not valid UTF-8.
-    ///
-    /// Only printable ASCII is ever pushed, so the failure cannot happen
-    /// -- but returning `""` rather than unwrapping keeps a future change
-    /// to that rule from turning into a panic with no console.
     #[must_use]
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(&self.bytes[..self.len]).unwrap_or("")

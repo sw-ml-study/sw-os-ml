@@ -1,10 +1,13 @@
-//! Programming the translation registers, and the order it must happen in.
+//! Programming the translation registers, in the order the architecture
+//! requires.
+//!
+//! Invariant: the barriers in `install` are not optional. Design:
+//! docs/notes/mlos-mmu-aarch64.md.
 
 use core::arch::asm;
 
 /// `MAIR_EL1`: attribute 0 is Device-nGnRE (`0x04`), attribute 1 is Normal
-/// write-back read/write-allocate (`0xff`). `descriptor::ATTR_*` index
-/// into this, so the two must agree.
+/// write-back read/write-allocate (`0xff`).
 const MAIR: u64 = (0xff << 8) | 0x04;
 
 /// `SCTLR_EL1.M` -- enable translation.
@@ -14,16 +17,9 @@ const SCTLR_C: u64 = 1 << 2;
 /// `SCTLR_EL1.I` -- enable the instruction cache.
 const SCTLR_I: u64 = 1 << 12;
 
-/// Builds `TCR_EL1` for a 39-bit identity map with a 4 KiB granule.
-///
-/// `T0SZ` of 25 gives a 39-bit address space, whose initial lookup is at
-/// level 1 -- which is exactly why the tables are a single level of 1 GiB
-/// blocks and there is no level-0 table.
-///
-/// `IPS` is read from `ID_AA64MMFR0_EL1.PARange` rather than assumed.
-/// Programming an intermediate size the implementation does not support
-/// is architecturally unpredictable, and "unpredictable" on the
-/// instruction after the MMU comes on is not a failure anyone can debug.
+/// Builds `TCR_EL1` for a 39-bit identity map with a 4 KiB granule and
+/// the initial lookup at level 1. `IPS` is read from
+/// `ID_AA64MMFR0_EL1`, never assumed.
 fn tcr() -> u64 {
     let mmfr0: u64;
     // SAFETY: reading an ID register. No side effects, always accessible
@@ -31,8 +27,7 @@ fn tcr() -> u64 {
     unsafe { asm!("mrs {}, id_aa64mmfr0_el1", out(reg) mmfr0, options(nomem, nostack)) };
     let parange = mmfr0 & 0b1111;
 
-    // TG0 (bits 15:14) is left zero: 0b00 *is* the 4 KiB granule, so the
-    // field is absent from this expression rather than forgotten.
+    // TG0 (bits 15:14) is left zero: 0b00 *is* the 4 KiB granule.
     25                    // T0SZ:  39-bit VA, initial lookup at level 1
         | (0b01 << 8)     // IRGN0: inner write-back, read/write-allocate
         | (0b01 << 10)    // ORGN0: outer, likewise
@@ -41,13 +36,9 @@ fn tcr() -> u64 {
         | (parange << 32) // IPS:   as the implementation reports it
 }
 
-/// Installs the tables, without yet translating through them.
-///
-/// The barriers are the substance. `dsb ishst` publishes the table writes
-/// before anything can walk them; the `isb` makes the new control
-/// registers visible to instruction fetch; the TLB invalidate removes
-/// anything cached from before we existed. Dropping any of them yields a
-/// machine that boots on one host and hangs on another.
+/// Installs the tables, without yet translating through them. `dsb`
+/// publishes the table writes, `isb` makes the registers visible, `tlbi`
+/// drops anything cached from before.
 ///
 /// # Safety
 ///
@@ -78,9 +69,8 @@ pub unsafe fn install(ttbr0: u64) {
 /// # Safety
 ///
 /// The tables installed by [`install`] must identity map at least the
-/// currently executing code, its stack and the console. The instruction
-/// after the final `isb` executes under the new regime; if it is not
-/// mapped, the machine stops there with no way to report it.
+/// currently executing code, its stack and the console; the instruction
+/// after the final `isb` executes under the new regime.
 pub unsafe fn turn_on() {
     // SAFETY: caller guarantees the mapping covers what is still in use.
     unsafe {
@@ -96,9 +86,7 @@ pub unsafe fn turn_on() {
     }
 }
 
-/// Whether translation is enabled, read back from `SCTLR_EL1.M` -- so a
-/// claim that the MMU is on can be checked rather than inferred from the
-/// fact that we are still running.
+/// Whether translation is enabled, read back from `SCTLR_EL1.M`.
 #[must_use]
 pub fn is_enabled() -> bool {
     let sctlr: u64;

@@ -1,4 +1,4 @@
-//! The 40-byte device tree header.
+//! The 40-byte device tree header. Design: docs/notes/mlos-fdt.md.
 
 /// Reads a big-endian `u32` at a byte offset, or `None` if out of range.
 fn be32(bytes: &[u8], at: usize) -> Option<u32> {
@@ -27,11 +27,8 @@ impl Header {
     /// Version 16 introduced the layout this reader assumes.
     pub const MIN_COMPATIBLE: u32 = 16;
 
-    /// Parses and sanity-checks a header.
-    ///
-    /// Checks `last_comp_version`, not `version`: a newer blob that still
-    /// declares itself backward compatible with 16 is one we can read, and
-    /// refusing it would reject a future QEMU for no reason.
+    /// Parses and sanity-checks a header: the magic, and a
+    /// `last_comp_version` no newer than [`Self::MIN_COMPATIBLE`].
     pub fn parse(blob: &[u8]) -> Option<Self> {
         if be32(blob, 0)? != Self::MAGIC || be32(blob, 24)? > Self::MIN_COMPATIBLE {
             return None;

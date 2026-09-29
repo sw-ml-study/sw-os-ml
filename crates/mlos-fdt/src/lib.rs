@@ -1,17 +1,9 @@
-//! A minimal reader for the flattened device tree format.
+//! A minimal reader for the flattened device tree: it walks the blob, it
+//! does not build a tree.
 //!
-//! Enough to answer the three questions MLOS asks at boot -- where is
-//! memory, how many CPUs, and where is the console -- and no more. It
-//! walks; it does not build a tree, because building one needs an
-//! allocator and the memory map is what the allocator gets built *from*.
-//!
-//! Architecture-neutral on purpose. aarch64 and RISC-V both boot this way,
-//! so this is one of the few places a future `mlos-hal-riscv64` costs
-//! nothing (`docs/architecture.md` s.9).
-//!
-//! The blob is firmware-supplied and therefore untrusted. Every read is
+//! Invariant: the blob is firmware-supplied and untrusted. Every read is
 //! bounds-checked and every malformed input yields `None`, never a panic
-//! and never an out-of-range access.
+//! or an out-of-range access. Design and history: docs/notes/mlos-fdt.md.
 
 #![no_std]
 
@@ -68,9 +60,8 @@ impl<'a> Fdt<'a> {
     /// # Safety
     ///
     /// `ptr` must point at a device tree blob whose declared `total_size`
-    /// bytes are all readable. The header is read first to learn that
-    /// length, so a pointer to something that is not a blob is rejected
-    /// after 40 bytes rather than believed.
+    /// bytes are all readable. Only the 40-byte header is read before
+    /// that length is known and checked.
     pub unsafe fn from_ptr(ptr: *const u8) -> Option<Self> {
         // SAFETY: the caller guarantees a blob is here; 40 bytes is the
         // fixed header length, read before trusting any field in it.
@@ -81,7 +72,8 @@ impl<'a> Fdt<'a> {
         Self::new(unsafe { core::slice::from_raw_parts(ptr, total) })
     }
 
-    /// Reads a blob already in a slice.
+    /// Reads a blob already in a slice. `None` if the header is bad or
+    /// names blocks outside the slice.
     pub fn new(blob: &'a [u8]) -> Option<Self> {
         let header = Header::parse(blob)?;
         Some(Self {
@@ -95,10 +87,8 @@ impl<'a> Fdt<'a> {
     }
 
     /// Walks the tree, reporting every node and property in order.
-    ///
-    /// Returns `None` on a malformed blob, having already reported
-    /// whatever it read successfully -- a caller that got what it needed
-    /// before the damage can proceed.
+    /// `None` on a malformed blob, after reporting everything before the
+    /// damage.
     pub fn walk(&self, mut visit: impl FnMut(Event<'a>)) -> Option<()> {
         let mut cursor = Cursor::new(self.structs);
         loop {

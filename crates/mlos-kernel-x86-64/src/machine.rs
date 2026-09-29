@@ -1,10 +1,8 @@
 //! The machine, from what the PVH loader handed over.
 //!
-//! The x86-64 counterpart of `mlos_machine::Machine::probe`: the memory
-//! map from `hvm_start_info`, the virtio-mmio slots and `mlsh.run=` from
-//! the command line (`mlos-pvh`). The kernel image and the loader's own
-//! structures are carved out of the map with the same `reserve` the
-//! aarch64 path uses, so `mem` reports what was found on both.
+//! Invariant: the image and the loader's structures are carved out of
+//! Usable regions only, and a record the map cannot hold is counted, never
+//! silently dropped. Design and history: docs/notes/mlos-kernel-x86-64.md.
 
 use mlos_hal::{BootInfo, MemoryKind};
 use mlos_hal_x86_64 as hal;
@@ -59,8 +57,8 @@ pub unsafe fn discover(start_info: *const u8) -> Option<Machine> {
         .iter()
         .filter(|r| r.kind == MemoryKind::Usable);
     let total = usable.map(|r| r.len).sum();
-    // What occupies RAM the map calls free: the image, and the loader's
-    // own structures -- reclaimable once read, like the aarch64 DTB.
+    // What occupies RAM the map calls free; the loader's structures are
+    // reclaimable once read.
     let (image, reclaim) = (hal::extent(), MemoryKind::Reclaimable);
     let carve = [
         (image.0, image.1, MemoryKind::Kernel),
@@ -68,10 +66,9 @@ pub unsafe fn discover(start_info: *const u8) -> Option<Machine> {
         (info.memmap, map_len as u64, reclaim),
         (info.cmdline, cmdline.len() as u64 + 1, reclaim),
     ];
-    // Only out of Usable: `reserve` re-labels whatever it overlaps, and
-    // QEMU puts the loader's structures in the BIOS area when ACPI is off,
-    // which the map already calls Reserved. Re-labelling that Reclaimable
-    // would one day hand firmware memory to an allocator.
+    // Only out of Usable: `reserve` re-labels whatever it overlaps, and the
+    // loader's structures can sit in memory the map already calls Reserved.
+    // Re-labelling that Reclaimable would hand firmware memory to an allocator.
     for (base, len, kind) in carve {
         if free(&regions, base, len) {
             regions = reserve(&regions, base, len, kind);

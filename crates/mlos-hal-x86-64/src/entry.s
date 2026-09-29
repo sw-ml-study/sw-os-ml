@@ -7,8 +7,8 @@
 // identity-mapped UNCACHED as the device window -- the LAPIC (0xfee00000),
 // IOAPIC (0xfec00000) and virtio-mmio slots (0xfeb00000) live there.
 // 1-3 GiB stays unmapped, so a stray pointer there still faults. Calling
-// `mlos_main(start_info)`. Nothing else: everything a device tree told
-// the aarch64 kernel is read from start_info later, in Rust.
+// `mlos_main(start_info)`. Nothing else is read here; start_info is read
+// later, in Rust.
 
     // The note QEMU finds the entry through. linker/x86_64.ld keeps it.
     .section .note.pvh, "a", @note
@@ -96,7 +96,7 @@ _start:
     lgdt [mlos_gdt_ptr]
     // Through a memory far pointer: LLVM's Intel parser encodes
     // `push offset sym` with a 16-bit immediate, which cannot hold an
-    // address above 64 KiB (found in spikes/x86-skeleton).
+    // address above 64 KiB.
     jmp fword ptr [mlos_long_mode_ptr]
 
     .code64

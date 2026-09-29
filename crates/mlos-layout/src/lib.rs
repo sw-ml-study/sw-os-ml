@@ -1,21 +1,9 @@
-//! The `sw-ml-study.system-layout` document.
+//! The `sw-ml-study.system-layout` document: a columnar table of spaces,
+//! regions and edges.
 //!
-//! A cross-repo contract, not an MLOS format. It is pinned by
-//! `../sw-mlpl/docs/storage-layout-viz.md`, emitted first by SWTOS, parsed
-//! by sw-mlpl's array language and drawn by demo-extensions' native3d.
-//! MLOS is the second producer.
-//!
-//! Nothing here knows what an `ML_OBJECT` is. That is the point of the
-//! boundary the contract draws: the operating system knows storage
-//! semantics, the visualizer knows geometry, and the only thing crossing
-//! between them is a table. Region kinds, owners and ids are opaque
-//! strings and numbers at this level -- `mlos-image-map` supplies MLOS's
-//! vocabulary, and SWTOS supplies a different one through the same shape.
-//!
-//! Columnar (struct-of-arrays) rather than an array of objects, because
-//! that is what sw-mlpl's `parse_json` ingests today: homogeneous numeric
-//! arrays become numeric arrays, all-string arrays become string lists,
-//! and the layout math then runs elementwise over whole columns.
+//! Contract: pinned by `../sw-mlpl/docs/storage-layout-viz.md`, shared
+//! with SWTOS; region kinds, owners and ids are opaque here. Design:
+//! docs/notes/mlos-layout.md.
 
 #![forbid(unsafe_code)]
 
@@ -46,13 +34,9 @@ pub struct Space {
     pub capacity: u64,
 }
 
-/// One classified extent within a space.
-///
-/// The `tier`, `object` and `state` columns are MLOS's extensions. The
-/// contract permits extra columns, and this is what an ML object store
-/// knows that a flash image does not -- which is the argument for sharing
-/// a format rather than forking one. Regions they do not apply to carry
-/// the empty string.
+/// One classified extent within a space. `tier`, `object`, `state`,
+/// `reuse`, `cost` and `next_use` are MLOS's extension columns; regions
+/// they do not apply to carry the empty string or zero.
 pub struct Region {
     /// Stable across snapshots; what picking and cross-highlighting use.
     pub id: u32,
@@ -70,9 +54,10 @@ pub struct Region {
     pub length: u64,
     /// Residency tier, for ML objects.
     pub tier: String,
-    /// The decimal `ObjectId`, for ML objects. A string because a `u64`
-    /// does not survive a JSON number in every consumer.
+    /// The decimal `ObjectId`, for ML objects. A string, not a JSON
+    /// number.
     pub object: String,
+
     /// Residency state, for the State colour mode.
     pub state: String,
     /// How many times this object has been wanted.

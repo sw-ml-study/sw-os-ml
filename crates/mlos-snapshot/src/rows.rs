@@ -1,20 +1,7 @@
 //! Every region the running system has, as a stream.
 //!
-//! An iterator rather than a collection because there is no allocator to
-//! collect into. Each column is written by walking this again -- sixteen
-//! passes over a hundred-odd rows, which costs nothing and means no buffer
-//! has to exist anywhere.
-//!
-//! [`Row`] carries values already resolved rather than the `ObjectMeta` it
-//! came from. That is what lets every column be a one-line field read: the
-//! alternative is a match per column, repeated sixteen times, each one
-//! another chance to describe a free region as an object.
-//!
-//! Sorted order is deliberately NOT promised. The contract requires the
-//! regions of a space to tile it, not to arrive in order, and sorting
-//! without an allocator would be a quadratic pass for no gain -- the
-//! consumer indexes by `region_id` and takes geometry from `start` and
-//! `length`, neither of which cares.
+//! Invariant: the regions of a space tile it exactly; their order is not
+//! promised. Design: docs/notes/mlos-snapshot.md.
 
 use mlos_objman::{Arena, Manager};
 use mlos_objtab::{NextUse, ObjectMeta};
@@ -58,10 +45,8 @@ pub struct Row {
     pub cost: u64,
 }
 
-/// Every region: what is stored, what is resident, and `tail` after them.
-///
-/// The tail is passed in rather than built here because it is the one row
-/// that describes no object -- see `tail` in the crate root.
+/// Every region: what is stored, what is resident, and `tail` after them
+/// when it has any length.
 pub fn rows<'m, const N: usize>(
     manager: &'m Manager<'static, N>,
     base: u64,
@@ -69,18 +54,12 @@ pub fn rows<'m, const N: usize>(
 ) -> impl Iterator<Item = Row> + 'm {
     stored(manager)
         .chain(placed(manager, base))
-        // Skipped when the arena is exactly full. A zero-length region
-        // satisfies the tiling rule and draws as nothing, which is a box
-        // in the legend that is never on screen.
+        // A zero-length tail would tile correctly and draw as nothing.
         .chain(core::iter::once(tail).filter(|row| row.length > 0))
 }
 
-/// The model's weight tiles, where the disk image keeps them.
-///
-/// Every tile, resident or not: the disk map is about what EXISTS, and a
-/// tile's `state` column says whether it is also in memory. That is the
-/// picture worth having -- which parts of a model a workload has actually
-/// touched, drawn over the whole model rather than over a fragment of it.
+/// The model's weight tiles, where the disk image keeps them. Every
+/// tile, resident or not.
 fn stored<'m, const N: usize>(manager: &'m Manager<'static, N>) -> impl Iterator<Item = Row> + 'm {
     (0..LAYERS).flat_map(move |layer| {
         (0..TILES).filter_map(move |tensor| {
@@ -92,11 +71,8 @@ fn stored<'m, const N: usize>(manager: &'m Manager<'static, N>) -> impl Iterator
     })
 }
 
-/// Everything actually in the arena, at the address it was given.
-///
-/// Length is rounded to the arena's granularity, because that is what the
-/// object cost. A bump allocator hands out aligned extents, and reporting
-/// the unrounded size would leave holes the contract does not allow.
+/// Everything actually in the arena, at the address it was given. Length
+/// is rounded to `GRAIN`, or the regions would not tile.
 fn placed<'m, const N: usize>(
     manager: &'m Manager<'static, N>,
     base: u64,

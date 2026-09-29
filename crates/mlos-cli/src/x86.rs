@@ -1,15 +1,9 @@
 //! `--arch x86-64`: building and booting the x86-64 guest.
 //!
-//! Its own module, reached through one hook in `main`, so the x86-64 lane
-//! (saga `mlos-x86-64`, `lanes/x86/`) and the aarch64 lane never edit the
-//! same lines. Folding the two into one `--arch`-aware path is a later
-//! refactor, once both have merged.
-//!
-//! Without `--arch`, `build` and `run` target the host's own architecture
-//! -- x86-64 on a Linux PC, aarch64 on Apple Silicon -- which is the one
-//! it can accelerate. Every other verb (`doctor`, `layout`, `runtime`,
-//! `help`) is architecture-neutral or aarch64-only for now and keeps the
-//! shared path. `--arch aarch64` takes that path explicitly.
+//! Invariant: reached through one hook in `main`, so the x86-64 and
+//! aarch64 lanes never edit the same lines. Without `--arch`, `build` and
+//! `run` target the host's own architecture. Design and history:
+//! docs/notes/mlos-cli.md.
 
 use std::{
     io::{self, Write},
@@ -76,10 +70,9 @@ pub fn dispatch(args: &[String]) -> Option<io::Result<()>> {
     })
 }
 
-/// Builds the kernel for x86-64 and returns the ELF.
-///
-/// The ELF itself, not a flat image: PVH is found through an ELF note, so
-/// QEMU needs the program headers an objcopy would strip.
+/// Builds the kernel for x86-64 and returns the ELF itself, not a flat
+/// image: PVH is found through an ELF note, so QEMU needs the program
+/// headers.
 fn build() -> io::Result<PathBuf> {
     let args = ["build", "-q", "-p", "mlos-kernel", "--target", TARGET];
     let status = Command::new("cargo").args(args).status()?;
@@ -91,16 +84,10 @@ fn build() -> io::Result<PathBuf> {
         .join("debug/mlos-kernel"))
 }
 
-/// QEMU for the x86-64 guest, minus RAM size and kernel.
-///
-/// `microvm`: virtio-mmio, which MLOS speaks, rather than `q35`'s PCI.
-/// `acpi=off`, because with ACPI on `microvm` describes its virtio-mmio
-/// slots in the DSDT and leaves them OFF the command line -- and the
-/// command line is where MLOS reads them (`mlos-pvh`).
-/// COM1 is the console, multiplexed with the QEMU monitor (`Ctrl-A x`).
-/// `-cpu max` so the identity map can use 1 GiB pages; the 2 MiB fallback
-/// is exercised by the boot test with QEMU's default CPU. The debug-exit
-/// device is how the guest reports before it has a console.
+/// QEMU for the x86-64 guest, minus RAM size and kernel. `acpi=off` keeps
+/// the virtio-mmio slots on the command line, where `mlos-pvh` reads
+/// them; `-cpu max` allows 1 GiB pages; `isa-debug-exit` is how the
+/// guest reports before it has a console.
 #[rustfmt::skip] // flag/value pairs, one pair per line reads as a command line
 const MICROVM: [&str; 15] = [
     "-M", "microvm,acpi=off", "-accel", "tcg", "-cpu", "max",
@@ -108,17 +95,10 @@ const MICROVM: [&str; 15] = [
     "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-kernel",
 ];
 
-/// Boots under QEMU `microvm`, console on this terminal.
-///
-/// With `--capture`, stops the guest at the deadline: it waits for input
-/// that a headless boot never sends, so still running is the normal end.
-/// Without it there is no deadline and this waits for the guest. (A
-/// far-future deadline instead overflowed `Instant` and panicked, leaving
-/// QEMU running behind the shell -- found recording demos/x86-64.tape.)
-///
-/// `--run SCRIPT` becomes `mlsh.run=`, as for aarch64, and the model disk
-/// is the one the aarch64 guest gets. The report after the guest ends
-/// goes on its own line: the guest's last output is usually a prompt.
+/// Boots under QEMU `microvm`, console on this terminal. With
+/// `--capture`, kills the guest at the deadline (still running is the
+/// normal end); without it, waits for the guest. `--run SCRIPT` becomes
+/// `mlsh.run=`.
 fn boot(args: &[String]) -> io::Result<()> {
     let (host, seconds, _) = crate::options(args, true)?;
     if args.iter().any(|arg| arg == host) && host != "tcg" {
@@ -145,13 +125,10 @@ fn boot(args: &[String]) -> io::Result<()> {
 }
 
 /// Turns the guest's exit status into what it means, or into an error.
-///
-/// `None` is the `--capture` deadline, not a failure: the console above
-/// already says what the guest did. Otherwise QEMU's `isa-debug-exit`
-/// exited with `(code << 1) | 1`, and the bits are
-/// `mlos-kernel-x86-64`'s: `0x40` reached `mlos_main`, `0x01` long mode,
-/// `0x02` a valid `hvm_start_info`, `0x04` 1 GiB pages, `0x08` stopped
-/// by a trap (the report is on the console above).
+/// `None` is the `--capture` deadline, not a failure. Otherwise the code
+/// is `(bits << 1) | 1` from `isa-debug-exit`, bits as `mlos-kernel-x86-64`
+/// sets them: `0x40` reached `mlos_main`, `0x01` long mode, `0x02` valid
+/// `hvm_start_info`, `0x04` 1 GiB pages, `0x08` stopped by a trap.
 fn describe(status: Option<i32>) -> io::Result<String> {
     let Some(code) = status else {
         return Ok("(stopped at the --capture deadline)".to_owned());

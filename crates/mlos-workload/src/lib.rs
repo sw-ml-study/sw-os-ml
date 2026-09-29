@@ -1,52 +1,8 @@
-//! A decode loop, as an access trace.
+//! A decode loop, as an access trace: sessions of different lengths,
+//! round-robin, each sweeping the weights and re-reading its own KV.
 //!
-//! The workload the M3 comparison is actually decided on, and the reason
-//! it exists is that the recorded trace cannot decide anything. A dense
-//! sweep re-reads nothing within a pass, so LRU evicts precisely what it
-//! is about to need and misses everything; known-next-use is optimal on
-//! it by construction. Both facts follow from the shape of the workload
-//! before any policy is written, and a result that could not have come
-//! out otherwise is not a measurement.
-//!
-//! A real decode loop has two halves that pull in opposite directions:
-//!
-//! - **Weights are swept cyclically.** Every token reads every tile, in
-//!   the same order. This is LRU's WORST case, and worth understanding
-//!   rather than just asserting: in a cycle longer than the budget, the
-//!   tile LRU just touched is the one it will want LAST, so it evicts
-//!   exactly what it is about to need.
-//! - **KV accumulates and is re-read.** Each token appends a block per
-//!   layer and reads every earlier block for that layer.
-//!
-//! That was the first design, and it did not work. Re-reading the whole
-//! prefix every token is ITSELF a cyclic sweep: every block is read once
-//! per round, in order, so after one pass LRU's recency order is exactly
-//! insertion order and it evicts what FIFO evicts. Measured, they tied at
-//! 192 reads each on the KV half alone.
-//!
-//! **A purely cyclic workload can never distinguish FIFO from LRU**, and
-//! that is worth stating as a property rather than as an accident. The
-//! two differ only when something placed EARLY is used RECENTLY, which a
-//! uniform scan never produces.
-//!
-//! What produces it in real serving is concurrency. Several sessions
-//! decode at once, they sit at different positions, and they do not all
-//! finish together. A session that has stopped generating still holds KV
-//! that will never be read again; an active session holds early blocks it
-//! reads every round. LRU distinguishes those and FIFO cannot -- it
-//! evicts the active session's early blocks while a finished session's
-//! later blocks survive purely for being younger.
-//!
-//! So this workload is round-robin over sessions of different lengths.
-//! That is also nearer the system MLOS is for: the premise in
-//! `docs/PRD.md` is many sessions wanting the same weights, and a
-//! single-session trace could not express it.
-//!
-//! **This is a model of a decode loop, not a recording of one.** Weaker
-//! provenance than the step-001 trace, and it has to be said: what keeps
-//! it honest is that the access ORDER follows from the structure rather
-//! than from anyone's preference, and that M3 step 010 replaces the
-//! sizes with a real model's.
+//! Invariant: the access order follows from the arithmetic, never from
+//! convenience. Design and history: docs/notes/mlos-workload.md.
 
 #![forbid(unsafe_code)]
 
@@ -81,12 +37,9 @@ impl Decode {
         Self { sessions, rounds }
     }
 
-    /// How long session `which` keeps generating.
-    ///
-    /// Spread evenly, so the shortest stops after a fraction of the run
-    /// and the longest lasts all of it. Sessions that finish are what
-    /// make recency mean something: their KV is never read again, and a
-    /// policy that notices keeps the active sessions' blocks instead.
+    /// How long session `which` keeps generating: spread evenly, so the
+    /// shortest stops after a fraction of the run and the longest lasts
+    /// all of it.
     #[must_use]
     pub const fn length(&self, which: u16) -> u16 {
         match self.sessions {
@@ -104,19 +57,9 @@ impl Decode {
         }
     }
 
-    /// The whole access sequence.
-    ///
-    /// Round-robin over sessions still generating. Within a session's
-    /// turn: every weight tile, layer by layer, then that session's KV
-    /// prefix for the layer -- the order the arithmetic needs them, since
-    /// the projections come from the weights and attention reads the
-    /// cache. An order chosen for convenience would be a different
-    /// workload wearing this one's name.
-    ///
-    /// Returned rather than written into a caller's slice, unlike
-    /// `mlos-trace`: nothing replays a GENERATED trace in the kernel, and
-    /// a length the caller had to predict is a length that can disagree
-    /// with the loop that fills it.
+    /// The whole access sequence: round-robin over sessions still
+    /// generating, and within a turn every weight tile, layer by layer,
+    /// then that session's KV prefix for the layer.
     #[must_use]
     pub fn trace(&self) -> Vec<Access> {
         let mut out = Vec::new();

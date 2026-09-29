@@ -1,13 +1,8 @@
-//! A virtio console.
+//! A virtio console, transmit only.
 //!
-//! Its own crate, like every other virtio device. `mlos-virtio` is the
-//! transport and the virtqueue; what rides on them is a driver, and
-//! keeping the two apart is what stops the transport crate growing a
-//! module every time a device is added.
-//!
-//! Transmit only, for now. That is what closes requirement N2: MLOS needs
-//! to be able to *say* something under Virtualization.framework before
-//! being able to listen there is worth anything.
+//! Invariant: one submission at a time, on the boot core; the static
+//! buffer is reused only after the device has returned the previous
+//! chunk. Design and history: docs/notes/mlos-virtio-console.md.
 
 #![no_std]
 
@@ -23,11 +18,8 @@ use mlos_virtio::{
 /// Queue 1 is the transmit queue of port 0. Queue 0 is its receive queue.
 const TRANSMIT: u32 = 1;
 
-/// The rings, and the bytes the device reads.
-///
-/// Static because there is no allocator, and because the device reads
-/// them by physical address: they must not move. Identity-mapped, so the
-/// address this code sees is the one the device is given.
+/// The rings, and the bytes the device reads. Static and identity-mapped:
+/// the device addresses them physically, so they must not move.
 #[repr(C, align(64))]
 struct Rings {
     descriptors: UnsafeCell<[Descriptor; SIZE]>,
@@ -70,7 +62,8 @@ pub struct Console {
 }
 
 impl Console {
-    /// Brings up the console at `device`.
+    /// Brings up the console at `device`. `None` if negotiation or queue
+    /// setup fails.
     ///
     /// # Safety
     ///
@@ -98,10 +91,8 @@ impl Console {
 }
 
 impl ConsoleTrait for Console {
-    /// Sends bytes, a bufferful at a time.
-    ///
-    /// Synchronously: each chunk waits for the device before the next is
-    /// staged, which is what makes one static buffer safe to reuse.
+    /// Sends bytes, 256 at a time; each chunk waits for the device before
+    /// the next is staged, which is what makes one buffer safe to reuse.
     fn write(&self, bytes: &[u8]) {
         for chunk in bytes.chunks(256) {
             // SAFETY: single-threaded, and the previous chunk has already

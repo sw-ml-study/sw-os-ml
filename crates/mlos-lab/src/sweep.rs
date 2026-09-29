@@ -1,9 +1,8 @@
-//! Walking the model in order.
+//! Walking the model in order, and declaring that order as a stream.
 //!
-//! In order, because that is what a dense transformer does, and the whole
-//! argument of `docs/PRD.md` is that the order is knowable in advance.
-//! Nothing here exploits that yet -- exploiting it is M3 -- but this is
-//! the sweep whose numbers M3 has to improve on.
+//! Invariant: a declaration is one pass, not a repeating one; a tile
+//! behind the cursor reads `Never`. Design and history:
+//! docs/notes/mlos-lab.md.
 
 use mlos_abi::ObjectId;
 use mlos_objman::{Lease, Manager};
@@ -54,26 +53,9 @@ fn walk(held: &mut Manager<'static, CAPACITY>, session: u16) -> (u32, Option<mlo
     (acquired, None)
 }
 
-/// Declares the sweep this model performs, in the order it performs it.
-///
-/// `ml_stream_declare`, with the declaration derived from the model
-/// rather than supplied by a caller -- there is no userspace to supply it
-/// and `docs/plan.md` defers one deliberately. What matters for M3 is
-/// that the kernel is TOLD the order rather than inferring it, and a
-/// declaration built from `model::tile` is told in exactly the sense a
-/// process would tell it.
-///
-/// ONE sweep, not a repeating one. A stream is a finite sequence now, so
-/// a tile behind the cursor reads `Never` -- which is the truth: the
-/// kernel has been told about one pass and nothing beyond it. The shell's
-/// `stream` verb exists to watch that being written, and watching it run
-/// out is part of what there is to see.
-///
-/// Borrows the replay's declaration buffers, because they are the
-/// storage this kernel has for a declared sequence and a stream borrows
-/// rather than owns.
-///
-/// Returns how many objects were declared.
+/// Declares one sweep of this model, in the order it performs it, into
+/// the replay's declaration buffers. Returns how many objects were
+/// declared, or `None` if there is no manager or no room.
 pub fn declare() -> Option<usize> {
     let room = crate::state::replay_room();
     let count = (LAYERS * TILES) as usize;
@@ -93,10 +75,7 @@ pub fn declare() -> Option<usize> {
     })?
 }
 
-/// Moves the declared stream on by `steps`.
-///
-/// `ml_stream_advance`. One addition, whatever the object table holds --
-/// the property `NextUse::At` exists to preserve.
+/// Moves the declared stream on by `steps`, returning the new cursor.
 pub fn advance(steps: u32) -> Option<u32> {
     with(|held| {
         held.stream.advance(steps);

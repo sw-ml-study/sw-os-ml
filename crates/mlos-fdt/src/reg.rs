@@ -1,15 +1,11 @@
 //! Decoding `reg` properties.
 //!
-//! A `reg` value is a flat run of big-endian cells whose widths come from
-//! the *parent* node's `#address-cells` and `#size-cells`. That indirection
-//! is why this is a function taking both, rather than something a caller
-//! can read off the bytes.
+//! Invariant: cell widths come from the parent node's `#address-cells`
+//! and `#size-cells`, never from the value itself. Design and history:
+//! docs/notes/mlos-fdt.md.
 
 /// Reads `count` consecutive big-endian cells starting at cell `at`.
-///
-/// Refuses more than two cells: a device tree may in principle use wider
-/// addresses, but nothing that would fit in a `u64` does, and silently
-/// truncating an address is worse than admitting we cannot read it.
+/// Refuses zero or more than two: a wider address would not fit a `u64`.
 fn cells(value: &[u8], at: usize, count: u32) -> Option<u64> {
     if count == 0 || count > 2 {
         return None;
@@ -19,10 +15,8 @@ fn cells(value: &[u8], at: usize, count: u32) -> Option<u64> {
     Some(bytes.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b)))
 }
 
-/// Reads the `index`th `(address, size)` pair from a `reg` value.
-///
-/// `None` if the value is too short, which is how a truncated or
-/// mis-specified property is rejected rather than read as zeros.
+/// Reads the `index`th `(address, size)` pair from a `reg` value. `None`
+/// if the value is too short, rather than reading zeros.
 #[must_use]
 pub fn reg_pair(
     value: &[u8],
@@ -37,18 +31,9 @@ pub fn reg_pair(
     Some((address, size))
 }
 
-/// A device tree string property, if it is valid UTF-8.
-///
-/// Property strings are NUL-terminated, and the terminator is inside the
-/// value's declared length -- so a caller that compares the raw bytes to a
-/// string literal is comparing against a trailing zero and always losing.
-///
-/// The terminator is stripped HERE rather than trusted to
-/// `trim_ascii_end`, which trims whitespace and leaves a NUL exactly where
-/// it was. That was a real bug and an invisible one: `/chosen/bootargs`
-/// came back as `console=hvc0\0`, every `contains` and `starts_with`
-/// still matched, and nothing noticed until a NUL was written into a JSON
-/// document and somebody else's parser refused it.
+/// A device tree string property with its NUL terminator stripped, if it
+/// is valid UTF-8. The terminator is inside the declared length and
+/// `trim_ascii_end` does not remove it, so it is stripped here.
 #[must_use]
 pub const fn string(value: &[u8]) -> Option<&str> {
     let mut end = value.len();

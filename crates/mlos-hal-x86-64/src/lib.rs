@@ -1,18 +1,12 @@
-//! x86-64 platform support for MLOS.
+//! x86-64 platform support for MLOS: the entry point, and the facts about
+//! the CPU only the architecture can answer.
 //!
-//! The twin of `mlos-hal-aarch64`: it owns the entry point and the few
-//! facts about the CPU that only the architecture can answer. The guest is
-//! QEMU `microvm` booted by PVH (`docs/plan.md`, saga `mlos-x86-64`), so
-//! the entry is 32-bit protected mode with paging off and the
-//! `hvm_start_info` pointer in `%ebx` -- see [`boot`].
-//!
-//! `unsafe` lives here by design (AGENTS.md, "Hard constraints"). Every
-//! block names the invariant it relies on.
+//! Invariant: `unsafe` lives here by design, and every block names what it
+//! relies on. Design and history: docs/notes/mlos-hal-x86-64.md.
 
 #![no_std]
-// Empty anywhere but a bare x86-64 target. `target_os = "none"` as well as
-// the architecture, because a Linux x86-64 HOST is also `target_arch =
-// "x86_64"`, and this crate's 32-bit entry has no business in a host build.
+// Empty anywhere but a bare x86-64 target: a Linux x86-64 host is also
+// `target_arch = "x86_64"`, and the 32-bit entry must not reach it.
 #![cfg(all(target_arch = "x86_64", target_os = "none"))]
 
 mod boot;
@@ -30,7 +24,7 @@ unsafe extern "C" {
 }
 
 /// The image's `(base, length)` in physical memory, `.bss` and the boot
-/// stack included -- the same contract as `mlos_hal_aarch64::extent`.
+/// stack included.
 #[must_use]
 pub fn extent() -> (u64, u64) {
     // `&raw const`: these symbols have an address and no value.
@@ -47,11 +41,8 @@ pub fn wait_for_interrupt() {
 
 /// Sleeps until an interrupt, unless `pending` says one already came.
 ///
-/// The check and the sleep are atomic with respect to interrupts: `cli`
-/// before the check, then `sti; hlt`, and `sti` holds interrupts off for
-/// exactly one more instruction. Without that, an interrupt landing
-/// between the check and the `hlt` would be serviced and then slept
-/// through, and a keystroke would wait for the next timer tick.
+/// Invariant: `cli` before the check, then `sti; hlt`, so an interrupt
+/// cannot land between the check and the sleep and be slept through.
 pub fn wait_unless(pending: &core::sync::atomic::AtomicBool) {
     // SAFETY: masks interrupts on this CPU only; unmasked again below
     // on both paths.
@@ -66,11 +57,9 @@ pub fn wait_unless(pending: &core::sync::atomic::AtomicBool) {
     unsafe { core::arch::asm!("sti", "hlt", options(nomem, nostack)) };
 }
 
-/// Ends the VM through QEMU's `isa-debug-exit` device at port `0xf4`.
-///
-/// QEMU exits with status `(code << 1) | 1`, which is how a boot test gets
-/// a real answer before there is a console to read. Without the device the
-/// write goes nowhere and the CPU parks, which a test sees as a timeout.
+/// Ends the VM through QEMU's `isa-debug-exit` device at port `0xf4`;
+/// QEMU exits with status `(code << 1) | 1`. Without the device the write
+/// is ignored and the CPU parks.
 pub fn qemu_exit(code: u8) -> ! {
     // SAFETY: port 0xf4 is the debug-exit device `mlos run` attaches; an
     // unclaimed port write has no effect on an x86 machine.

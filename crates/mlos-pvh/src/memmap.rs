@@ -1,4 +1,7 @@
 //! The PVH memory map: e820 records, in the order the loader wrote them.
+//!
+//! Invariant: a record type this code does not know is `Reserved`, never
+//! usable. Design: docs/notes/mlos-pvh.md.
 
 use mlos_hal::{MemoryKind, MemoryRegion};
 
@@ -10,13 +13,8 @@ const RAM: u32 = 1;
 /// e820 type 3: ACPI tables, reclaimable once read.
 const ACPI: u32 = 3;
 
-/// Hands every record in `memmap` to `push` as a [`MemoryRegion`].
-///
-/// RAM is `Usable`, ACPI tables `Reclaimable`, everything else --
-/// reserved, NVS, unusable, types this code has never heard of --
-/// `Reserved`. Unknown is not usable: the safe mistake is to waste
-/// memory, not to hand out memory firmware still owns.
-///
+/// Hands every record in `memmap` to `push` as a [`MemoryRegion`]: RAM is
+/// `Usable`, ACPI tables `Reclaimable`, everything else `Reserved`.
 /// Zero-length records are dropped; a trailing partial record is ignored.
 pub fn regions(memmap: &[u8], mut push: impl FnMut(MemoryRegion)) {
     for record in memmap.chunks_exact(ENTRY_LEN) {

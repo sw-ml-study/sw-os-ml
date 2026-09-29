@@ -1,4 +1,7 @@
 //! The ARM generic timer.
+//!
+//! Invariant: a handler that does not rearm is re-entered the instant it
+//! returns. Design: docs/notes/mlos-hal-aarch64.md.
 
 use core::arch::asm;
 
@@ -7,25 +10,16 @@ use mlos_device::{Hertz, Ticks, Timer};
 /// `CNTP_CTL_EL0.ENABLE`.
 const ENABLE: u64 = 1 << 0;
 
-/// The EL1 physical timer, whose interrupt is private interrupt 30.
-///
-/// A fixed number, from the Arm architecture rather than from the device
-/// tree: the tree's `interrupts` property describes the same thing, but
-/// PPI 30 is architectural for the non-secure EL1 physical timer and
-/// parsing three cells of interrupt specifier to rediscover it would be
-/// ceremony, not portability.
+/// The EL1 physical timer. Its interrupt is PPI 30, fixed by the
+/// architecture.
 pub struct GenericTimer;
 
 /// The interrupt this timer raises.
 pub const TIMER_PPI: u32 = 30;
 
 impl GenericTimer {
-    /// Arms the timer `ticks` from now and enables it.
-    ///
-    /// `CNTP_TVAL_EL0` is a countdown, so writing it is both "when" and
-    /// "start counting". It is also how the interrupt is cleared: the
-    /// timer asserts its output for as long as the count is negative, so a
-    /// handler that does not rearm gets called again immediately, forever.
+    /// Arms the timer `ticks` from now and enables it. Writing the
+    /// countdown is also what clears the interrupt.
     pub fn arm(&self, ticks: u32) {
         // SAFETY: writes to this CPU's own timer registers.
         unsafe {

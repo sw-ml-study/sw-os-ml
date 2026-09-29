@@ -1,20 +1,14 @@
-//! Where to look for an object, and in what order.
+//! Where to look for an object, and in what order: open addressing with
+//! linear probing.
 //!
-//! Open addressing with linear probing. A tree would be the obvious
-//! alternative and is the wrong one: the fast path is an exact-match
-//! lookup on the model-fault path, and it must be a couple of cache lines
-//! rather than a traversal. Linear probing keeps a miss in the same cache
-//! line as the hit it displaced.
+//! Invariant: the probe sequence for an id is a fixed function of the id
+//! and the capacity, so a lookup and the insert that placed it agree.
+//! Design: docs/notes/mlos-objtab.md.
 
 use mlos_abi::ObjectId;
 
-/// Scatters an id across the table.
-///
-/// [`ObjectId`] is structured -- class, model, layer, tensor, tile -- so
-/// its low bits are anything but random: a dense layer sweep walks
-/// consecutive tensors, and masking the raw value would pile a whole
-/// layer into adjacent slots. Fibonacci hashing mixes the high bits down,
-/// which is what makes a sweep spread out instead of collide.
+/// Scatters an id across the table. Mixes the high bits down, because a
+/// structured [`ObjectId`]'s low bits are not random.
 #[must_use]
 pub const fn start(id: ObjectId, capacity: usize) -> usize {
     const GOLDEN: u64 = 0x9e37_79b9_7f4a_7c15;

@@ -1,15 +1,9 @@
-//! x86-64 interrupt controllers and clocks: the LAPIC ([`Lapic`]), the
-//! IOAPIC, the legacy 8259 PIC (silenced), and the TSC ([`clock`]).
+//! x86-64 interrupt controllers and clocks: the LAPIC, the IOAPIC, the
+//! silenced 8259 PIC, and the TSC.
 //!
-//! The counterpart of `mlos-gic-aarch64` plus the generic timer. On
-//! `microvm` with ACPI off nothing describes these devices, so the LAPIC
-//! base is read from `IA32_APIC_BASE` (discovered) and the IOAPIC is at
-//! [`IOAPIC_BASE`] (the PC convention -- only ACPI's MADT could say
-//! otherwise). Both are in the device window `mlos-hal-x86-64` maps
-//! uncached.
-//!
-//! `unsafe` is confined to this driver crate, every block with its
-//! invariant.
+//! Invariant: the LAPIC base is read from `IA32_APIC_BASE`, the IOAPIC is
+//! at [`IOAPIC_BASE`], and both lie in the uncached device window. Design
+//! and history: docs/notes/mlos-apic-x86-64.md.
 
 #![no_std]
 // Empty anywhere but a bare x86-64 target, like `mlos-hal-x86-64`.

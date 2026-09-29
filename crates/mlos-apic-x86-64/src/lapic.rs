@@ -1,4 +1,7 @@
 //! The local APIC: this CPU's interrupt controller, and its timer.
+//!
+//! Invariant: registers are 32-bit, accessed volatile, inside the uncached
+//! device window. Design: docs/notes/mlos-apic-x86-64.md.
 
 use mlos_hal_x86_64::port::rdmsr;
 
@@ -18,11 +21,8 @@ pub struct Lapic {
 }
 
 impl Lapic {
-    /// Finds and enables the LAPIC.
-    ///
-    /// The base is read from `IA32_APIC_BASE` rather than assumed, and it
-    /// lies in the device window only because 0xfee00000 is what every
-    /// PC reports; a base outside the window is refused.
+    /// Finds and enables the LAPIC. `None` if the base `IA32_APIC_BASE`
+    /// reports lies outside the device window.
     #[must_use]
     pub fn enable() -> Option<Self> {
         // SAFETY: IA32_APIC_BASE exists on every x86-64 CPU.

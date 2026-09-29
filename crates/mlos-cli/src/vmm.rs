@@ -1,26 +1,15 @@
 //! Turning "which hypervisor" into a command line.
 //!
-//! Its own module because QEMU and vfkit are not variants of one thing.
-//! They are separate programs with separate argument conventions, and the
-//! only reason `mlos run` treats them alike is that from the outside they
-//! answer the same question: what runs MLOS.
+//! Invariants: `-m` is `mlos_image_map::RAM_BYTES`, the size the layout
+//! emitter draws; `gic-version=3` is pinned; virtio-mmio is
+//! `force-legacy=false`, the only version MLOS speaks. Design and
+//! history: docs/notes/mlos-cli.md.
 
 use std::fs;
 
-// `-m` comes from `mlos_image_map::RAM_BYTES` rather than a literal: the
-// layout emitter draws guest RAM at that size, and a VMM handed a
-// different number would make every free region in the picture wrong with
-// nothing to report the disagreement.
-
 /// The program and its whole command line, console included.
-///
-/// `gic-version=3` is pinned for QEMU rather than left to it: the default
-/// differs by accelerator -- TCG gives a GICv2, HVF a v3 -- so without it
-/// the two hand the guest different interrupt controllers, and only one is
-/// the one MLOS drives.
-///
-/// `-serial mon:stdio` multiplexes the guest console with the QEMU
-/// monitor, which is what makes `Ctrl-A x` work. vfkit has no monitor.
+/// `gic-version=3` is pinned because the default differs by accelerator;
+/// `-serial mon:stdio` is what makes `Ctrl-A x` work.
 pub fn command(
     host: &str,
     image: &str,
@@ -63,14 +52,8 @@ fn qemu(cpu: &str, host: &str, image: &str, log: Option<&str>, boot: &str) -> Ve
 }
 
 /// QEMU with the console on virtio rather than the PL011.
-///
-/// `force-legacy=false` is required, not cosmetic: QEMU's `virt` defaults
-/// virtio-mmio to version 1, the legacy layout with a different queue
-/// convention, and MLOS speaks only version 2. Without it the magic value
-/// matches, the version does not, and every slot probes as absent.
-///
-/// `console=hvc0` is what tells MLOS to prefer it -- the same `console=`
-/// convention Linux uses.
+/// `force-legacy=false` is required: without it every slot probes as
+/// absent. `console=hvc0` tells MLOS to prefer it.
 fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>, boot: &str) -> Vec<String> {
     let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
     let ram = (mlos_image_map::RAM_BYTES >> 20).to_string();
@@ -91,11 +74,9 @@ fn qemu_virtio(cpu: &str, host: &str, image: &str, log: Option<&str>, boot: &str
     args
 }
 
-/// vfkit takes no boot arguments here: `VZLinuxBootLoader` has a command
-/// line, but vfkit does not expose it, so `mlos runtime` uses QEMU.
-///
-/// vfkit's arguments: Apple's Virtualization.framework, via
-/// `VZLinuxBootLoader`, which takes the raw arm64 image directly.
+/// vfkit's arguments: `VZLinuxBootLoader` takes the raw arm64 image
+/// directly. vfkit exposes no kernel command line, so nothing here can
+/// carry `mlsh.run=`.
 fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {
     let serial = log.map_or_else(
         || "virtio-serial,stdio".to_owned(),
@@ -115,15 +96,9 @@ fn vfkit(image: &str, log: Option<&str>) -> Vec<String> {
     args
 }
 
-/// The model disk, attached read-only.
-///
-/// `force-legacy=false` again, and for the same reason as the console:
-/// QEMU defaults virtio-mmio to version 1, MLOS speaks only version 2, and
-/// without it the device is present and probes as absent.
-///
-/// Read-only because weights are immutable, which is the property that
-/// lets one copy serve every session. A writable model disk would be a
-/// tier that has to be invalidated.
+/// The model disk, attached read-only: weights are immutable, and a
+/// writable model disk would be a tier that has to be invalidated.
+/// `force-legacy=false` for the same reason as the console.
 pub fn disk() -> Vec<String> {
     let Ok(path) = crate::image::disk() else {
         return Vec::new();

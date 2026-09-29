@@ -1,7 +1,6 @@
 //! The verbs that only look.
 //!
-//! Nothing here changes residency, which is what makes them safe to run
-//! while working out what the acting verbs did.
+//! Invariant: nothing here changes residency. Design: docs/notes/mlsh.md.
 
 use core::fmt::Write;
 
@@ -9,12 +8,8 @@ use mlos_abi::ObjectClass;
 use mlos_lab::{LAYERS, TILES};
 use mlos_synth::model;
 
-/// Lists the model's objects and what the table knows about each.
-///
-/// The inspector `docs/design.md` s.9 asked for. A page table would have
-/// nothing worth listing -- present, dirty, accessed. This has a tier, a
-/// residency, and how often each object has been wanted, which is the
-/// state every policy in `docs/PRD.md` reads.
+/// Lists the model's objects and what the table knows about each: tier,
+/// residency, use count, next use.
 pub fn objs(out: &mut impl Write, args: &str) {
     let all = args.split_whitespace().next() == Some("all");
     match mlos_lab::with(|manager| list(out, manager, all)) {
@@ -28,15 +23,8 @@ pub fn objs(out: &mut impl Write, args: &str) {
     }
 }
 
-/// Prints every tile the table knows, or only the resident ones.
-///
-/// Resident by default: a full listing of 128 identical cold tiles says
-/// nothing, and the ones in memory are the ones a decision was made
-/// about.
-///
-/// The last column is `next_use` -- when the object is next wanted,
-/// which no page-based system can hold. It reads `never` until something
-/// declares a stream, because until M3 step 007 nothing ever wrote it.
+/// Prints every tile the table knows, or only the resident ones. The
+/// last column is `next_use`, `never` until something declares a stream.
 fn list<const N: usize>(
     out: &mut impl Write,
     manager: &mlos_objman::Manager<'static, N>,
@@ -62,16 +50,9 @@ fn list<const N: usize>(
     shown
 }
 
-/// The arena: what is in it, and what would still fit.
-///
-/// The largest single RUN, not the total free. After evictions those
-/// differ, and the difference is memory the arena holds and cannot give
-/// to anything -- a policy evicting perfectly into a fragmented arena has
-/// not helped.
-///
-/// `Rm` is the same fact against the model rather than the buffer, and
-/// the ratio `docs/PRD.md` s.5.2 says the whole system optimises. A small
-/// fraction of a large model resident is the good case, not a failure.
+/// The arena: what is in it, and what would still fit. Reports the
+/// largest single run, not the total free, since after evictions they
+/// differ; `Rm` is the same fact against the model, per mille.
 pub fn arena(out: &mut impl Write) {
     let Some(arena) = mlos_lab::with(|manager| manager.arena.occupancy()) else {
         return; // dispatch already said so
@@ -109,8 +90,6 @@ pub fn faults(out: &mut impl Write) {
         }
     }
 
-    // Only one model exists, so its number is noise; the layer and
-    // tensor are what a page fault could never have told you.
     if let Some(f) = last {
         let us = f.cost.0 / 1000;
         let (class, tile) = (f.class, f.tile);

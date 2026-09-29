@@ -22,6 +22,13 @@ quoted. Development is stepwise sagas in parallel lanes, each commit a
 design record; there is no CI, because the local gate is stricter than
 any runner was ([AGENTS.md](../AGENTS.md)).
 
+Each crate's design reasoning, and the lessons its bugs taught, live in
+one note per crate under [notes/](notes/README.md); the code keeps the
+invariant and a link. That is a rule ([AGENTS.md](../AGENTS.md),
+"Comments: the invariant in the code, the reasoning in the notes"), and
+this document plus [dream.md](dream.md) are where the reasoning above
+the crate level lives.
+
 The layers, bottom up:
 
 | Layer | Crates | What it owns |

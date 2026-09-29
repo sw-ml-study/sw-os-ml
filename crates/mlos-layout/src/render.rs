@@ -1,11 +1,8 @@
 //! Writing the columnar document out.
 //!
-//! Column names and their order live here as tables rather than as a run
-//! of `push_str` calls, so that adding a column is one line and cannot be
-//! added to the header without being added to the body. The contract's own
-//! columns come first, in the order the contract lists them, and the
-//! producer's extensions follow -- a reader diffing this against
-//! `storage-layout-viz.md` should be able to do it by eye.
+//! Contract: the contract's own columns come first, in the order
+//! `storage-layout-viz.md` lists them; the producer's extensions follow.
+//! Design: docs/notes/mlos-layout.md.
 
 use crate::{Doc, Region, SCHEMA, Space, VERSION};
 
@@ -36,12 +33,9 @@ const REGION_TEXT: [Text<Region>; 8] = [
     ("region_next_use", |r| &r.next_use),
 ];
 
-/// The region columns that are numbers, contract first.
-///
-/// The three word counts are 24-bit image words, which MLOS has none of:
-/// they are emitted as zeros rather than omitted, because a consumer
-/// written against SWTOS reads them unconditionally and a missing column
-/// is a crash where a zero is a fact.
+/// The region columns that are numbers, contract first. The three word
+/// counts are always zero here but must be present: consumers read them
+/// unconditionally.
 const REGION_NUMS: [Nums<Region>; 8] = [
     ("region_id", |r| u64::from(r.id)),
     ("region_start", |r| r.start),
@@ -99,12 +93,8 @@ fn column(name: &str, items: impl Iterator<Item = String>) -> String {
     )
 }
 
-/// A JSON string, quotes included.
-///
-/// Rust's `{:?}` is close but not the same -- it emits Rust's own
-/// `\u{..}` form for a control character, which JSON does not accept --
-/// and "close" in a format three other repos parse is not a property
-/// worth relying on.
+/// A JSON string, quotes included. Not `{:?}`: JSON's control-character
+/// escape differs from Rust's.
 fn quoted(value: &str) -> String {
     let body: String = value
         .chars()

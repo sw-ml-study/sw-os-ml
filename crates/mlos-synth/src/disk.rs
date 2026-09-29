@@ -1,10 +1,7 @@
-//! The tier that is really a disk.
+//! The tier that is really a disk: weights read over virtio-blk.
 //!
-//! Replaces the pattern-filling stub for weights when a block device is
-//! present. The bytes are the same either way, which is the point: the
-//! test is that they now cross a virtqueue to get here, so "three tiers"
-//! stops being a claim about the table and becomes a fact about where the
-//! data is.
+//! Invariant: an object's sector is a function of its id, with no index
+//! on disk. Design: docs/notes/mlos-synth.md.
 
 use mlos_abi::{Error, Result};
 use mlos_objtab::{CostNs, ProviderId};
@@ -16,31 +13,19 @@ use crate::model;
 /// The provider slot a disk occupies.
 pub const DISK: ProviderId = ProviderId(4);
 
-/// The sector the model's weights end at, and the trace begins.
-///
-/// One device rather than two. A second virtio-blk would have meant
-/// teaching `probe` to tell two block devices apart and pick the right
-/// one, which is machinery in service of a layout decision -- and the
-/// layout decision is free: the model occupies a known, fixed extent, so
-/// everything after it is spare.
+/// The sector the model's weights end at, and the trace begins: one
+/// device holds both.
 pub const TRACE_AT: u64 = (model::LAYERS as u64 * model::TILES as u64 * model::TILE_BYTES as u64)
     / mlos_virtio_blk::SECTOR as u64;
 
 /// A block device holding the model.
 pub struct Disk {
-    /// The device its bytes come off. Public because `Disk` adds a layout
-    /// and a cost and nothing else -- a constructor would be a formality
-    /// around a single field.
+    /// The device its bytes come off.
     pub block: Block,
 }
 
 impl Disk {
-    /// Which sector an object starts at.
-    ///
-    /// Laid out by id rather than by a table on disk: layer and tensor
-    /// give a position directly, so there is no index to read before the
-    /// first read. A real model file would need one; a synthetic one
-    /// should not pretend to.
+    /// Which sector an object starts at, from its layer and tensor alone.
     #[must_use]
     pub fn sector_of(id: mlos_abi::ObjectId) -> u64 {
         let fields = id.fields();
@@ -62,9 +47,8 @@ impl Provider for Disk {
         unsafe { self.block.read_at(at, &mut into[..want]) }.map_err(|_| Error::NoProvider)
     }
 
-    /// Real NVMe-ish numbers, unchanged from the stub they replace, so a
-    /// comparison of policies is not confounded by the tier getting
-    /// cheaper underneath it.
+    /// NVMe-shaped numbers, identical to `tiers::BACKING` so policy
+    /// comparisons are not confounded by which tier served the read.
     fn cost(&self, _object: Located) -> Cost {
         Cost {
             latency: CostNs(3_000_000),

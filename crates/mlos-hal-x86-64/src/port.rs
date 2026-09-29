@@ -1,9 +1,8 @@
-//! Port I/O, MSRs and the TSC: the instructions every x86-64 driver
-//! needs and none should re-derive.
+//! Port I/O, MSRs and the TSC.
 //!
-//! `unsafe fn` because a port or MSR write can do anything the hardware
-//! behind it does -- reset the machine, remap memory. The caller names
-//! the register and owns the consequence.
+//! Invariant: `unsafe fn`, because a port or MSR write does whatever the
+//! hardware behind it does; the caller names the register and owns the
+//! consequence. Design: docs/notes/mlos-hal-x86-64.md.
 
 use core::arch::asm;
 

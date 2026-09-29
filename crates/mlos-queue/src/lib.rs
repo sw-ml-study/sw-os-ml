@@ -1,18 +1,9 @@
-//! A byte queue for handing input from an interrupt handler to a loop.
+//! A byte queue from an interrupt handler to the loop it interrupted.
 //!
-//! Its own crate because nothing about it is shell-specific: any device
-//! whose interrupt produces bytes faster than something wants to consume
-//! them needs exactly this, and a shell is only the first such consumer.
-//!
-//! Bytes arrive in an interrupt handler and are consumed by the idle loop.
-//! An interrupt handler is the wrong place to run a command: it holds the
-//! interrupt active, so the console cannot report anything that happens
-//! while it works, and a slow command stops the timer. The handler's whole
-//! job is to move the byte somewhere and get out.
-//!
-//! Single producer, single consumer, and both are on the same core -- the
-//! producer just happens to have interrupted the consumer. That is what
-//! makes two atomics sufficient and a lock unnecessary.
+//! Invariant: single producer, single consumer, same core. `HEAD` is
+//! advanced only by the producer and `TAIL` only by the consumer, and the
+//! Release/Acquire pair on each is what publishes a slot. Design and
+//! history: docs/notes/mlos-queue.md.
 
 #![no_std]
 
@@ -38,11 +29,8 @@ static HEAD: AtomicUsize = AtomicUsize::new(0);
 /// Next slot to read, only ever advanced by the consumer.
 static TAIL: AtomicUsize = AtomicUsize::new(0);
 
-/// Adds a byte. Returns `false` if the queue is full, dropping it.
-///
-/// Dropping is the right failure: a keystroke lost when 64 are already
-/// waiting is a keystroke nobody was going to read in time anyway, and the
-/// alternative -- blocking in an interrupt handler -- is a hang.
+/// Adds a byte. `false` if the queue is full, and the byte is dropped:
+/// an interrupt handler cannot block.
 pub fn push(byte: u8) -> bool {
     let head = HEAD.load(Ordering::Relaxed);
     let next = (head + 1) % CAPACITY;

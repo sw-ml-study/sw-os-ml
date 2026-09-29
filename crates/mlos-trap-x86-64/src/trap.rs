@@ -1,4 +1,7 @@
 //! What the CPU can tell us about why it stopped, and saying it.
+//!
+//! Invariant: `CR2` is read before anything else can fault and overwrite
+//! it. Design: docs/notes/mlos-trap-x86-64.md.
 
 use core::{arch::asm, fmt::Write};
 
@@ -38,8 +41,7 @@ pub const VECTOR_NAMES: [&str; 32] = [
     "reserved",
 ];
 
-/// A snapshot of why an exception was taken: the x86-64 twin of the
-/// aarch64 `Trap`'s ESR/ELR/FAR/SPSR.
+/// A snapshot of why an exception was taken.
 #[derive(Clone, Copy)]
 pub struct Trap {
     /// Which vector fired, indexing [`VECTOR_NAMES`].

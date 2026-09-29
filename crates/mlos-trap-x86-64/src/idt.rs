@@ -1,5 +1,8 @@
 //! The interrupt descriptor table: 256 gates, one per vector, each
-//! pointing at a stub in `entry.s` -- 0-31 exceptions, 32-255 interrupts.
+//! pointing at a stub in `entry.s`.
+//!
+//! Invariant: written once, by `load`, before `lidt` makes the CPU read
+//! it. Design: docs/notes/mlos-trap-x86-64.md.
 
 use core::arch::{asm, global_asm};
 
@@ -15,7 +18,7 @@ unsafe extern "C" {
 const KERNEL_CS: u64 = 0x08;
 
 /// Present, DPL 0, 64-bit interrupt gate: interrupts stay off in the
-/// handler, which is what a fatal-fault path wants.
+/// handler.
 const INTERRUPT_GATE: u64 = 0x8e;
 
 /// 256 gates of 16 bytes each, as pairs of words. Written once, by

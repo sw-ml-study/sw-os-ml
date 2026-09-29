@@ -1,5 +1,4 @@
-//! Transmit: polled, because printing is not hot and a kernel that
-//! cannot print until interrupts work cannot report why they do not.
+//! Transmit: polled. Design: docs/notes/mlos-pl011.md.
 
 use core::{fmt, ptr};
 

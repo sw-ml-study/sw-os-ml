@@ -1,13 +1,9 @@
-//! virtio over MMIO.
+//! virtio over MMIO: the transport and the virtqueue every virtio device
+//! driver rides on.
 //!
-//! Enough to drive a console, which is what MLOS needs first: Apple's
-//! Virtualization.framework offers no PL011, so without this MLOS boots
-//! under it and says nothing (`docs/architecture.md` s.8.1).
-//!
-//! It is also the first piece of the provider machinery M2 needs -- a
-//! block device and a filesystem are the same transport with a different
-//! device id -- which is why the transport is separated from the console
-//! that happens to use it.
+//! Invariant: only `VIRTIO_F_VERSION_1` is ever accepted, so no driver
+//! has to implement a feature it did not ask for. Design and history:
+//! docs/notes/mlos-virtio.md.
 
 #![no_std]
 
@@ -21,10 +17,8 @@ pub const CONSOLE_ID: u32 = 3;
 /// The device id a block device reports.
 pub const BLOCK_ID: u32 = 2;
 
-/// `VIRTIO_F_VERSION_1`: the device speaks the non-legacy interface.
-///
-/// Bit 32, so it lives in the second feature word -- which is the whole
-/// reason the feature registers are selected a word at a time.
+/// `VIRTIO_F_VERSION_1`: the device speaks the non-legacy interface. Bit
+/// 32, so it is word 1 of the feature registers.
 const VERSION_1: u32 = 1 << 0;
 
 /// A virtio device at an MMIO window.
@@ -34,11 +28,8 @@ pub struct Device {
 }
 
 impl Device {
-    /// Identifies the device at `base`, if there is one.
-    ///
-    /// QEMU lays out 32 slots whether or not anything is plugged into
-    /// them, and an empty slot reads a device id of zero rather than
-    /// failing -- so probing is how you find what is actually there.
+    /// Identifies the device at `base`, if there is one. An empty slot
+    /// reads a device id of zero and is reported as `None`.
     ///
     /// # Safety
     ///
@@ -60,11 +51,7 @@ impl Device {
     }
 
     /// Walks the handshake to `FEATURES_OK`, accepting only
-    /// `VIRTIO_F_VERSION_1`.
-    ///
-    /// Accepting nothing else is deliberate: every feature accepted is a
-    /// behaviour the driver then has to implement, and a console needs
-    /// none of them.
+    /// `VIRTIO_F_VERSION_1`. `false` if the device refused.
     ///
     /// # Safety
     ///

@@ -1,15 +1,9 @@
 //! Reading a rendered document's columns back out.
 //!
-//! Line-based, which is all either emitter produces and all a validator
-//! needs: both write one column per line. It is not a JSON parser and does
-//! not pretend to be -- a consumer's real parser is what decides whether
-//! this is valid JSON, and `tests/` puts the emitted text through one.
+//! Line-based, not a JSON parser: it relies on both emitters writing one
+//! column per line. Design: docs/notes/mlos-layout.md.
 
 /// A rendered document's columns, in the order they were written.
-///
-/// The `Vec` is public because checking index alignment means walking
-/// every column whatever its name, and an accessor that hands out exactly
-/// that is the `Vec` with extra steps.
 pub struct Columns(pub Vec<(String, Vec<String>)>);
 
 impl Columns {

@@ -1,21 +1,12 @@
-//! aarch64 exception vectors.
+//! aarch64 exception vectors: faults are reported and stop, IRQs return.
 //!
-//! Before this crate, `VBAR_EL1` was zero and every exception branched
-//! into unmapped nothing -- which is exactly what step 001 saw when a
-//! stack push faulted and the machine spun at `0x200` with no way to say
-//! why. Diagnosing that took a disassembler and a register dump. The point
-//! of a vector table is that the machine tells you instead.
-//!
-//! Reporting only: no handler here resumes. Interrupts, which must save
-//! and restore state to return, are the next step; a fault that reaches
-//! these vectors today is a bug, and stopping at it is the correct
-//! response.
+//! Invariant: a handler runs on an arbitrary stack at an arbitrary moment
+//! and may not allocate, lock, or borrow. Design and history:
+//! docs/notes/mlos-trap-aarch64.md.
 
 #![no_std]
-// Empty on any other architecture, so the workspace-wide gate can sweep
-// every crate without a hand-maintained exclude list. The crate says where
-// it applies; a list in .cargo/config.toml would say it somewhere else and
-// then drift, which is exactly what happened before this line existed.
+// Empty on any other architecture, so the workspace gate can sweep every
+// crate without an exclude list.
 #![cfg(target_arch = "aarch64")]
 
 mod trap;
@@ -29,19 +20,15 @@ pub use trap::{Trap, VECTOR_NAMES, describe};
 static HANDLER: AtomicUsize = AtomicUsize::new(0);
 
 /// Where to send a trap report, as a raw function pointer.
-///
-/// An atomic rather than a `static mut`, and a plain `fn` rather than a
-/// closure, because a handler runs on an arbitrary stack at an arbitrary
-/// moment and must not depend on anything it might have borrowed.
 static REPORTER: AtomicUsize = AtomicUsize::new(0);
 
-/// Installs the vector table and the function to report through.
+/// Installs the vector table and the functions to dispatch to.
 ///
 /// # Safety
 ///
-/// Call once, on the boot core. `reporter` must be safe to call from an
-/// exception context: no allocation, no locks it could already hold, and
-/// no assumption about which stack it is on.
+/// Call once, on the boot core. `reporter` and `handler` must be safe to
+/// call from an exception context: no allocation, no locks they could
+/// already hold, and no assumption about which stack they are on.
 pub unsafe fn install(reporter: fn(&Trap) -> !, handler: fn()) {
     REPORTER.store(reporter as *const () as usize, Ordering::Relaxed);
     HANDLER.store(handler as *const () as usize, Ordering::Relaxed);
@@ -59,12 +46,7 @@ pub unsafe fn install(reporter: fn(&Trap) -> !, handler: fn()) {
     }
 }
 
-/// Unmasks IRQs.
-///
-/// Last, and separately: everything up to here can be got wrong quietly,
-/// but an unmasked interrupt with a half-built controller behind it fires
-/// immediately and repeatedly, which is much harder to read than a machine
-/// that simply never ticks.
+/// Unmasks IRQs. Call last, once the vectors and the controller are up.
 ///
 /// # Safety
 ///
@@ -76,11 +58,7 @@ pub unsafe fn unmask() {
 }
 
 /// Where every IRQ entry lands, with the interrupted context already on
-/// the stack and `x19`-`x28` the compiler's problem.
-///
-/// Returns, unlike [`report`]. That is the whole difference between the
-/// two paths: an interrupt is not a bug, and the work it interrupted is
-/// still worth finishing.
+/// the stack. Returns, unlike [`report`].
 extern "C" fn irq() {
     let handler = HANDLER.load(Ordering::Relaxed);
     if handler != 0 {
@@ -90,11 +68,8 @@ extern "C" fn irq() {
     }
 }
 
-/// Where every fault entry lands.
-///
-/// Reads the syndrome first, before anything else can overwrite it, then
-/// hands it to whoever registered. If nobody did, park: there is no way to
-/// report and no state worth returning to.
+/// Where every fault entry lands. Reads the syndrome before anything can
+/// overwrite it, reports, and parks if nobody registered.
 extern "C" fn report(vector: usize) -> ! {
     // SAFETY: entered directly from a vector, so this is the first code to
     // run since the exception and the syndrome registers still describe it.

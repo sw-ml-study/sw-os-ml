@@ -1,5 +1,7 @@
-//! Transmit: polled, like the PL011's, and for the same reason -- a
-//! kernel that cannot print until interrupts work cannot say why not.
+//! Transmit: polled.
+//!
+//! Invariant: printing works before interrupts do, or a kernel that cannot
+//! bring them up cannot say why. Design: docs/notes/mlos-uart16550.md.
 
 use core::fmt;
 

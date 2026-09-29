@@ -1,4 +1,8 @@
 //! The distributor: system-wide interrupt routing.
+//!
+//! Invariant: affinity routing (`ARE`) is on before anything is routed;
+//! without it the redistributors are not addressed. Design:
+//! docs/notes/mlos-gic-aarch64.md.
 
 use core::ptr;
 
@@ -6,9 +10,8 @@ use core::ptr;
 const CTLR: usize = 0x0000;
 /// `GICD_CTLR.EnableGrp1NS` -- deliver Group 1 non-secure interrupts.
 const ENABLE_GRP1: u32 = 1 << 1;
-/// `GICD_CTLR.ARE_NS` -- affinity routing. GICv3's defining feature, and
-/// not optional: with it clear the redistributors are not addressed at
-/// all and every per-CPU interrupt is invisible.
+/// `GICD_CTLR.ARE_NS` -- affinity routing. Required for the
+/// redistributors to be addressed at all.
 const ARE: u32 = 1 << 4;
 /// `GICD_CTLR.RWP` -- a register write is still propagating.
 const RWP: u32 = 1 << 31;
@@ -22,7 +25,8 @@ const IPRIORITYR: usize = 0x0400;
 /// `GICD_IROUTER`, one 64-bit affinity per interrupt, from interrupt 32.
 const IROUTER: usize = 0x6000;
 
-/// Enables Group 1 delivery with affinity routing.
+/// Enables Group 1 delivery with affinity routing, and waits for the
+/// write to land.
 ///
 /// # Safety
 ///
@@ -32,25 +36,19 @@ pub unsafe fn enable(base: usize) {
     // SAFETY: caller guarantees the window. Volatile because the device,
     // not the compiler, decides what a read means.
     unsafe {
-        // ARE first, then Group 1: enabling delivery before routing exists
-        // would advertise interrupts that have nowhere to go.
+        // ARE first, then Group 1: delivery before routing would advertise
+        // interrupts with nowhere to go.
         ptr::write_volatile(ctlr as *mut u32, ARE);
         ptr::write_volatile(ctlr as *mut u32, ARE | ENABLE_GRP1);
-        // Writes to CTLR are not instantaneous. Proceeding while RWP is
-        // set means configuring a controller that has not finished being
-        // configured.
+        // Nothing further is configured until the CTLR write has landed.
         while ptr::read_volatile(ctlr as *const u32) & RWP != 0 {
             core::hint::spin_loop();
         }
     }
 }
 
-/// Routes one shared interrupt to CPU 0 and unmasks it.
-///
-/// Shared interrupts are the distributor's, unlike the private ones each
-/// redistributor owns. `GICD_IROUTER` only exists from interrupt 32 up,
-/// and only means anything with affinity routing enabled -- which is why
-/// [`enable`] sets `ARE` before anything is routed.
+/// Routes one shared interrupt to CPU 0 and unmasks it. `GICD_IROUTER`
+/// exists from interrupt 32 up, and only with `ARE` set.
 ///
 /// # Safety
 ///

@@ -1,30 +1,15 @@
 //! KV blocks: the half of a decode loop that accumulates.
 //!
-//! Moved here from `mlos-workload` in M3 step 009, and the reason is the
-//! whole point of that step. The kernel replays the same trace as the
-//! simulator, so it has to be able to REGISTER a KV block when one is
-//! first asked for -- and it cannot do that from a `std` crate it does
-//! not link. What is a property of the workload is the decode LOOP, which
-//! stays where it was; what a KV block IS belongs beside the model whose
-//! objects it sits among.
-//!
-//! The class is session-scoped: [`ObjectClass::is_session_scoped`] says
-//! so, and it means `Fields::model` carries a session id rather than a
-//! model id. Getting that wrong would let one session's KV alias
-//! another's, which is why the ABI made it a function rather than a
-//! convention.
+//! Invariant: the class is session-scoped, so `Fields::model` carries a
+//! session id, never a model id; otherwise one session's KV could alias
+//! another's. Design and history: docs/notes/mlos-synth.md.
 
 use mlos_abi::{Fields, ObjectClass, ObjectId};
 use mlos_objtab::{
     CostNs, Mutability, NextUse, ObjectMeta, Precision, ProviderId, SessionId, Tier,
 };
 
-/// Bytes per block, per layer.
-///
-/// Small beside a weight tile on purpose. One block is one position's
-/// keys and values for one layer; a tile is a slab of a weight matrix.
-/// The interesting pressure comes from how MANY blocks accumulate, not
-/// from any one of them being large.
+/// Bytes per block, per layer: one position's keys and values.
 pub const BYTES: u32 = 256;
 
 /// The id of one session's KV block for one layer and position.
@@ -41,16 +26,8 @@ pub fn block(session: u16, layer: u16, position: u16) -> ObjectId {
     )
 }
 
-/// What the table would know about a KV block.
-///
-/// The opposite of a weight tile in every respect a policy cares about.
-/// A tile is immutable, shared by every session, and cannot be recomputed
-/// at any price. A block is mutable, owned by one session, and CAN be
-/// recomputed -- by re-running attention over the prefix, which is
-/// expensive and gets more expensive the further back it sits.
-///
-/// `Warm` rather than `Cold`: a block does not come from storage the way
-/// a weight does. It comes from having done the work once.
+/// What the table would know about a KV block: mutable, owned by
+/// `session`, warm, and recomputable at a price above reloading.
 #[must_use]
 pub fn meta(session: u16) -> ObjectMeta {
     ObjectMeta {
@@ -65,11 +42,9 @@ pub fn meta(session: u16) -> ObjectMeta {
         reuse_count: 0,
         placed_tick: 0,
         used_tick: 0,
-        // Spilling to storage and reading it back, which is what a real
-        // serving engine does under pressure.
+        // Spill and read back.
         reload_cost: CostNs(400_000),
-        // Re-running attention over the prefix. Dearer than the spill,
-        // which is why a cost-aware policy would spill rather than drop.
+        // Re-run attention over the prefix. Must stay dearer than the spill.
         recompute_cost: CostNs(2_000_000),
         share_count: 0,
         mutability: Mutability::Mutable,

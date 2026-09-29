@@ -1,19 +1,13 @@
 //! The verbs.
 //!
-//! Deliberately few, and deliberately about the state MLOS actually has.
-//! `mlsh` is not a Unix shell: there is no filesystem to navigate and no
-//! processes to list. It is an inspector, and it grows a verb when the
-//! kernel grows something worth inspecting -- the object table, at M2.
+//! Invariant: a verb that needs a model is refused in `dispatch`, in one
+//! place, before it runs. Design: docs/notes/mlsh.md.
 
 use core::{fmt::Write, sync::atomic::Ordering};
 
 use crate::Facts;
 
 /// Runs one line.
-///
-/// The "needs a model" guard is a match arm rather than an early return
-/// because it is a dispatch decision like the others, and it belongs
-/// where they are.
 pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
     let (verb, args) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
     let ready = !NEEDS_MODEL.contains(&verb) || mlos_lab::with(|_| ()).is_some();
@@ -45,10 +39,7 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
     let _ = writeln!(out, "{ticks} timer ticks since boot");
 }
 
-/// Verbs that need a model to already exist.
-///
-/// A constant, so the check is one line in `dispatch` and the apology
-/// lives in one place -- three copies of it is three places to change.
+/// Verbs that need a model to already exist; `dispatch` checks them once.
 const NEEDS_MODEL: [&str; 10] = [
     "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream", "replay",
 ];
@@ -73,15 +64,9 @@ const HELP: &str = concat!(
     "help          this\r\n",
 );
 
-/// The physical memory map.
-///
-/// The two non-usable entries are the point: the kernel image and the
-/// device tree blob are memory the machine has and MLOS may not hand out.
-/// Everything the object manager will ever do starts from this number
-/// being honest.
-///
-/// `mem peek ADDR` reads eight bytes at ADDR instead. On an unmapped
-/// address the CPU faults and the trap report is the answer.
+/// The physical memory map, including the reserved entries MLOS may not
+/// hand out. `mem peek ADDR` reads eight bytes at ADDR instead; an
+/// unmapped address faults, on purpose.
 fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
     if let Some(addr) = args.strip_prefix("peek") {
         let addr = u64::from_str_radix(addr.trim().trim_start_matches("0x"), 16);
@@ -107,12 +92,8 @@ fn mem(out: &mut impl Write, facts: &Facts<'_>, args: &str) {
     );
 }
 
-/// The devices in use, as found -- whichever source described them.
-///
-/// Every line comes from `Facts`, none from an assumption about the
-/// architecture: the console kind is the one `boot` chose (a PL011 or
-/// virtio on aarch64, a 16550 on x86-64), and a timer the platform has
-/// not described is reported as absent rather than as irq 0.
+/// The devices in use, as `Facts` describes them. A timer the platform
+/// has not described is reported as absent, not as irq 0.
 fn dev(out: &mut impl Write, facts: &Facts<'_>) {
     let (kind, uart, irq) = (facts.console, facts.uart, facts.uart_irq);
     let _ = writeln!(out, "  console  {kind} @ {uart:#x}, irq {irq}");

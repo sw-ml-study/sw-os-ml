@@ -1,11 +1,8 @@
 //! The document's columns, in the order the contract lists them.
 //!
-//! Split the way the contract is: the columns every producer emits, then
-//! the ones MLOS adds. A reader comparing this against
-//! `../sw-mlpl/docs/storage-layout-viz.md`, or against the host emitter's
-//! `render.rs`, should be able to do it by eye -- and the two emitters
-//! disagreeing about a column name is the failure mode that would be
-//! hardest to notice, since each is valid JSON on its own.
+//! Contract: column names must match the host emitter's `render.rs` and
+//! `../sw-mlpl/docs/storage-layout-viz.md` exactly. Design:
+//! docs/notes/mlos-snapshot.md.
 
 use core::fmt::Write;
 
@@ -19,12 +16,8 @@ use crate::{
     rows::{GRAIN, Row, rows},
 };
 
-/// The two spaces this document describes.
-///
-/// `sysram` is absent on purpose. A running kernel has no symbol table and
-/// cannot say where its own `.text` ended, so claiming a RAM map here
-/// would mean inventing one -- and the static document already has a real
-/// one, drawn from the linked image.
+/// The two spaces this document describes: `disk` and `dram`. No `sysram`;
+/// a running kernel cannot map its own image.
 pub fn spaces(out: &mut impl Write, stored: u64, capacity: u64) {
     let keys = [Where::Disk.key(), Where::Dram.key()];
     let names = ["virtio-blk model image", "object arena"];
@@ -41,11 +34,8 @@ pub fn spaces(out: &mut impl Write, stored: u64, capacity: u64) {
     });
 }
 
-/// Image word counts, which MLOS has none of.
-///
-/// Emitted as zeros rather than omitted: a consumer written against SWTOS
-/// reads them without checking, and a missing column is a crash where a
-/// zero is a fact.
+/// Image word counts, which MLOS has none of. Always zero, never omitted:
+/// consumers read them unconditionally.
 const WORDS: [&str; 3] = ["region_text_words", "region_data_words", "region_bss_words"];
 
 /// The columns the contract itself defines.
@@ -73,10 +63,8 @@ pub fn contract<const N: usize>(
     });
 }
 
-/// The columns MLOS adds -- what a page-based system could not say.
-///
-/// Empty strings where a column does not apply, so a consumer grouping by
-/// tier or state never sees a bucket that is really "not an object".
+/// The columns MLOS adds. Empty strings where a column does not apply to
+/// a region.
 pub fn extras<const N: usize>(
     out: &mut impl Write,
     manager: &Manager<'static, N>,
@@ -101,13 +89,7 @@ pub fn extras<const N: usize>(
 }
 
 /// The edge table: `backs`, from stored bytes to the arena region holding
-/// them.
-///
-/// MLOS's version of SWTOS's catalog -> extent -> allocation chain, and
-/// what an "explain this object" view consumes. Only weight tiles have
-/// stored bytes: an activation is recomputed, so there is no disk extent
-/// for an edge to run from, and drawing one would be a lie about where it
-/// came from.
+/// them. Weight tiles only; an activation has no stored bytes.
 pub fn edges<const N: usize>(
     out: &mut impl Write,
     manager: &Manager<'static, N>,

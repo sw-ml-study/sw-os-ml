@@ -1,9 +1,8 @@
-//! Acquiring one object by hand.
+//! Acquiring one object by hand: `get` and `evict`, the verbs that make
+//! the fault path pokeable.
 //!
-//! Its own module because `get` is the verb that makes the fault path
-//! pokeable, and the two helpers below exist only to serve it. Running it
-//! twice on the same tile is the shortest possible demonstration of what
-//! an object table is for: the second time costs nothing.
+//! Invariant: residency is read before the acquire, since afterwards the
+//! object is resident either way. Design: docs/notes/mlsh.md.
 
 use core::fmt::Write;
 
@@ -12,11 +11,6 @@ use mlos_objtab::SessionId;
 use mlos_synth::model;
 
 /// Throws one tile out, and says what came back.
-///
-/// The verb that makes the other half of the fault path pokeable. Run
-/// `get 3 7`, then `evict 3 7`, then `get 3 7` again: the third costs
-/// what the first did, which is the shortest demonstration that the
-/// bytes really went away.
 pub fn evict(out: &mut impl Write, args: &str) {
     let mut numbers = args.split_whitespace().filter_map(|n| n.parse().ok());
     let Some((layer, tensor)) = numbers.next().zip(numbers.next()) else {
@@ -32,10 +26,6 @@ pub fn evict(out: &mut impl Write, args: &str) {
 }
 
 /// Acquires one tile by hand, and says whether it had to fault.
-///
-/// The verb that makes the fault path pokeable. Running it twice on the
-/// same tile is the shortest possible demonstration of what the object
-/// table is for: the second time costs nothing.
 pub fn get(out: &mut impl Write, args: &str) {
     let mut numbers = args
         .split_whitespace()
@@ -53,11 +43,9 @@ pub fn get(out: &mut impl Write, args: &str) {
     }
 }
 
-/// Whether it hit or faulted, where it landed, and what it holds.
-///
-/// The first byte is printed because it is the cheapest possible proof of
-/// provenance: the stub tier fills with `layer ^ tensor`, and the disk
-/// image sets a high nibble the stub never writes.
+/// Whether it hit or faulted, where it landed, and its first byte: the
+/// disk image sets a high nibble the stub tier never writes, so the byte
+/// says where the bytes came from.
 fn outcome(
     out: &mut impl Write,
     resident: bool,
@@ -78,11 +66,8 @@ fn outcome(
     }
 }
 
-/// Acquires one tile, reporting whether it was already resident.
-///
-/// The residency is read *before* the acquire, because afterwards every
-/// object is resident and the interesting fact -- whether this one had to
-/// be fetched -- is gone.
+/// Acquires one tile, reporting whether it was already resident. The
+/// residency is read before the acquire; afterwards the fact is gone.
 type Acquired = (
     bool,
     mlos_abi::Result<mlos_objman::Handle>,

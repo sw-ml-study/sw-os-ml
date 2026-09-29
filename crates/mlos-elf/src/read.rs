@@ -1,8 +1,7 @@
 //! Little-endian field reads that refuse to run off the end.
 //!
-//! Bounds-checked rather than trusting the file, because the file is an
-//! input: a truncated ELF should produce a message naming the offset, not
-//! a panic in a tool the user did not know parsed ELF.
+//! Invariant: every read is bounds-checked; a short file is an error
+//! naming the offset. Design: docs/notes/mlos-elf.md.
 
 use std::io;
 

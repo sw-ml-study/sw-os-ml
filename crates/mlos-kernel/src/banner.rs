@@ -1,7 +1,7 @@
 //! What MLOS says about the machine it woke up on.
 //!
-//! Its own module because the entry point should read as a sequence of
-//! decisions, not as a print statement with a probe attached.
+//! Invariant: `fault` never returns. Design and history:
+//! docs/notes/mlos-kernel.md.
 
 use core::fmt::Write;
 
@@ -9,9 +9,8 @@ use mlos_hal::BootInfo;
 use mlos_trap_aarch64::Trap;
 
 use crate::handlers::CONSOLE;
-/// Reports what the device tree said, so a boot that reaches here proves
-/// the whole chain: Image header, `x0`, the tree walk, and the console
-/// address discovered from it.
+
+/// Reports what the device tree said.
 pub fn report(console: &mut impl Write, dtb: usize, info: &BootInfo<'_>, kind: &str) {
     let _ = writeln!(console, "\nMLOS aarch64");
     let _ = writeln!(console, "  dtb      {dtb:#018x}");
@@ -25,8 +24,7 @@ pub fn report(console: &mut impl Write, dtb: usize, info: &BootInfo<'_>, kind: &
 }
 
 /// Reports that translation is on, reading `SCTLR_EL1.M` back rather than
-/// asserting it. Printed through a device block of the table just
-/// installed: if the mapping were wrong, this line would not appear.
+/// asserting it.
 pub fn mmu(console: &mut impl Write) {
     let _ = writeln!(
         console,
@@ -47,11 +45,8 @@ pub fn interrupts(console: &mut impl Write, frequency: u32, ppi: u32, uart: u32)
     );
 }
 
-/// Reports a fault, then stops.
-///
-/// Stops rather than returns: nothing that reaches the vectors today is
-/// recoverable, and resuming into the instruction that faulted would fault
-/// again, forever, with the console filling up.
+/// Reports a fault, then stops: nothing that reaches the vectors today is
+/// recoverable.
 pub fn fault(trap: &Trap) -> ! {
     // SAFETY: published at boot and never rewritten. A fault before the
     // console exists has nowhere to report and simply stops.

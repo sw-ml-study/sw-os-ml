@@ -1,8 +1,8 @@
 //! x86 port I/O: the only `unsafe` in the crate.
 //!
-//! Safe to call because a UART's registers are the only ports this crate
-//! is ever handed, and reading or writing one affects nothing but the
-//! UART. That is the invariant every block below relies on.
+//! Invariant: the only ports this crate is ever handed are a UART's
+//! registers, and touching one affects nothing but the UART. Design:
+//! docs/notes/mlos-uart16550.md.
 
 use core::arch::asm;
 

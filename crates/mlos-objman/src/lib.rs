@@ -1,14 +1,9 @@
-//! The model object manager.
-//!
-//! Where a conventional kernel has a VM subsystem, MLOS has this. It owns
-//! the object table, the arena resident objects live in, and the fault
+//! The model object manager: the object table, the arena, and the fault
 //! path between them.
 //!
-//! The fast path is the design constraint. A hit must be a table lookup
-//! and nothing else: no allocation, no call out to a policy, no lock. A
-//! fault that costs an IPC round trip before it even knows where to look
-//! is a fault too expensive to have, which is why the *table* lives in
-//! the kernel while *policy* does not (`docs/architecture.md` s.4).
+//! Invariant: a hit is a table lookup and nothing else, and residency is
+//! `resident_at != 0`, never the tier. Design and history:
+//! docs/notes/mlos-objman.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -36,58 +31,27 @@ pub const MAX_PROVIDERS: usize = 8;
 pub struct Manager<'a, const N: usize> {
     /// What is known about each object.
     pub table: Table<N>,
-    /// Where resident objects live. Public because how full it is, and
-    /// how much would still fit, is a question anything may ask.
+    /// Where resident objects live. Public so anything may ask how full it
+    /// is.
     pub arena: Arena<'a>,
     providers: [Option<&'a dyn Provider>; MAX_PROVIDERS],
     /// The most recent fault, for a caller to report on.
     pub last_fault: Option<ModelFault>,
     /// What has happened, in order.
-    ///
-    /// The field is `events` and the crate is `mlos-events`; the shell
-    /// verb that prints them is still `trace`, because that is what
-    /// someone types and it is still what it does. The name `mlos-trace`
-    /// now belongs to the M3 access trace, which is a different thing:
-    /// what the workload ASKED FOR, rather than what this did about it.
-    ///
-    /// Counters say how much; this says what, and when relative to
-    /// everything else. A viewer animating residency needs the sequence,
-    /// not the totals -- and the totals can be rebuilt from the sequence
-    /// where the reverse is not true.
     pub events: Ring,
-    /// What decides a victim when the arena is full.
-    ///
-    /// `None` is demand paging, which is what MLOS did until M3 step 009:
-    /// a full arena refuses rather than choosing. Attaching one is what
-    /// makes the kernel able to act on the answer step 006 measured.
+    /// What decides a victim when the arena is full. `None` is demand
+    /// paging: a full arena refuses rather than choosing.
     pub policy: Option<&'a dyn Policy>,
     /// What this session has declared it will acquire, and where it is.
-    ///
-    /// The thing that finally writes `ObjectMeta::next_use`. Empty until
-    /// something declares a stream, and an empty stream answers `Never`
-    /// for everything -- which is exactly what the table said before
-    /// streams existed, so nothing changes for a workload that does not
-    /// declare one.
+    /// Empty answers `Never` for everything.
     pub stream: Stream<'a>,
-    /// How many objects have been thrown out.
-    ///
-    /// Counted here rather than derived, because a replay has to
-    /// attribute evictions to the acquire that caused them and the event
-    /// ring is a fixed size that a long run overflows.
+    /// How many objects have been thrown out. Counted, not derived: the
+    /// event ring overflows on a long run.
     pub evictions: u64,
     /// A monotonic count of acquires, for `ObjectMeta`'s two ticks.
-    ///
-    /// The kernel keeps them even though nothing in the kernel reads them
-    /// yet: a field the simulator fills and the kernel does not is a
-    /// field the two disagree about, and step 009 replays the same trace
-    /// in both and requires the counts to match exactly.
     pub clock: u32,
-    /// What has happened, counted.
-    ///
-    /// Kept here rather than by a caller because this is where the events
-    /// are: a fault that the manager serviced and a caller forgot to
-    /// count is a fault that did not happen, as far as any measurement is
-    /// concerned.
+    /// What has happened, counted. Kept here because this is where the
+    /// events are.
     pub counters: Counters,
 }
 
@@ -118,23 +82,9 @@ impl<'a, const N: usize> Manager<'a, N> {
         Ok(())
     }
 
-    /// Gets an object, faulting it in if it is not resident.
-    ///
-    /// The fast path -- a resident object -- is a table lookup and a
-    /// counter. Everything else is [`Self::service`].
-    ///
-    /// Residency is `resident_at`, not the tier. The tier says where an
-    /// object LIVES; only the address says whether it is here. The two
-    /// agreed for weight tiles, which start `Cold` and become `Warm` when
-    /// placed, and disagreed the moment a KV block arrived: KV is
-    /// produced by compute rather than storage, so it starts `Warm`, and
-    /// a never-fetched one read as a hit at address zero. Found by the
-    /// kernel and the simulator disagreeing about a replay they were
-    /// meant to agree on exactly.
-    ///
-    /// The stream is asked ONCE, and the answer written into whichever
-    /// path serves the acquire. A position stays true until the object is
-    /// acquired again, so nothing revisits it when the stream advances.
+    /// Gets an object, faulting it in if it is not resident. A resident
+    /// object is `resident_at != 0`, not a tier. The stream is asked once
+    /// here and the answer written into whichever path serves the acquire.
     pub fn acquire(&mut self, id: ObjectId, lease: Lease, by: SessionId) -> Result<Handle> {
         self.clock = self.clock.saturating_add(1);
         let wanted = self.stream.next_after(id);
