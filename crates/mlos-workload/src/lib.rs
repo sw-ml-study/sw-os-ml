@@ -9,9 +9,10 @@
 mod model;
 mod real;
 mod shape;
+mod tokens;
 
 use mlos_objtab::SessionId;
-use mlos_synth::{LAYERS, TILES, model as weights};
+use mlos_sched::ProcessMajor;
 use mlos_trace::{Access, Header};
 
 pub use mlos_synth::kv::{BYTES as KV_BYTES, block, meta as kv_meta};
@@ -62,23 +63,9 @@ impl Decode {
     /// then that session's KV prefix for the layer.
     #[must_use]
     pub fn trace(&self) -> Vec<Access> {
-        let mut out = Vec::new();
-        for round in 0..self.rounds {
-            for session in 0..self.sessions {
-                if self.length(session) <= round {
-                    continue; // this one has stopped generating
-                }
-                let by = SessionId(session + 1);
-                for layer in 0..LAYERS {
-                    let tiles = (0..TILES).map(|tile| weights::tile(layer, tile));
-                    let cache = (0..=round).map(|at| block(session + 1, layer, at));
-                    out.extend(tiles.chain(cache).map(|object| Access {
-                        session: by,
-                        object,
-                    }));
-                }
-            }
-        }
-        out
+        let streams: Vec<_> = (0..self.sessions)
+            .map(|s| (SessionId(s + 1), self.tokens(s)))
+            .collect();
+        mlos_sched::merge(&mut ProcessMajor::default(), &streams)
     }
 }

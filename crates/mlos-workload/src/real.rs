@@ -6,7 +6,7 @@
 
 use mlos_abi::{Fields, ObjectClass, ObjectId};
 use mlos_objtab::SessionId;
-use mlos_synth::kv::block;
+use mlos_sched::ProcessMajor;
 use mlos_trace::{Access, Header};
 
 use crate::{Decode, Shape, Stream};
@@ -90,27 +90,9 @@ impl<'a> Real<'a> {
     /// token is in it.
     #[must_use]
     pub fn trace(&self) -> Vec<Access> {
-        let (shape, context) = (self.shape, self.context);
-        let at = |session: u16, object| Access {
-            session: SessionId(session + 1),
-            object,
-        };
-        let resident = shape.streams.iter().filter(|s| !s.rotating);
-        let mut out: Vec<Access> = resident.map(|s| at(0, Self::object(s))).collect();
-        for round in 0..self.loop_.rounds {
-            for session in (0..self.loop_.sessions).filter(|&s| self.loop_.length(s) > round) {
-                let tokens = u32::from(context.prefix) + u32::from(round) + 1;
-                let cached = tokens.div_ceil(u32::from(context.tokens_per_block.max(1)));
-                for stream in shape.streams.iter().filter(|s| s.rotating) {
-                    out.push(at(session, Self::object(stream)));
-                    if stream.layer < shape.layers && stream.name.contains("v_proj") {
-                        let blocks =
-                            (0..cached).map(|b| block(session + 1, stream.layer, b as u16));
-                        out.extend(blocks.map(|object| at(session, object)));
-                    }
-                }
-            }
-        }
-        out
+        let streams: Vec<_> = (0..self.loop_.sessions)
+            .map(|s| (SessionId(s + 1), self.tokens(s)))
+            .collect();
+        mlos_sched::merge(&mut ProcessMajor::default(), &streams)
     }
 }

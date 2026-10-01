@@ -1,6 +1,6 @@
 number = 3
 slug = "scheduler-inversion"
-status = "pending"
+status = "in-progress"
 description = """
 The parameter-major inversion, `docs/architecture.md` s.6. A scheduler
 that s..."""
