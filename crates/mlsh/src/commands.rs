@@ -23,6 +23,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
         "stream" => crate::objects::stream(out, args),
         "replay" => crate::objects::replay(out, args),
+        "session" => crate::session::session(out, args),
         "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::acquire::get(out, args),
@@ -40,8 +41,9 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 }
 
 /// Verbs that need a model to already exist; `dispatch` checks them once.
-const NEEDS_MODEL: [&str; 10] = [
+const NEEDS_MODEL: [&str; 11] = [
     "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream", "replay",
+    "session",
 ];
 
 /// What `help` prints.
@@ -57,6 +59,7 @@ const HELP: &str = concat!(
     "trace [on|off] residency events as they happened, one per line\r\n",
     "stream [N]    declare the model's access order, or advance it by N\r\n",
     "replay POLICY replay the recorded workload under one policy\r\n",
+    "session [new [KIB] | end ID]  list sessions, create one, or end one\r\n",
     "mem           physical memory map, and what is left\r\n",
     "mem peek ADDR read 8 bytes at ADDR; unmapped faults, on purpose\r\n",
     "dev           console, timer and interrupt controller\r\n",

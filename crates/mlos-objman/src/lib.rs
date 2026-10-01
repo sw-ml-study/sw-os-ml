@@ -11,6 +11,7 @@
 pub(crate) mod evict;
 mod fault;
 mod lease;
+mod session;
 
 use mlos_abi::{Error, ObjectId, Result};
 use mlos_events::{Event, Ring};
@@ -18,11 +19,13 @@ use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table};
 use mlos_policy::Policy;
 use mlos_provider::Provider;
+use mlos_session::{MAX_SESSIONS, Sessions};
 use mlos_stream::Stream;
 
 pub use fault::ModelFault;
 pub use lease::{Handle, Lease};
 pub use mlos_arena::{Arena, Occupancy};
+pub use mlos_session::{Contract, Session};
 
 /// How many providers can be attached.
 pub const MAX_PROVIDERS: usize = 8;
@@ -53,6 +56,9 @@ pub struct Manager<'a, const N: usize> {
     /// What has happened, counted. Kept here because this is where the
     /// events are.
     pub counters: Counters,
+    /// The sessions this manager serves. An object owned by a session the
+    /// manager does not know is served but not counted against anyone.
+    pub sessions: Sessions<MAX_SESSIONS>,
 }
 
 impl<'a, const N: usize> Manager<'a, N> {
@@ -69,6 +75,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             clock: 0,
             events: Ring::EMPTY,
             counters: Counters::EMPTY,
+            sessions: Sessions::EMPTY,
         }
     }
 

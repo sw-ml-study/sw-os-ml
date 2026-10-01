@@ -6,7 +6,7 @@
 //! truncated. Design and history: docs/notes/mlos-lab.md.
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
-use mlos_objman::Lease;
+use mlos_objman::{Contract, Lease};
 use mlos_objtab::SessionId;
 use mlos_trace::parse;
 use mlos_virtio_blk::SECTOR;
@@ -54,12 +54,16 @@ pub fn replay() -> Result<Replayed> {
     let declared: &'static [ObjectId] = room.declared;
     let next: &'static [u32] = room.next;
     with(|held| held.stream.declare(&declared[..count], next)).ok_or(Error::NoProvider)??;
-
+    // The sessions the trace names exist for the replay, as in `mlos-sim`,
+    // and go when it ends, taking their KV blocks with them.
+    let named = trace.accesses.iter().map(|access| access.session);
+    with(|held| held.sessions.adopt_each(named, Contract::NONE));
     let mut out = Replayed::default();
     for access in trace.accesses {
         step(access.object, access.session, &mut out);
         with(|held| held.stream.advance(1));
     }
+    with(|held| held.destroy_all_sessions());
     Ok(out)
 }
 

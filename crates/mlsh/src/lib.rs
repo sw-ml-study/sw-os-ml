@@ -11,6 +11,7 @@ mod acquire;
 mod commands;
 mod objects;
 mod report;
+mod session;
 
 use core::{fmt::Write, sync::atomic::AtomicU32};
 

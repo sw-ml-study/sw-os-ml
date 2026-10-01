@@ -167,6 +167,18 @@ is still what it does. The name `mlos-trace` belongs to the M3 access
 trace, which is a different thing: what the workload asked for, rather
 than what the manager did about it.
 
+## Sessions
+
+M4 step 001. The manager holds a `Sessions` table (`mlos-session`) and
+two hooks: `service` charges the owner's account before a victim is
+chosen and credits it back if placement fails; `evict` credits it. An
+owner of zero, or one the table does not know, is served and uncounted,
+so every M3 workload's counts are unchanged. `destroy_session` is the
+manager-side half of `ml_session_destroy`: it evicts what the session
+owned, forgets those objects, then forgets the session, and stops
+without destroying if an eviction is refused. Design in
+`docs/notes/mlos-session.md`.
+
 ## Lessons
 
 **Residency is `resident_at`, not the tier.** The tier says where an

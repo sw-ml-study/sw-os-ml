@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 1,
+    "step": "session-objects"
+  },
+  "action": "Read the manager, table, shell and both replays in full before designing; kept every existing count unchanged by making unknown and zero owners uncounted; adopt-by-id so trace sessions keep their numbers on both sides; proved the kernel still equals the simulator by boot test twice; split the fault path once and took the documented exception rather than oscillating.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-10-01T08:19:32"
+}

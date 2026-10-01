@@ -71,12 +71,33 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.counters.fault(fault.class, meta.size);
 
         let base = self.arena.occupancy().base;
-        self.make_room(&meta);
-        let placed = self.place(id, located, provider, lease, wanted);
+        let placed = self.admit(id, located, provider, lease, wanted);
         self.events.record(match &placed {
             Ok(handle) => Event::placed(id, by, &meta, cost, handle.address - base),
             Err(why) => Event::refused(id, by, &meta, cost, *why),
         });
+        placed
+    }
+
+    /// Charges the owner, makes room, places. The owner's ceiling is
+    /// checked before any victim is chosen, so a refused acquire evicts
+    /// nothing; a placement that fails afterwards gives the charge back.
+    fn admit(
+        &mut self,
+        id: ObjectId,
+        located: Located,
+        provider: &dyn Provider,
+        lease: Lease,
+        wanted: NextUse,
+    ) -> Result<Handle> {
+        let meta = *self.table.get(id).ok_or(Error::BadObject)?;
+        let (owner, size) = (meta.owner, meta.size);
+        self.sessions.charge(owner, size)?;
+        self.make_room(&meta);
+        let placed = self.place(id, located, provider, lease, wanted);
+        if placed.is_err() {
+            self.sessions.credit(owner, size);
+        }
         placed
     }
 

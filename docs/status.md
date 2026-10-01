@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-09-27, at the end of saga `mlos-nextuse` (M3).
+Last updated: 2026-09-29, during saga `mlos-parameter-major` (M4), after step 001.
 
 ---
 
@@ -84,6 +84,7 @@ x86-64 anywhere in this repo.
 | Eviction | `mlos-arena` is a real allocator: first fit over a sorted free list, coalescing on release. `Manager::evict` gives bytes back, drops residency, and emits `Kind::Evicted`. `evict L T` from the shell. A full arena now asks the policy for victims (`Manager::make_room`) until the largest free run fits, rather than refusing |
 | Policy in kernel | `Manager::policy`: demand (refuse), FIFO, LRU or known-next-use -- the same `mlos-policy` crate `mlos-sim` links, chosen with `replay POLICY`. Verified against the simulator on the same trace and budget: identical integers for all four |
 | Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
+| Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -93,15 +94,18 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 32 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 34 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
-No userspace, no scheduler beyond a single kernel thread, no leases, no
-sessions, no sharing, no degradation ladder, no GPU and no ML-MMU. The
-policy runs only when `replay` asks it to: nothing declares a stream or
-chooses a policy at boot, because nothing but the replay is a workload
-yet.
+No userspace, no scheduler beyond a single kernel thread, no sharing, no
+degradation ladder, no GPU and no ML-MMU. Leases are an enum that sets
+`share_count` and enforces nothing (M4 step 002). Sessions exist as
+kernel records (M4 step 001) but nothing creates one except the shell and
+the replay: there is no process to own a session, and `get` acts as
+session 1. The policy runs only when `replay` asks it to: nothing declares
+a stream or chooses a policy at boot, because nothing but the replay is a
+workload yet.
 
 The trace from a real model's shape (step 010) is a model OF a decode
 loop over real tensors, not a recording of one: the tensor inventory and

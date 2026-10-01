@@ -182,3 +182,13 @@ line.
 `Facts::ticks` is borrowed rather than copied because it keeps changing,
 and the shell should report the count at the moment it was asked, not at
 the moment boot handed the facts over.
+
+## `session`
+
+M4 step 001. `session` lists the live sessions with what each holds and
+its ceiling; `session new [KIB]` creates one, optionally with a resident
+ceiling in KiB; `session end ID` destroys one and says how many objects
+went with it. The verb exists so the lifetime can be watched: create a
+session, `get` on its behalf is not yet possible (`get` acts as session
+1), but `replay` adopts and destroys the trace's sessions and `session`
+between two replays shows an empty table.
