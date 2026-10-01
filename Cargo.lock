@@ -252,6 +252,15 @@ name = "mlos-queue"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-sched"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+ "mlos-trace",
+]
+
+[[package]]
 name = "mlos-session"
 version = "0.0.1"
 dependencies = [
@@ -369,6 +378,7 @@ dependencies = [
  "mlos-abi",
  "mlos-objtab",
  "mlos-policy",
+ "mlos-sched",
  "mlos-sim",
  "mlos-synth",
  "mlos-trace",

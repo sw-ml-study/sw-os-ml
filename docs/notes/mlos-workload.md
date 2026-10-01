@@ -171,3 +171,16 @@ and value projections' output widths are the per-token cache row, so the
 number is `rows(k_proj) + rows(v_proj)` elements of layer zero. Zero for a
 shape with no attention in it, which a caller should treat as "this is not
 a decoder".
+
+## Tokens, and one generator
+
+M4 step 003. `Decode::tokens(session)` and `Real::tokens(session)` give
+one session's stream as a list of tokens, each the objects one step asks
+for in the arithmetic's order. `trace()` on both is now
+`mlos_sched::merge(ProcessMajor, tokens)`: the hand-written round-robin
+loops are gone, and `tests/baseline.rs` holds the merged order to the G4
+report's integers (25,200 accesses, 12,722 and 3,480 next-use reads;
+54,150 and 44,309 on the real shape; the kernel's 4,448-access trace at
+3,748) so that one generator cannot drift from what was measured. The
+real shape's resident streams are the first thing in session zero's
+first token, which is where the old loop put them.

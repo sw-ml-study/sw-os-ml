@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-10-01, during saga `mlos-parameter-major` (M4), after step 002.
+Last updated: 2026-10-01, during saga `mlos-parameter-major` (M4), after step 003.
 
 ---
 
@@ -86,6 +86,7 @@ x86-64 anywhere in this repo.
 | Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
 | Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
 | Leases | `share_count` is the number of leases holding an object: Pin, Borrow and Streaming count, Speculative does not. `acquire` raises it, `release` (`ml_release`) lowers it, `evict` zeroes it. Known-next-use divides recovery cost by it, so an object two sessions hold outlives one held by one (tested). Replays and sweeps `consume`: acquire and release in one, so every M3 count is unchanged. `release L T` in the shell |
+| Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session token streams into a trace; `Decode::tokens` and `Real::tokens` are those streams and `trace()` is now the process-major merge. In the simulator only |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -95,21 +96,22 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 35 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 38 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
-No userspace, no scheduler beyond a single kernel thread, no sharing
-(one read still serves one session; the scheduler is step 003), no
-degradation ladder, no GPU and no ML-MMU. Leases are counted but not
-enforced: `share_count` is the live holds on an object and next-use
-weighs it, but nothing yet refuses to evict a pinned object or revokes a
-borrow between operations. Sessions exist as
-kernel records (M4 step 001) but nothing creates one except the shell and
-the replay: there is no process to own a session, and `get` acts as
-session 1. The policy runs only when `replay` asks it to: nothing declares
-a stream or chooses a policy at boot, because nothing but the replay is a
-workload yet.
+No userspace, no scheduler beyond a single kernel thread, no degradation
+ladder, no GPU and no ML-MMU. Sharing exists in the simulator and not yet
+in the kernel: `mlos-sched` decides whose turn it is over per-session
+streams and the simulator merges them, but the guest still replays one
+merged trace (the in-kernel scheduler is step 006). Leases are counted
+but not enforced: `share_count` is the live holds on an object and
+next-use weighs it, but nothing yet refuses to evict a pinned object or
+revokes a borrow between operations. Sessions exist as kernel records (M4
+step 001) but nothing creates one except the shell and the replay: there
+is no process to own a session, and `get` acts as session 1. The policy
+runs only when `replay` asks it to: nothing declares a stream or chooses
+a policy at boot, because nothing but the replay is a workload yet.
 
 The trace from a real model's shape (step 010) is a model OF a decode
 loop over real tensors, not a recording of one: the tensor inventory and
@@ -514,6 +516,58 @@ trace in static arrays sized for the synthetic workload, and a real
 shape's weights are two gigabytes against a 32 KiB arena; the in-kernel
 replay stays on the synthetic model, where it proves the simulator
 faithful, and the simulator carries the real shape.
+
+## Parameter-major, in the simulator
+
+M4 step 003. Provider reads, process-major against parameter-major, same
+trace of per-session streams, same budget, same policy. `cargo test -p
+mlos-workload --test g5 -- --ignored --nocapture --test-threads=1` prints
+the full tables.
+
+**On the real shape the inversion is the whole story.** MiniCPM5-1B at
+F16, forty rounds, no prompt: the per-token weight sweep (1,678 MiB)
+exceeds every budget below the working set, so process-major re-reads it
+once per session per token and parameter-major reads it once per token
+for everyone.
+
+| sessions, budget | KV share | LRU process | LRU parameter | gain | next-use process | next-use parameter | gain |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2, 1536 MiB | 70% | 34,910 | 31,530 | +10% | 29,004 | **1,726** | **+95%** |
+| 4, 1536 MiB | 68% | 54,150 | 44,010 | +19% | 44,309 | **2,787** | **+94%** |
+| 8, 1536 MiB | 67% | 93,830 | 70,170 | +26% | 76,207 | **4,875** | **+94%** |
+| 8, 1024 MiB | 67% | 93,830 | 70,213 | +26% | 85,381 | 32,448 | +62% |
+
+Four sessions needing the same layer cause one read, not four: under LRU
+the weight reads fall from 16,900 to 6,760 (once per token-round) and
+nothing else moves, because every KV access still misses a pure cycle;
+under next-use the weights are shared and the cache is kept, and reads
+fall sixteenfold. With 2,048-token prompts and 16-token KV blocks (94%
+of accesses are KV) at 1,792 MiB: next-use 301,800 to 25,680 with eight
+sessions (+92%), 79,254 to 13,438 with four (+84%); LRU 1 to 3% worse,
+because lockstep interleaves the sessions' cache phases and spoils
+recency. Those two rows took 166 s and 507 s to replay.
+
+**On the synthetic model there is little to share.** Its 128 KiB of
+weights fit in every budget from 128 KiB up, so next-use already served
+them once for everyone and parameter-major changes its reads by at most
+18% at 96 KiB and nothing above 160 KiB. LRU gains 17 to 41% at tight
+budgets and loses 12 to 27% at loose ones (two sessions at 192 KiB: 4,960
+to 5,580; four at 192 KiB: 11,942 to 15,246), for the same reason as
+above: lockstep is good for weights and bad for recency over KV. A
+negative row is a finding, not an omission.
+
+**The bound.** Parameter-major shares weights and cannot share a
+session's cache, so its best case removes `(N - 1) / N` of the weight
+reads and none of the KV reads. The KV share column is why the gain
+under LRU tops out where it does, and why the long-context rows are
+where the inversion matters least for a recency policy and most for a
+policy that knows the future.
+
+**What this is not yet.** The simulator's scheduler over host-side
+streams. The kernel replays one merged trace and does not schedule; that
+is step 006, where the same crate runs over the session table and the
+counts must match these to the integer. Latency variance, the cost of
+lockstep, is unmeasured until step 004.
 
 ## Known gaps
 

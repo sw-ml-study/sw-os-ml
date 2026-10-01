@@ -46,6 +46,7 @@ commit as its first module.
 
 ## Policy
 
+- [mlos-sched](mlos-sched.md): Whose turn it is: process-major and parameter-major scheduling over sessions' declared streams.
 - [mlos-policy](mlos-policy.md): What to throw away when memory runs out: the `Policy` trait, the known-next-use policy this project exists to test, and the three baselines it is measured against.
 
 ## Observation

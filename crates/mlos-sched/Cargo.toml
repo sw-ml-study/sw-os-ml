@@ -1,23 +1,23 @@
 [package]
-name        = "mlos-workload"
+name        = "mlos-sched"
 version     = "0.0.1"
-description = "A decode loop, as an access trace."
+description = "Whose turn it is: process-major and parameter-major scheduling over sessions' declared streams."
 edition.workspace      = true
 rust-version.workspace = true
 license.workspace      = true
 repository.workspace   = true
 authors.workspace      = true
 
+[features]
+# `merge` drives a schedule over per-session streams into one trace. It
+# needs a growable buffer, which the kernel does not have; the simulator
+# and the workloads turn it on.
+alloc = []
+
 [dependencies]
 mlos-abi    = { path = "../mlos-abi",    version = "0.0.1" }
 mlos-objtab = { path = "../mlos-objtab", version = "0.0.1" }
-mlos-sched  = { path = "../mlos-sched",  version = "0.0.1", features = ["alloc"] }
-mlos-sim    = { path = "../mlos-sim",    version = "0.0.1" }
-mlos-synth  = { path = "../mlos-synth",  version = "0.0.1" }
 mlos-trace  = { path = "../mlos-trace",  version = "0.0.1" }
-
-[dev-dependencies]
-mlos-policy = { path = "../mlos-policy", version = "0.0.1" }
 
 [lints]
 workspace = true
