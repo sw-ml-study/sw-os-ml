@@ -1,11 +1,12 @@
 number = 1
 slug = "session-objects"
-status = "in-progress"
+status = "completed"
 description = """
 Session objects. `docs/architecture.md` s.3.4 and `docs/design.md` s.5.3:
 a s..."""
 role = "production"
 context_files = []
 created_at = "2026-09-29T13:03:37"
+completed_at = "2026-10-01T08:19:32"
 task_type = "rust"
-commits = []
+commits = ["1ebebb5c113efbccdea46c73ba3d648c0b339c77"]
