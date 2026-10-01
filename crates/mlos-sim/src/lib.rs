@@ -15,6 +15,7 @@ use mlos_abi::ObjectId;
 use mlos_arena::Arena;
 use mlos_objtab::ObjectMeta;
 use mlos_policy::Policy;
+use mlos_session::{Contract, MAX_SESSIONS, Sessions};
 use mlos_trace::Trace;
 
 use run::Run;
@@ -43,6 +44,9 @@ pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Po
     let mut bytes = vec![0u8; usize::try_from(budget).expect("a budget that fits in memory")];
     let mut resident = Resident::new(Arena::new(&mut bytes));
     let mut outcome = Outcome::default();
+    let mut sessions = Sessions::<MAX_SESSIONS>::EMPTY;
+    let named = trace.accesses.iter().map(|access| access.session);
+    outcome.sessions = sessions.adopt_each(named, Contract::NONE);
     for (at, access) in trace.accesses.iter().enumerate() {
         run.step(&mut resident, &mut outcome, access.object, at as u32 + 1);
     }
@@ -82,6 +86,8 @@ pub struct Outcome {
     /// Accesses naming objects this model does not have. Zero for a
     /// matched trace and model; non-zero means the two files disagree.
     pub mismatched: u64,
+    /// Distinct sessions the trace named, each created for the replay.
+    pub sessions: u64,
 }
 
 impl Outcome {

@@ -74,6 +74,7 @@ impl<const N: usize> Manager<'_, N> {
         }
         self.arena.release(meta.resident_at, meta.size)?;
         self.counters.resident(-i64::from(meta.size));
+        self.sessions.credit(meta.owner, meta.size);
         self.evictions += 1;
         self.events.record(Event::evicted(id, meta.owner, &meta));
 

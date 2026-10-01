@@ -1,6 +1,6 @@
 number = 1
 slug = "session-objects"
-status = "pending"
+status = "in-progress"
 description = """
 Session objects. `docs/architecture.md` s.3.4 and `docs/design.md` s.5.3:
 a s..."""

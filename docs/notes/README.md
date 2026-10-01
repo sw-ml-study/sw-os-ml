@@ -41,6 +41,7 @@ commit as its first module.
 - [mlos-provider-dram](mlos-provider-dram.md): The resident tier as a provider: a bounded window of physical memory whose `read` is a copy.
 - [mlos-arena](mlos-arena.md): A fixed region with a coalescing free list: where a faulted-in object is put, and taken out of.
 - [mlos-stream](mlos-stream.md): A declared sequence of objects and where the workload is in it: the mechanism by which a transformer hands the operating system its own future.
+- [mlos-session](mlos-session.md): Sessions as kernel objects: a record, a contract, a budget, and what each one owns.
 - [mlos-objman](mlos-objman.md): The model object manager: owns the object table, the arena resident objects live in, and the fault path between them.
 
 ## Policy

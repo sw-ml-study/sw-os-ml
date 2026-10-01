@@ -121,6 +121,7 @@ fn a_hit_costs_nothing_and_a_miss_costs_a_read() {
             reads: 1,
             bytes: u64::from(SIZE),
             cost: 1000,
+            sessions: 1,
             ..Outcome::default()
         }
     );
@@ -222,4 +223,13 @@ fn an_empty_trace_costs_nothing() {
     let out = replay(&as_trace(&[]), &Uniform, 1024, &First);
     assert_eq!(out, Outcome::default());
     assert_eq!(out.hit_per_mille(), 0);
+}
+
+#[test]
+fn every_session_the_trace_names_is_created_once() {
+    let mut accesses = trace(&[1, 2, 3]);
+    accesses[1].session = SessionId(2);
+    accesses[2].session = SessionId(2);
+    let out = replay(&as_trace(&accesses), &Uniform, 8 * u64::from(SIZE), &First);
+    assert_eq!(out.sessions, 2, "sessions 1 and 2, once each");
 }

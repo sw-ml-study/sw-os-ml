@@ -187,3 +187,11 @@ test but the measurement.
 **A simulator that does not fragment is not simulating this arena.** See
 "The budget is an arena, not a number" above; the thirteen-read
 disagreement is the reason `mlos-arena` takes a lifetime parameter.
+
+## Sessions exist for the replay
+
+M4 step 001. `replay` adopts every session the trace names before the
+first access and reports the count in `Outcome::sessions`, as the kernel's
+replay does with its manager. Nothing is served differently yet: the
+table exists so that step 003's scheduler has sessions to schedule, and so
+the simulator and the kernel already agree on who exists when.

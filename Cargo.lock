@@ -197,6 +197,7 @@ dependencies = [
  "mlos-objtab",
  "mlos-policy",
  "mlos-provider",
+ "mlos-session",
  "mlos-stream",
 ]
 
@@ -251,6 +252,14 @@ name = "mlos-queue"
 version = "0.0.1"
 
 [[package]]
+name = "mlos-session"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-objtab",
+]
+
+[[package]]
 name = "mlos-sim"
 version = "0.0.1"
 dependencies = [
@@ -258,6 +267,7 @@ dependencies = [
  "mlos-arena",
  "mlos-objtab",
  "mlos-policy",
+ "mlos-session",
  "mlos-stream",
  "mlos-synth",
  "mlos-trace",
@@ -378,6 +388,7 @@ dependencies = [
  "mlos-objman",
  "mlos-objtab",
  "mlos-queue",
+ "mlos-session",
  "mlos-snapshot",
  "mlos-spaces",
  "mlos-synth",
