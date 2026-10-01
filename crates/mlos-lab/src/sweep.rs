@@ -5,7 +5,7 @@
 //! docs/notes/mlos-lab.md.
 
 use mlos_abi::ObjectId;
-use mlos_objman::{Lease, Manager};
+use mlos_objman::Manager;
 use mlos_objtab::SessionId;
 use mlos_synth::{LAYERS, TILES, model};
 
@@ -44,7 +44,7 @@ fn walk(held: &mut Manager<'static, CAPACITY>, session: u16) -> (u32, Option<mlo
     for layer in 0..LAYERS {
         for tensor in 0..TILES {
             let id = model::tile(layer, tensor);
-            if let Err(error) = held.acquire(id, Lease::Streaming, SessionId(session)) {
+            if let Err(error) = held.consume(id, SessionId(session)) {
                 return (acquired, Some(error));
             }
             acquired += 1;

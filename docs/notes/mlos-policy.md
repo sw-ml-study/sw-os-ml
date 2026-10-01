@@ -97,6 +97,16 @@ overflow. That is a decision with a reason rather than a maximum.
 A position already passed saturates to a distance of zero: the object is
 wanted now, and is the worst possible victim.
 
+**Shared objects are dearer (M4 step 002).** The recovery cost is
+multiplied by `share_count`, the number of leases holding the object,
+with zero counting as one: evicting an object k sessions hold means k
+reloads, one per holder, when each comes back for it. This is the first
+place the parameter-major idea touches the policy -- what is shared is
+worth keeping -- and it is a factor on cost, not a veto, so a shared
+object far enough away is still evicted before a private one wanted now.
+Replayed traces and sweeps hold Streaming leases for one access and
+release them, so their counts are unchanged by this.
+
 ## `SCALE`
 
 Recovery costs are nanoseconds and run to millions, so a small fixed-point

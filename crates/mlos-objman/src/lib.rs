@@ -101,7 +101,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             let (address, size) = (meta.resident_at, meta.size);
             let now = self.clock;
             let claim = self.table.get_mut(id).ok_or(Error::BadObject)?;
-            claim.share_count = claim.share_count.saturating_add(1);
+            claim.share_count = claim.share_count.saturating_add(u16::from(lease.counts()));
             claim.reuse_count = claim.reuse_count.saturating_add(1);
             claim.used_tick = now;
             claim.next_use = wanted;

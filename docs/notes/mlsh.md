@@ -192,3 +192,12 @@ went with it. The verb exists so the lifetime can be watched: create a
 session, `get` on its behalf is not yet possible (`get` acts as session
 1), but `replay` adopts and destroys the trace's sessions and `session`
 between two replays shows an empty table.
+
+## `release`
+
+M4 step 002. `get L T` takes a Pin that `share_count` now counts;
+`release L T` lets it go, as `ml_release` does for a handle, and says how
+many leases still hold the object. `evict` and `release` share one
+function because they parse the same two numbers and differ only in what
+they ask the manager; a shared object evicts last under next-use, which
+`get` twice from the shell and `objs` make visible.

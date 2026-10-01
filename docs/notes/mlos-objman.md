@@ -142,6 +142,22 @@ afterwards. A consumer that stores it past a release has assumed the
 thing this design exists to prevent: that where an object lives is a
 property of the object.
 
+### `share_count` is live holds (M4 step 002)
+
+`ObjectMeta::share_count` was set from a pin and read by nothing. It is
+now the number of leases holding the object: raised by `acquire` when
+the lease counts, lowered by `release(id, lease)` (`ml_release`; the
+kernel-side form names the lease kind, so `Handle` stays three fields),
+zeroed by `evict`
+because eviction voids every lease. Pin, Borrow and Streaming count; a
+Speculative lease does not, since a guess is not a hold. `consume` is
+acquire-then-release under a Streaming lease, which is what a replayed
+trace and a sweep are, so both leave `share_count` where they found it
+and every M3 count is unchanged. Known-next-use divides by the count:
+evicting an object k sessions hold costs k reloads
+(`docs/notes/mlos-policy.md`). `release L T` in the shell lets go of the
+pin `get` took.
+
 ## Why the manager counts what it counts
 
 `counters` are kept here rather than by a caller because this is where the

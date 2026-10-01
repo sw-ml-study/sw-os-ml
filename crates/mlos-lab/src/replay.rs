@@ -6,7 +6,7 @@
 //! truncated. Design and history: docs/notes/mlos-lab.md.
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
-use mlos_objman::{Contract, Lease};
+use mlos_objman::Contract;
 use mlos_objtab::SessionId;
 use mlos_trace::parse;
 use mlos_virtio_blk::SECTOR;
@@ -78,7 +78,7 @@ fn step(object: ObjectId, by: SessionId, out: &mut Replayed) {
     let Some((faults, evictions)) = before else {
         return;
     };
-    let outcome = with(|held| held.acquire(object, Lease::Streaming, by));
+    let outcome = with(|held| held.consume(object, by));
     let after = with(|held| (held.counters.report().total_faults(), held.evictions));
     let Some((faults_now, evictions_now)) = after else {
         return;

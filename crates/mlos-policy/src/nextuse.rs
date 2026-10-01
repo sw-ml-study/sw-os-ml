@@ -59,7 +59,10 @@ fn evictability(meta: &ObjectMeta, now: u32) -> u64 {
         0 => 1,
         cost => u64::from(cost),
     };
-    horizon(meta.next_use, now).saturating_mul(SCALE) / recovery
+    // Evicting an object k sessions hold costs k reloads, so it is k times
+    // dearer to give up. Zero holders count as one.
+    let holders = u64::from(meta.share_count.max(1));
+    horizon(meta.next_use, now).saturating_mul(SCALE) / recovery.saturating_mul(holders)
 }
 
 /// How far away the next use is, in steps, with a hint discounted.
