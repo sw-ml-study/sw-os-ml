@@ -10,19 +10,29 @@ use mlos_objman::Lease;
 use mlos_objtab::SessionId;
 use mlos_synth::model;
 
-/// Throws one tile out, and says what came back.
-pub fn evict(out: &mut impl Write, args: &str) {
+/// `evict L T` throws one tile out; `release L T` lets go of the pin
+/// `get` took, which is what `ml_release` does for a handle.
+pub fn let_go(out: &mut impl Write, args: &str, evict: bool) {
     let mut numbers = args.split_whitespace().filter_map(|n| n.parse().ok());
     let Some((layer, tensor)) = numbers.next().zip(numbers.next()) else {
-        let _ = writeln!(out, "  usage: evict LAYER TILE");
+        let verb = if evict { "evict" } else { "release" };
+        let _ = writeln!(out, "  usage: {verb} LAYER TILE");
         return;
     };
     let id = model::tile(layer, tensor);
-    match mlos_lab::with(|held| held.evict(id)) {
-        Some(Ok(bytes)) => drop(writeln!(out, "  evicted {bytes} B, returned to the arena")),
-        Some(Err(why)) => drop(writeln!(out, "  not evicted: {why:?}")),
-        None => {}
-    }
+    let done = mlos_lab::with(|held| {
+        if evict {
+            return held.evict(id).map(|bytes| (bytes, 0));
+        }
+        held.release(id, Lease::Pin)?;
+        Ok((0, held.table.get(id).map_or(0, |meta| meta.share_count)))
+    });
+    let _ = match (done, evict) {
+        (Some(Ok((bytes, _))), true) => writeln!(out, "  evicted {bytes} B, returned to the arena"),
+        (Some(Ok((_, left))), false) => writeln!(out, "  released; {left} lease(s) still hold it"),
+        (Some(Err(why)), _) => writeln!(out, "  refused: {why:?}"),
+        (None, _) => Ok(()),
+    };
 }
 
 /// Acquires one tile by hand, and says whether it had to fault.

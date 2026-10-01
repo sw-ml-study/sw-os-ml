@@ -80,6 +80,7 @@ impl<const N: usize> Manager<'_, N> {
 
         let gone = self.table.get_mut(id).ok_or(Error::BadObject)?;
         gone.resident_at = 0;
+        gone.share_count = 0; // every lease on it is now void
         gone.tier = meta.home;
         Ok(meta.size)
     }

@@ -134,3 +134,21 @@ fn an_empty_set_yields_no_victim() {
     assert!(set.is_empty());
     assert!(NEXT_USE.victim(&set, &held(NextUse::Never, 1)).is_none());
 }
+
+#[test]
+fn an_object_more_sessions_hold_is_dearer_to_evict() {
+    // Same distance, same cost: the only difference is how many hold it.
+    let mut shared = held(NextUse::At(50), 1_000);
+    shared.share_count = 3;
+    let private = held(NextUse::At(50), 1_000);
+    assert_eq!(victim(&[(1, shared), (2, private)]), 2);
+    assert_eq!(
+        victim(&[(1, private), (2, shared)]),
+        1,
+        "and not by position"
+    );
+    // Three holders make it three times dearer, so a private object three
+    // times further away is still the better victim -- just.
+    let further = held(NextUse::At(150), 1_000);
+    assert_eq!(victim(&[(1, shared), (2, further)]), 2);
+}

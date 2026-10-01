@@ -133,7 +133,7 @@ impl<'a, const N: usize> Manager<'a, N> {
         placed.placed_tick = now;
         placed.used_tick = now;
         placed.tier = Tier::Warm;
-        placed.share_count = u16::from(lease.pins());
+        placed.share_count = u16::from(lease.counts());
         placed.reuse_count = placed.reuse_count.saturating_add(1);
         Ok(Handle { id, address, size })
     }

@@ -27,7 +27,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "trace" => _ = mlos_lab::with(|held| mlos_events::verb(out, &mut held.events, args)),
         "model" => crate::objects::model(out, args),
         "get" => crate::acquire::get(out, args),
-        "evict" => crate::acquire::evict(out, args),
+        "evict" | "release" => crate::acquire::let_go(out, args, verb == "evict"),
         "objs" => crate::report::objs(out, args),
         "ticks" => ticks(out, facts),
         other => _ = writeln!(out, "no such command: {other}   (try `help`)"),
@@ -41,9 +41,9 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 }
 
 /// Verbs that need a model to already exist; `dispatch` checks them once.
-const NEEDS_MODEL: [&str; 11] = [
+const NEEDS_MODEL: [&str; 12] = [
     "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream", "replay",
-    "session",
+    "session", "release",
 ];
 
 /// What `help` prints.
@@ -52,6 +52,7 @@ const HELP: &str = concat!(
     "sweep         acquire every tile in order, faulting them in\r\n",
     "get L T       acquire one tile, and say if it had to fault\r\n",
     "evict L T     throw one tile out, returning its bytes to the arena\r\n",
+    "release L T   let go of the pin `get` took; shared objects are dearer to evict\r\n",
     "objs [all]    what the table knows: tier, residency, use count\r\n",
     "arena         how full memory is, and what would still fit\r\n",
     "faults        what it all cost, per object class\r\n",
