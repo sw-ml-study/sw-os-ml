@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 3,
+    "step": "scheduler-inversion"
+  },
+  "action": "Made the generators produce per-session streams and defined trace() as the process-major merge, with a test holding the merged order to the G4 report's integers, so the baseline cannot drift. Designed parameter-major as a token barrier plus lockstep after reasoning through what a most-shared-next rule alone would do (a session running ahead loses the sharing). Reported the negative LRU rows and the KV bound rather than the flattering columns.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-10-01T13:50:50"
+}
