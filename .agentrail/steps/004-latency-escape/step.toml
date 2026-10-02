@@ -1,11 +1,12 @@
 number = 4
 slug = "latency-escape"
-status = "in-progress"
+status = "completed"
 description = """
 The latency escape hatch, `docs/architecture.md` s.6: parameter-major
 schedul..."""
 role = "production"
 context_files = []
 created_at = "2026-09-29T13:15:22"
+completed_at = "2026-10-02T08:44:38"
 task_type = "rust"
-commits = []
+commits = ["1a3f20fd8843bb128f3236c752fc2892dc386e7d"]
