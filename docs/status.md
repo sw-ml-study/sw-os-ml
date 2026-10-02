@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-10-01, during saga `mlos-parameter-major` (M4), after step 003.
+Last updated: 2026-10-02, during saga `mlos-parameter-major` (M4), after step 004.
 
 ---
 
@@ -86,7 +86,7 @@ x86-64 anywhere in this repo.
 | Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
 | Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
 | Leases | `share_count` is the number of leases holding an object: Pin, Borrow and Streaming count, Speculative does not. `acquire` raises it, `release` (`ml_release`) lowers it, `evict` zeroes it. Known-next-use divides recovery cost by it, so an object two sessions hold outlives one held by one (tested). Replays and sweeps `consume`: acquire and release in one, so every M3 count is unchanged. `release L T` in the shell |
-| Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session token streams into a trace; `Decode::tokens` and `Real::tokens` are those streams and `trace()` is now the process-major merge. In the simulator only |
+| Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session lanes into a trace; `Decode::tokens` and `Real::tokens` are those lanes and `trace()` is now the process-major merge. A session whose wait (other sessions' acquires since its token became due) reaches its `latency_ceiling` is served out of turn and reads alone: the escape hatch. In the simulator only |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -96,7 +96,7 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 38 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 39 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
@@ -564,10 +564,40 @@ where the inversion matters least for a recency policy and most for a
 policy that knows the future.
 
 **What this is not yet.** The simulator's scheduler over host-side
-streams. The kernel replays one merged trace and does not schedule; that
-is step 006, where the same crate runs over the session table and the
-counts must match these to the integer. Latency variance, the cost of
-lockstep, is unmeasured until step 004.
+lanes. The kernel replays one merged trace and does not schedule; that is
+step 006, where the same crate runs over the session table and the counts
+must match these to the integer.
+
+## The latency escape
+
+M4 step 004. Period is what a session's user waits for each token:
+acquires from the first access of one token to the first of the next.
+Real shape, four sessions, forty rounds, 1536 MiB, next-use; session 1
+is the one with a ceiling. `cargo test -p mlos-workload --test latency --
+--ignored --nocapture` prints it.
+
+| schedule | session 1 ceiling | reads | session 1 period mean / worst | session 4 period mean / worst |
+| --- | --- | --- | --- | --- |
+| process-major | none | 44,309 | 1,086 / 1,540 | 1,338 / 1,923 |
+| parameter-major | none | 2,787 | 1,208 / 1,633 | 1,353 / 1,946 |
+| parameter-major | 1024 | 2,787 | 1,169 / 1,540 | 1,353 / 1,946 |
+| parameter-major | 512 | 3,206 | 817 / 964 | 1,353 / 1,946 |
+| parameter-major | 256 | 2,922 | 561 / 753 | 1,353 / 1,950 |
+| parameter-major | 128 | 22,709 | 433 / 513 | 1,353 / 2,336 |
+| parameter-major | 32 | 23,137 | 337 / 417 | 1,353 / 3,638 |
+
+Lockstep costs session 1 about 11% in period against process-major, for
+sixteen times fewer reads. A ceiling of 256 acquires halves its period
+for 5% more reads; 512 for 15%; at 128 and below the session runs a full
+token ahead, every weight it reads alone is one the others then miss, and
+the group pays eight times the reads. The break-even for this workload is
+a ceiling near a quarter of a token. The wait is other sessions' acquires
+since the session's token became due, not the gap between two of its own
+accesses, because under lockstep that gap is a handful while the token
+takes four times longer; the first version of the escape measured the gap
+and never fired.
+
+
 
 ## Known gaps
 

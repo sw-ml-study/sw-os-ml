@@ -1,6 +1,6 @@
 number = 4
 slug = "latency-escape"
-status = "pending"
+status = "in-progress"
 description = """
 The latency escape hatch, `docs/architecture.md` s.6: parameter-major
 schedul..."""
