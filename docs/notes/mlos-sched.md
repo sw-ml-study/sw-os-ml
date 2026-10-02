@@ -94,3 +94,13 @@ A session's cache is its own. Parameter-major shares weights and cannot
 share KV, so its best case saves `(N - 1) / N` of the weight reads and
 none of the KV reads. The G5 tables print the KV share of accesses next
 to the gain for exactly that reason.
+
+## In the kernel (M4 step 006)
+
+`mlos-lab::lanes` implements `Waiting` over static buffers and runs
+`ProcessMajor` or `ParameterMajor` over the disk trace's sessions before
+the replay declares and replays the order. Nothing in this crate changed
+to make that possible, which was the point of `Waiting` taking positions
+and next objects and nothing else: the host's `merge` and the kernel's
+`Lanes::order` are two drivers of one `pick`. The boot tests hold the
+kernel's eight count lines to the simulator's, on both architectures.

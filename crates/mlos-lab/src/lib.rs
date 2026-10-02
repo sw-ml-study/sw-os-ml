@@ -7,6 +7,7 @@
 #![no_std]
 
 mod devices;
+mod lanes;
 mod replay;
 mod state;
 mod sweep;

@@ -8,6 +8,7 @@ use core::cell::UnsafeCell;
 
 use mlos_abi::ObjectId;
 use mlos_objman::Manager;
+use mlos_objtab::SessionId;
 use mlos_synth::disk::Disk;
 use mlos_trace::Access;
 
@@ -33,6 +34,10 @@ struct Replay {
     declared: UnsafeCell<[ObjectId; crate::replay::ACCESSES]>,
     next: UnsafeCell<[u32; crate::replay::ACCESSES]>,
     seen: UnsafeCell<[(ObjectId, u32); crate::replay::DISTINCT]>,
+    grouped: UnsafeCell<[ObjectId; crate::replay::ACCESSES]>,
+    shape: UnsafeCell<[(u32, u32); crate::replay::ACCESSES]>,
+    lanes: UnsafeCell<[crate::lanes::Lane; mlos_session::MAX_SESSIONS]>,
+    sessions: UnsafeCell<[SessionId; crate::replay::ACCESSES]>,
 }
 
 // SAFETY: touched only from the shell loop, on the boot core; see
@@ -46,6 +51,10 @@ static REPLAY: Replay = Replay {
     declared: UnsafeCell::new([ObjectId(0); crate::replay::ACCESSES]),
     next: UnsafeCell::new([0; crate::replay::ACCESSES]),
     seen: UnsafeCell::new([(ObjectId(0), 0); crate::replay::DISTINCT]),
+    grouped: UnsafeCell::new([ObjectId(0); crate::replay::ACCESSES]),
+    shape: UnsafeCell::new([(0, 0); crate::replay::ACCESSES]),
+    lanes: UnsafeCell::new([(SessionId(0), 0, 0, 0); mlos_session::MAX_SESSIONS]),
+    sessions: UnsafeCell::new([SessionId(0); crate::replay::ACCESSES]),
 };
 
 /// Every buffer a replay needs.
@@ -60,6 +69,14 @@ pub struct Room {
     pub next: &'static mut [u32],
     /// Scratch for building that chain; one slot per distinct object.
     pub seen: &'static mut [(ObjectId, u32)],
+    /// The trace's objects grouped by session, for the scheduler.
+    pub grouped: &'static mut [ObjectId],
+    /// Each grouped access's token and index.
+    pub shape: &'static mut [(u32, u32)],
+    /// One lane per session.
+    pub lanes: &'static mut [crate::lanes::Lane],
+    /// The session of each access in the merged order.
+    pub sessions: &'static mut [SessionId],
 }
 
 /// All of it at once, so no buffer can be borrowed while another is not.
@@ -72,6 +89,10 @@ pub fn replay_room() -> Room {
             declared: &mut *REPLAY.declared.get(),
             next: &mut *REPLAY.next.get(),
             seen: &mut *REPLAY.seen.get(),
+            grouped: &mut *REPLAY.grouped.get(),
+            shape: &mut *REPLAY.shape.get(),
+            lanes: &mut *REPLAY.lanes.get(),
+            sessions: &mut *REPLAY.sessions.get(),
         }
     }
 }

@@ -75,6 +75,12 @@ impl<const N: usize> Sessions<N> {
         self.slots.get(index)?.as_ref()
     }
 
+    /// The live sessions, in slot order: the order they were created or
+    /// adopted in while no slot was freed.
+    pub fn each(&self) -> impl Iterator<Item = &Session> {
+        self.slots.iter().filter_map(Option::as_ref)
+    }
+
     /// How many sessions are live.
     #[must_use]
     pub fn live(&self) -> u32 {

@@ -1,6 +1,6 @@
 number = 6
 slug = "g5-report"
-status = "pending"
+status = "in-progress"
 description = """
 The G5 report. Sessions by budgets by scheduler by policy: reads and
 bytes mo..."""

@@ -19,7 +19,7 @@ on the critical path needs it.
   M2  it holds objects   object table, providers, model fault
   M3  it knows better    next_use beats LRU on a real trace       (G4)  <- DONE
   --  it is portable     x86-64 HAL; both guests on Mac and Linux  (no gate)
-  M4  it shares          parameter-major scheduling               (G5)
+  M4  it shares          parameter-major scheduling               (G5)  <- DONE
   M5  it degrades        sessions, contracts, admission, ladder   (G6)
   M6  it crosses PCIe    x86-64 + VFIO GPU placement, ML-MMU Gen 0 (G7,G8)
 ```
@@ -153,6 +153,17 @@ Scope:
 
 This is the direct continuation of the emufpga SPM result, promoted
 from a tensor-stream property to an OS scheduling policy.
+
+**Result, 2026-10-02: G5 met.** [g5-report.md](g5-report.md). On the real
+1B model's shape, parameter-major scheduling reads each weight once per
+token for every session: LRU's weight reads fall from once per session per
+token to once per token, and next-use reads fall sixteenfold (44,309 to
+2,787 with four sessions at 1536 MiB; `Ps` 8.8 to 77.4). The gain is
+bounded by the share of accesses that are a session's own cache, and
+lockstep costs a session about 11% in period, which a ceiling buys back
+until it is a quarter of a token, below which the group pays eightfold.
+The same `mlos-sched` crate schedules the kernel's replay on aarch64 and
+x86-64 to the simulator's integers.
 
 ### M5 -- It degrades (PoC gate G6)
 
@@ -520,8 +531,8 @@ Steps: `session-objects`, `share-count`, `scheduler-inversion`,
 `latency-escape`, `ps-ss-metrics`, `g5-report`.
 
 Started 2026-09-29 as saga `mlos-parameter-major`, from this outline;
-each step writes its own reasoning into its commit and `docs/status.md`
-as it is worked. M3's rules carry over: measure in the band near the
+each step wrote its own reasoning into its commit and `docs/status.md`.
+**Complete 2026-10-02, six steps, gate G5 met.** M3's rules carry over: measure in the band near the
 per-token working set and say where it is, keep the KV cache paged, and
 keep the kernel and the simulator agreeing to the integer.
 

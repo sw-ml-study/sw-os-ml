@@ -3,17 +3,20 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-10-02, during saga `mlos-parameter-major` (M4), after step 005.
+Last updated: 2026-10-02, at the end of saga `mlos-parameter-major` (M4).
 
 ---
 
 ## Where we are
 
-**M1, M2 and M3 complete, and the kernel boots on two architectures.
-Four of eight gates met.** Gate G4 is [g4-report.md](g4-report.md):
-known-next-use does 42--77% fewer provider reads than the better baseline
-on a real 1B model's shape in the band where any policy can differ, and
-the kernel and the simulator agree to the integer.
+**M1 to M4 complete, and the kernel boots on two architectures. Five of
+eight gates met.** Gate G4 is [g4-report.md](g4-report.md): known-next-use
+does 42--77% fewer provider reads than the better baseline on a real 1B
+model's shape in the band where any policy can differ. Gate G5 is
+[g5-report.md](g5-report.md): four sessions needing the same layer cause
+one read, not four -- parameter-major scheduling cuts next-use reads
+sixteenfold on the real shape -- and the same scheduler runs in the kernel
+on both architectures, matching the simulator to the integer.
 
 The kernel boots to a shell as a native aarch64 guest and as an x86-64
 guest, holds an object table, services a model fault from a real block
@@ -37,7 +40,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | G2 -- it holds an object table | **done** | M2 |
 | G3 -- it faults | **done** | M2 |
 | G4 -- known-next-use beats LRU | **done** -- [g4-report.md](g4-report.md). 42--77% fewer reads in the band on a real model's shape, 37--71% on the synthetic one; kernel = simulator to the integer on both architectures. Traces derived, not recorded, and the report says so | M3 |
-| G5 -- one read serves N sessions | not started | M4 |
+| G5 -- one read serves N sessions | **done** -- [g5-report.md](g5-report.md). Parameter-major scheduling: weight reads once per token for all sessions; next-use reads 44,309 -> 2,787 with four sessions on a real 1B model; the same `mlos-sched` crate in the kernel on both architectures matches the simulator to the integer | M4 |
 | G6 -- degrades instead of dying | not started | M5 |
 | G7 -- controls a real host resource | not started | M6 |
 | G8 -- another machine is a provider | not started | M7 |
@@ -50,7 +53,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M1 it boots | **17 of 18 steps, 1 parked** -- saga `mlos-boot`. Gate G1 met. Virtio console and CI done; `efi-stub` parked |
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
 | M3 it knows better | **complete** -- saga `mlos-nextuse`, 11 steps. Gate G4 met: [g4-report.md](g4-report.md). Known-next-use separates in the band where the budget is near the per-token working set (42--77% on a real 1B model, 37--71% synthetic) and nowhere else; the band's location is a property of the model and the serving regime, which is the milestone's second finding |
-| M4 it shares | not started |
+| M4 it shares | **complete** -- saga `mlos-parameter-major`, 6 steps. Gate G5 met: [g5-report.md](g5-report.md). Sessions as kernel objects, `share_count` live, a `no_std` scheduler shared by kernel and simulator, the latency escape, `Ps`/`Ks`/`Ss`, and the kernel scheduling the replay on both architectures |
 | M5 it degrades | not started |
 | M6 it crosses PCIe | not started |
 
@@ -86,7 +89,7 @@ x86-64 anywhere in this repo.
 | Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
 | Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
 | Leases | `share_count` is the number of leases holding an object: Pin, Borrow and Streaming count, Speculative does not. `acquire` raises it, `release` (`ml_release`) lowers it, `evict` zeroes it. Known-next-use divides recovery cost by it, so an object two sessions hold outlives one held by one (tested). Replays and sweeps `consume`: acquire and release in one, so every M3 count is unchanged. `release L T` in the shell |
-| Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session lanes into a trace; `Decode::tokens` and `Real::tokens` are those lanes and `trace()` is now the process-major merge. A session whose wait (other sessions' acquires since its token became due) reaches its `latency_ceiling` is served out of turn and reads alone: the escape hatch. In the simulator only |
+| Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session lanes into a trace; `Decode::tokens` and `Real::tokens` are those lanes and `trace()` is now the process-major merge. A session whose wait (other sessions' acquires since its token became due) reaches its `latency_ceiling` is served out of turn and reads alone: the escape hatch. **In the kernel too**: `replay POLICY [process\|parameter]` rebuilds per-session lanes from the disk trace in static buffers, runs the same scheduler over them and replays the order it chose; eight count lines match the simulator's on aarch64 and x86-64 |
 | Metrics | `mlos-metrics` counts faults, fetched bytes, hit bytes and resident bytes per class, and computes the PRD s.5.2 headline numbers in one place: `Ps` (weight bytes applied per thousand read), `Ks` (KV bytes per live session), `Ss` (sessions per GiB of budget, in thousandths; measured at a fixed budget until M5's admission control). The kernel's replay line and the simulator's carry all three, computed by the same function, and the boot test compares them as strings. `metrics` in the shell prints `Rm`, `Ps`, `Ks`, `Ss` |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
@@ -101,18 +104,16 @@ x86-64 anywhere in this repo.
 
 ## What does not exist yet
 
-No userspace, no scheduler beyond a single kernel thread, no degradation
-ladder, no GPU and no ML-MMU. Sharing exists in the simulator and not yet
-in the kernel: `mlos-sched` decides whose turn it is over per-session
-streams and the simulator merges them, but the guest still replays one
-merged trace (the in-kernel scheduler is step 006). Leases are counted
-but not enforced: `share_count` is the live holds on an object and
-next-use weighs it, but nothing yet refuses to evict a pinned object or
-revokes a borrow between operations. Sessions exist as kernel records (M4
-step 001) but nothing creates one except the shell and the replay: there
-is no process to own a session, and `get` acts as session 1. The policy
-runs only when `replay` asks it to: nothing declares a stream or chooses
-a policy at boot, because nothing but the replay is a workload yet.
+No userspace, no scheduler of threads (one kernel thread; the scheduler
+that exists decides whose acquire is served, not who runs), no degradation
+ladder, no GPU and no ML-MMU. Leases are counted but not enforced:
+`share_count` is the live holds on an object and next-use weighs it, but
+nothing yet refuses to evict a pinned object or revokes a borrow between
+operations. Sessions exist as kernel records but nothing creates one
+except the shell and the replay: there is no process to own a session,
+and `get` acts as session 1. The real shape's traces run in the
+simulator only; the kernel schedules and replays the synthetic
+4,448-access trace, where it proves the simulator faithful.
 
 The trace from a real model's shape (step 010) is a model OF a decode
 loop over real tensors, not a recording of one: the tensor inventory and
@@ -674,17 +675,16 @@ answered by measurement at M3 (Q1, Q2) and M6 (Q3).
 
 ## Next action
 
-Saga `mlos-nextuse` (M3) is complete and gate G4 is met;
-[g4-report.md](g4-report.md) is the artifact. Two things follow from it
-into the plan: measure future gates at budgets stated as a fraction of
-the per-token working set and report where the band is, and let M4 and
-M5 inherit paged KV blocks (`Context::tokens_per_block`) rather than one
-block per token.
+Saga `mlos-parameter-major` (M4) is complete and gate G5 is met;
+[g5-report.md](g5-report.md) is the artifact. Three things follow into
+the plan (its section 8): M5's admission control should admit a
+latency-contracted session knowing what its ceiling costs the others in
+reads; degradation rungs that shrink KV raise the share of accesses a
+scheduler can share; and two milestones have built session machinery with
+nothing but the shell to drive it -- a recorded trace from a real engine
+with MLOS under it is the gap both G4 and G5 name, and it wants a step
+before M6.
 
-Next, per [plan.md](plan.md): saga `mlos-two-hosts` (a Linux machine
-beside the Mac, both guests on both, the whole gate on both) can run
-alongside M4 `mlos-parameter-major` (gate G5: one provider read serves N
-sessions). Either starts with `agentrail init` from its section of the
-plan. The gap G4 leaves open -- a trace *recorded* from a real inference
-engine with MLOS under it -- is M4-or-later work and is listed in the
-report's section 5.
+Next, per [plan.md](plan.md): M5 `mlos-degradation` (gate G6) and saga
+`mlos-two-hosts`, which can run in parallel. Either starts with
+`agentrail init` from its section of the plan.

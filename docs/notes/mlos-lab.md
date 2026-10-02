@@ -157,3 +157,29 @@ about to want. See also `docs/notes/mlos-stream.md`.
 counter in `Replayed` is derived by differencing the manager's own
 counters around the acquire. A counter the replay computes for itself is a
 second implementation of the thing being measured.
+
+## Lanes: the scheduler runs in the kernel (M4 step 006)
+
+`lanes.rs` rebuilds per-session lanes from the disk trace in static
+buffers: the trace's objects grouped by session, each access's token and
+index within it, and one lane per live session in slot order, which is
+the order the trace first named them. A token begins wherever a session
+touches the model's first tile, which is how the generator starts every
+token and the only boundary the trace carries. `Lanes` implements
+`mlos_sched::Waiting` over those buffers with a cursor per lane, and
+`order` runs any `Schedule` over it, writing the merged order and its
+sessions into the room. `replay(parameter)` then declares that order as
+the stream and replays it, so `next_use` positions are the order the
+scheduler chose, as the simulator's foresight is over its merged trace.
+
+The process-major order rebuilt this way is the disk trace itself, which
+is why `replay POLICY process` prints the lines it always did, and the
+parameter-major order equals `mlos_sched::merge(ParameterMajor, tokens)`
+on the host because both sides run the same `pick` over the same lanes
+with the same ceilings (zero: the sessions are adopted under
+`Contract::NONE`). The boot tests compare all eight lines, headline
+numbers included, as strings.
+
+Two more static arrays were the cost: the grouped objects and their
+shape (12k entries each), plus the merged order's sessions. The lane
+list itself is sixteen entries, one per possible session.
