@@ -27,7 +27,11 @@ fn expected() {
                 ..
             } = out;
             println!(
-                "{kib:>3} KiB {name:>9}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused"
+                "{kib:>3} KiB {name:>9}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused, {} (weights applied {}, read {}, kv {})",
+                out.headline(kib << 10),
+                out.weights_applied,
+                out.weights_read,
+                out.kv_resident
             );
         }
     }

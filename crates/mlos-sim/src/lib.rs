@@ -7,11 +7,12 @@
 #![forbid(unsafe_code)]
 
 mod foresight;
+mod outcome;
 mod resident;
 mod run;
 mod view;
 
-use mlos_abi::ObjectId;
+use mlos_abi::{ObjectClass, ObjectId};
 use mlos_arena::Arena;
 use mlos_objtab::ObjectMeta;
 use mlos_policy::Policy;
@@ -21,6 +22,7 @@ use mlos_trace::Trace;
 use run::Run;
 
 pub use foresight::{Foresight, wanted_at};
+pub use outcome::Outcome;
 pub use resident::Resident;
 
 /// Where an object's size and costs come from: the model the trace
@@ -50,6 +52,7 @@ pub fn replay(trace: &Trace<'_>, model: &dyn Model, budget: u64, policy: &dyn Po
     for (at, access) in trace.accesses.iter().enumerate() {
         run.step(&mut resident, &mut outcome, access.object, at as u32 + 1);
     }
+    outcome.kv_resident = resident.held_of(ObjectClass::KvBlock);
     outcome
 }
 
@@ -65,39 +68,4 @@ pub fn compare<'a>(
         .iter()
         .map(|policy| (policy.name(), replay(trace, model, budget, *policy)))
         .collect()
-}
-
-/// What one policy did with one trace.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct Outcome {
-    /// Acquires that found the object already resident. The good case.
-    pub hits: u64,
-    /// Acquires that had to go to a provider. The number to minimise.
-    pub reads: u64,
-    /// Bytes those reads moved.
-    pub bytes: u64,
-    /// Objects thrown away to make room.
-    pub evicted: u64,
-    /// Acquires that could not be served at all. Part of the cost, not a
-    /// failure.
-    pub refused: u64,
-    /// What the reads would have cost, in nanoseconds, as providers charge.
-    pub cost: u64,
-    /// Accesses naming objects this model does not have. Zero for a
-    /// matched trace and model; non-zero means the two files disagree.
-    pub mismatched: u64,
-    /// Distinct sessions the trace named, each created for the replay.
-    pub sessions: u64,
-}
-
-impl Outcome {
-    /// Acquires served without going to a provider, per thousand of
-    /// those asked. Comparable across traces of different lengths.
-    #[must_use]
-    pub const fn hit_per_mille(&self) -> u64 {
-        match self.hits + self.reads + self.refused {
-            0 => 0,
-            asked => self.hits * 1000 / asked,
-        }
-    }
 }

@@ -99,6 +99,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             && meta.resident_at != 0
         {
             let (address, size) = (meta.resident_at, meta.size);
+            self.counters.hit(id.class().ok_or(Error::BadClass)?, size);
             let now = self.clock;
             let claim = self.table.get_mut(id).ok_or(Error::BadObject)?;
             claim.share_count = claim.share_count.saturating_add(u16::from(lease.counts()));

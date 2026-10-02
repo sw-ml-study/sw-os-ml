@@ -122,6 +122,8 @@ fn a_hit_costs_nothing_and_a_miss_costs_a_read() {
             bytes: u64::from(SIZE),
             cost: 1000,
             sessions: 1,
+            weights_applied: 3 * u64::from(SIZE),
+            weights_read: u64::from(SIZE),
             ..Outcome::default()
         }
     );

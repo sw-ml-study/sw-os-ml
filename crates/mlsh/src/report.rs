@@ -76,6 +76,32 @@ pub fn arena(out: &mut impl Write) {
     }
 }
 
+/// The numbers `docs/PRD.md` s.5.2 says matter: `Rm`, `Ps`, `Ks`, `Ss`.
+pub fn metrics(out: &mut impl Write) {
+    let Some((report, h, sessions)) =
+        mlos_lab::with(|m| (m.counters.report(), m.headline(), m.sessions.live()))
+    else {
+        return; // dispatch already said so
+    };
+    let rm = report.residency_per_mille().unwrap_or(0);
+    let _ = writeln!(out, "  Rm       {rm}/1000 of the model resident");
+    let _ = writeln!(
+        out,
+        "  Ps       {}/1000 weight bytes applied per byte read",
+        h.ps_per_mille
+    );
+    let _ = writeln!(
+        out,
+        "  Ks       {} B of KV per session, {sessions} session(s)",
+        h.ks
+    );
+    let _ = writeln!(
+        out,
+        "  Ss       {}/1000 sessions per GiB of arena",
+        h.ss_milli
+    );
+}
+
 /// What it all cost.
 pub fn faults(out: &mut impl Write) {
     let Some((report, last)) = mlos_lab::with(|m| (m.counters.report(), m.last_fault)) else {

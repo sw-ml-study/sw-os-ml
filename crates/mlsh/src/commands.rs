@@ -20,6 +20,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         "sweep" => crate::objects::sweep(out, facts.clock),
         "arena" => crate::report::arena(out),
         "faults" => crate::report::faults(out),
+        "metrics" => crate::report::metrics(out),
         "layout" => _ = mlos_snapshot::write_for(out, facts.bootargs),
         "stream" => crate::objects::stream(out, args),
         "replay" => crate::objects::replay(out, args),
@@ -41,9 +42,9 @@ fn ticks(out: &mut impl Write, facts: &Facts<'_>) {
 }
 
 /// Verbs that need a model to already exist; `dispatch` checks them once.
-const NEEDS_MODEL: [&str; 12] = [
+const NEEDS_MODEL: [&str; 13] = [
     "sweep", "get", "evict", "objs", "arena", "faults", "layout", "trace", "stream", "replay",
-    "session", "release",
+    "session", "release", "metrics",
 ];
 
 /// What `help` prints.
@@ -56,6 +57,7 @@ const HELP: &str = concat!(
     "objs [all]    what the table knows: tier, residency, use count\r\n",
     "arena         how full memory is, and what would still fit\r\n",
     "faults        what it all cost, per object class\r\n",
+    "metrics       Rm, Ps, Ks, Ss: the numbers docs/PRD.md says matter\r\n",
     "layout        the running layout as JSON, for the visualizer\r\n",
     "trace [on|off] residency events as they happened, one per line\r\n",
     "stream [N]    declare the model's access order, or advance it by N\r\n",

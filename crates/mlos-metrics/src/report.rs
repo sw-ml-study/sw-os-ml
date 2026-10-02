@@ -1,27 +1,33 @@
-//! Reading the counters out.
+//! A snapshot of the counters, with the ratios `docs/PRD.md` s.5.2 asks
+//! for computed from it rather than kept alongside.
 //!
-//! Design: docs/notes/mlos-metrics.md.
+//! Invariant: a report is a copy; reading one changes nothing. Design:
+//! docs/notes/mlos-metrics.md.
 
 use mlos_abi::ObjectClass;
 
 use crate::Counters;
 
-/// A snapshot, in a shape something can print.
+/// The counters at one moment.
 #[derive(Clone, Copy)]
 pub struct Report {
-    /// Faults per class, indexed by [`ObjectClass::index`].
+    /// Misses, per class.
     pub faults: [u32; 8],
-    /// Bytes fetched per class.
+    /// Bytes fetched from providers, per class.
     pub fetched: [u64; 8],
-    /// Bytes of registered objects.
+    /// Bytes served from residency without a read, per class.
+    pub hits: [u64; 8],
+    /// Bytes resident right now, per class.
+    pub held: [u64; 8],
+    /// Bytes registered in total.
     pub registered: u64,
-    /// Bytes currently resident.
+    /// Bytes resident in total: the sum of `held`.
     pub resident: u64,
 }
 
 impl Report {
-    /// `Rm`: resident bytes over model bytes, in parts per thousand.
-    /// `None` when nothing is registered: no denominator, no ratio.
+    /// `Rm`: resident bytes per thousand registered, or `None` with
+    /// nothing registered.
     #[must_use]
     pub const fn residency_per_mille(&self) -> Option<u32> {
         if self.registered == 0 {
@@ -30,7 +36,7 @@ impl Report {
         Some((self.resident.saturating_mul(1000) / self.registered) as u32)
     }
 
-    /// Total faults across every class.
+    /// Misses across every class.
     #[must_use]
     pub const fn total_faults(&self) -> u32 {
         let (mut total, mut at) = (0u32, 0);
@@ -41,8 +47,7 @@ impl Report {
         total
     }
 
-    /// The class that faulted most, and how often. `None` when nothing
-    /// has faulted.
+    /// The class that faulted most, with its count, if any did.
     #[must_use]
     pub fn worst(&self) -> Option<(ObjectClass, u32)> {
         ObjectClass::ALL
@@ -54,14 +59,23 @@ impl Report {
 }
 
 impl Counters {
-    /// A snapshot of everything counted so far.
+    /// The counts right now.
     #[must_use]
     pub const fn report(&self) -> Report {
+        let (mut resident, mut at) = (0u64, 0);
+        while at < CLASSES {
+            resident = resident.saturating_add(self.held[at]);
+            at += 1;
+        }
         Report {
             faults: self.faults,
             fetched: self.fetched,
+            hits: self.hits,
+            held: self.held,
             registered: self.registered,
-            resident: self.resident,
+            resident,
         }
     }
 }
+
+const CLASSES: usize = ObjectClass::ALL.len();

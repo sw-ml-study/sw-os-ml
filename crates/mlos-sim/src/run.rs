@@ -4,7 +4,7 @@
 //! `Occupancy::fits` for the same three reasons. Design:
 //! docs/notes/mlos-sim.md.
 
-use mlos_abi::ObjectId;
+use mlos_abi::{ObjectClass, ObjectId};
 use mlos_objtab::{NextUse, ObjectMeta};
 use mlos_policy::Policy;
 
@@ -29,8 +29,10 @@ impl Run<'_> {
             return;
         };
         let next = crate::wanted_at(self.seen, now);
+        let weight = id.class() == Some(ObjectClass::WeightTile);
         if resident.touch(id, now, next) {
             outcome.hits += 1;
+            outcome.weights_applied += u64::from(meta.size) * u64::from(weight);
             return;
         }
         self.fetch(resident, outcome, (id, meta), (now, next));
@@ -56,6 +58,10 @@ impl Run<'_> {
         out.reads += 1;
         out.bytes += u64::from(meta.size);
         out.cost += u64::from(meta.reload_cost.0);
+        if id.class() == Some(ObjectClass::WeightTile) {
+            out.weights_applied += u64::from(meta.size);
+            out.weights_read += u64::from(meta.size);
+        }
     }
 
     /// Evicts one victim at a time until `wanting` would fit, the policy

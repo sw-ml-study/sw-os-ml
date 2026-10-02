@@ -68,7 +68,6 @@ impl<'a, const N: usize> Manager<'a, N> {
         let cost = provider.cost(located).for_bytes(meta.size);
         let fault = ModelFault::new(id, by, cost).ok_or(Error::BadClass)?;
         self.last_fault = Some(fault);
-        self.counters.fault(fault.class, meta.size);
 
         let base = self.arena.occupancy().base;
         let placed = self.admit(id, located, provider, lease, wanted);
@@ -95,8 +94,13 @@ impl<'a, const N: usize> Manager<'a, N> {
         self.sessions.charge(owner, size)?;
         self.make_room(&meta);
         let placed = self.place(id, located, provider, lease, wanted);
-        if placed.is_err() {
-            self.sessions.credit(owner, size);
+        // A fault is counted when its bytes arrive: a refused miss fetched
+        // nothing, and `Ps` divides by bytes read.
+        match &placed {
+            Ok(_) => self
+                .counters
+                .fault(id.class().ok_or(Error::BadClass)?, size),
+            Err(_) => self.sessions.credit(owner, size),
         }
         placed
     }
@@ -124,7 +128,8 @@ impl<'a, const N: usize> Manager<'a, N> {
         let size = located.size;
         let (address, into) = self.arena.place(size)?;
         provider.read(located, 0, into)?;
-        self.counters.resident(i64::from(size));
+        self.counters
+            .held(id.class().ok_or(Error::BadClass)?, i64::from(size));
 
         let now = self.clock;
         let placed = self.table.get_mut(id).ok_or(Error::BadObject)?;

@@ -1,6 +1,6 @@
 number = 5
 slug = "ps-ss-metrics"
-status = "pending"
+status = "in-progress"
 description = """
 `Ps` and `Ss`, `docs/PRD.md` s.5.2: useful parameter applications per
 paramet..."""

@@ -1,27 +1,30 @@
-//! What MLOS counts: faults and bytes per object class, and residency.
+//! What the object manager counts: faults, hits and residency, per class.
 //!
-//! Invariant: every counter saturates; none wraps. Design and history:
-//! docs/notes/mlos-metrics.md.
+//! Invariant: every counter is per object class and saturates, never
+//! wraps; `held` is signed because eviction gives bytes back. Design and
+//! history: docs/notes/mlos-metrics.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
 
+mod headline;
 mod report;
 
 use mlos_abi::ObjectClass;
 
+pub use headline::Headline;
 pub use report::Report;
 
-/// How many classes there are to count.
 const CLASSES: usize = ObjectClass::ALL.len();
 
-/// Running totals, saturating throughout.
+/// The running counts.
 #[derive(Clone, Copy)]
 pub struct Counters {
     faults: [u32; CLASSES],
     fetched: [u64; CLASSES],
+    hits: [u64; CLASSES],
+    held: [u64; CLASSES],
     registered: u64,
-    resident: u64,
 }
 
 impl Counters {
@@ -29,26 +32,33 @@ impl Counters {
     pub const EMPTY: Self = Self {
         faults: [0; CLASSES],
         fetched: [0; CLASSES],
+        hits: [0; CLASSES],
+        held: [0; CLASSES],
         registered: 0,
-        resident: 0,
     };
 
-    /// Records a fault on `class` that moved `bytes` from a provider:
-    /// one more fault, `bytes` more fetched.
+    /// One miss on `class`, fetching `bytes` from a provider.
     pub const fn fault(&mut self, class: ObjectClass, bytes: u32) {
         let at = class.index();
         self.faults[at] = self.faults[at].saturating_add(1);
         self.fetched[at] = self.fetched[at].saturating_add(bytes as u64);
     }
 
-    /// Records that an object of `bytes` was registered, whether or not
-    /// it is resident. The denominator of `Rm`.
+    /// One hit on `class`: `bytes` applied without a read.
+    pub const fn hit(&mut self, class: ObjectClass, bytes: u32) {
+        let at = class.index();
+        self.hits[at] = self.hits[at].saturating_add(bytes as u64);
+    }
+
+    /// `bytes` of `class` registered with the manager.
     pub const fn registered(&mut self, bytes: u32) {
         self.registered = self.registered.saturating_add(bytes as u64);
     }
 
-    /// Records a change in resident bytes, in either direction.
-    pub const fn resident(&mut self, delta: i64) {
-        self.resident = self.resident.saturating_add_signed(delta);
+    /// `delta` bytes of `class` became resident (placed) or stopped being
+    /// (evicted).
+    pub const fn held(&mut self, class: ObjectClass, delta: i64) {
+        let at = class.index();
+        self.held[at] = self.held[at].saturating_add_signed(delta);
     }
 }

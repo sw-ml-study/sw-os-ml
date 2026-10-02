@@ -46,3 +46,13 @@ impl<const N: usize> Manager<'_, N> {
         evicted
     }
 }
+
+impl<const N: usize> Manager<'_, N> {
+    /// `Ps`, `Ks` and `Ss` right now: the counters' headline over the live
+    /// sessions and the arena's capacity.
+    #[must_use]
+    pub fn headline(&self) -> mlos_metrics::Headline {
+        let (sessions, budget) = (self.sessions.live(), self.arena.occupancy().capacity);
+        self.counters.report().headline(sessions, budget)
+    }
+}
