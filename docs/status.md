@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-10-02, during saga `mlos-parameter-major` (M4), after step 004.
+Last updated: 2026-10-02, during saga `mlos-parameter-major` (M4), after step 005.
 
 ---
 
@@ -87,6 +87,7 @@ x86-64 anywhere in this repo.
 | Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
 | Leases | `share_count` is the number of leases holding an object: Pin, Borrow and Streaming count, Speculative does not. `acquire` raises it, `release` (`ml_release`) lowers it, `evict` zeroes it. Known-next-use divides recovery cost by it, so an object two sessions hold outlives one held by one (tested). Replays and sweeps `consume`: acquire and release in one, so every M3 count is unchanged. `release L T` in the shell |
 | Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session lanes into a trace; `Decode::tokens` and `Real::tokens` are those lanes and `trace()` is now the process-major merge. A session whose wait (other sessions' acquires since its token became due) reaches its `latency_ceiling` is served out of turn and reads alone: the escape hatch. In the simulator only |
+| Metrics | `mlos-metrics` counts faults, fetched bytes, hit bytes and resident bytes per class, and computes the PRD s.5.2 headline numbers in one place: `Ps` (weight bytes applied per thousand read), `Ks` (KV bytes per live session), `Ss` (sessions per GiB of budget, in thousandths; measured at a fixed budget until M5's admission control). The kernel's replay line and the simulator's carry all three, computed by the same function, and the boot test compares them as strings. `metrics` in the shell prints `Rm`, `Ps`, `Ks`, `Ss` |
 | Layout | `mlos layout` writes `build/storage-layout.json`: three spaces (disk, arena, guest RAM), 140 regions, in sw-mlpl's columnar `system-layout` contract |
 | Snapshot | `mlos runtime` boots, sweeps and writes `build/runtime-layout.json` from the live object table -- residency, reuse, cost and `backs` edges from stored tile to arena placement |
 | Events | The same boot writes `build/runtime-events.jsonl`: one JSON line per residency transition (`placed` / `hit` / `refused`), joined to the snapshot by region id. `trace` prints them; `trace on\|off` switches recording |
@@ -96,7 +97,7 @@ x86-64 anywhere in this repo.
 | Boot script | `/chosen/bootargs` carries `mlsh.run=model;sweep;layout`, so a headless capture can drive the shell. A log file is not a terminal, so nothing else could |
 | Tooling | `mlos build` / `run [hvf\|tcg\|vz]` / `run --capture N` / `run --debug` / `doctor` / `layout` / `runtime` |
 | Timing | `sweep` reports elapsed nanoseconds from the ARM generic timer, not the 2 Hz tick -- which is what makes any claim about what the fault path costs measurable. The rate is read from `CNTFRQ_EL0` rather than assumed: 24 MHz under HVF, which is Apple Silicon's own counter passed through, and 62.5 MHz under TCG, which is QEMU's |
-| Tests | 39 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
+| Tests | 40 fast test binaries plus nine TCG boot tests (`cargo test -p mlos-cli -- --ignored`), one of which boots the kernel, replays four policies, and asserts each count line equals the simulator's. Local only, by choice -- see [AGENTS.md](../AGENTS.md); there is no CI and the local gate is the stricter of the two |
 
 ## What does not exist yet
 
@@ -598,6 +599,38 @@ takes four times longer; the first version of the escape measured the gap
 and never fired.
 
 
+
+## The headline numbers
+
+M4 step 005. `Ps` is the one the project is named for: weight bytes
+applied per thousand weight bytes read from a provider, so one thousand is
+one use per read and N thousand is N sessions sharing each read. From the
+G5 tables under next-use, process-major against parameter-major:
+
+| workload | sessions, budget | Ps process-major | Ps parameter-major |
+| --- | --- | --- | --- |
+| MiniCPM5-1B, no prompt | 1, 1536 MiB | 7,653 | 7,653 |
+| MiniCPM5-1B, no prompt | 2, 1536 MiB | 8,256 | 46,551 |
+| MiniCPM5-1B, no prompt | 4, 1536 MiB | 8,801 | 77,433 |
+| MiniCPM5-1B, no prompt | 8, 1536 MiB | 9,196 | 139,197 |
+| synthetic 8x16 | 4, 128 KiB | 38,787 | 76,646 |
+| synthetic 8x16 | 4, 192 KiB | 100,000 | 100,000 |
+
+Next-use alone already gets eight applications per read on the real shape
+(the weights that fit stay); parameter-major with four sessions gets
+seventy-seven, and the number keeps growing with sessions because every
+session after the first is a hit on a read already made. Where the
+weights fit entirely (the synthetic model at 192 KiB) `Ps` is the same
+under both schedules and equals the number of times each weight is used
+over the run, which is the ceiling.
+
+`Ss` is sessions per GiB of resident budget. Until M5's admission control
+exists it is measured at a fixed budget -- live sessions over the arena's
+capacity -- and is not yet a statement about how many a budget could
+admit; four sessions in 1,536 MiB is 2.667. `Ks` is KV bytes resident per
+live session. All three are computed by `mlos_metrics::Headline::of` from
+raw counts, by the kernel from its counters and by the simulator from its
+outcome, and the kernel's replay line equals the simulator's as a string.
 
 ## Known gaps
 

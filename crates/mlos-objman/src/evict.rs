@@ -73,7 +73,8 @@ impl<const N: usize> Manager<'_, N> {
             return Err(Error::NotResident);
         }
         self.arena.release(meta.resident_at, meta.size)?;
-        self.counters.resident(-i64::from(meta.size));
+        self.counters
+            .held(id.class().ok_or(Error::BadClass)?, -i64::from(meta.size));
         self.sessions.credit(meta.owner, meta.size);
         self.evictions += 1;
         self.events.record(Event::evicted(id, meta.owner, &meta));

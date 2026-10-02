@@ -123,6 +123,7 @@ fn counts(name: &str, out: &Outcome) -> String {
         ..
     } = out;
     format!(
-        "{name}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused"
+        "{name}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused, {}",
+        out.headline(BUDGET_KIB * 1024)
     )
 }

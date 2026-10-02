@@ -53,3 +53,40 @@ It is `None` when nothing is registered. A ratio with no denominator is
 not zero, it is unanswerable, and reporting zero would read as "nothing
 is resident" rather than "nothing exists". `registered` is the
 denominator of `Rm`: what the model is, against what of it is in memory.
+
+## The headline numbers (M4 step 005)
+
+`docs/PRD.md` s.5.2 names two headline numbers and this crate computes
+them in one place, `Headline::of`, from raw counts, so the kernel (from
+`Counters`) and the simulator (from its `Outcome`) cannot mean different
+things by them:
+
+- `Ps`, parameter applications per parameter read: weight bytes served
+  (hits and reads) per thousand weight bytes read from a provider. One
+  thousand is one use per read; four thousand is four sessions sharing
+  each read, which is what parameter-major scheduling is for. Bytes stand
+  in for parameter values; the ratio is the same.
+- `Ss`, sessions per GiB of resident budget, in thousandths. Before
+  admission control exists (M5) it is measured at a fixed budget: the
+  sessions live over the arena's capacity, not the most the budget could
+  admit. Said here so nobody reads it as a capacity figure yet.
+- `Ks`, KV bytes resident per live session, which comes free from the
+  per-class `held` counter.
+
+To compute them the counters grew `hits` (bytes served without a read,
+per class) and `held` replaced the single `resident` total (bytes
+resident per class, signed). `Report::resident` is now the sum of
+`held`, and `Rm` is unchanged. The replays print all three on their count
+line, the simulator's from `Outcome::headline` and the kernel's from
+`Report::headline` at the end of the run before the sessions are
+destroyed, and the boot test compares the lines as strings.
+
+**A fault is counted when its bytes arrive.** Until step 005 the manager
+counted a fault, and its bytes as fetched, the moment a miss was
+described, before any provider was asked. Demand paging refuses most
+misses, and every refused miss was counted as kilobytes fetched: the
+kernel reported `Ps` 1,302 where the simulator, counting bytes actually
+read, reported 24,000. The count now happens after a successful
+placement. A refused miss is a refusal -- the event stream and the replay
+line say so -- and not a fetch, which is what `Pf` and `Ps` need it to
+be. `faults` in the shell therefore reports misses that were served.

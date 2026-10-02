@@ -6,6 +6,7 @@
 //! truncated. Design and history: docs/notes/mlos-lab.md.
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
+use mlos_metrics::Headline;
 use mlos_objman::Contract;
 use mlos_objtab::SessionId;
 use mlos_trace::parse;
@@ -36,6 +37,8 @@ pub struct Replayed {
     pub evicted: u64,
     /// Acquires that could not be served at all.
     pub refused: u64,
+    /// `Ps`, `Ks`, `Ss` at the end of the replay, as `mlos-metrics` computes them.
+    pub headline: Headline,
 }
 
 /// Reads the trace off the disk, declares the whole of it as the stream,
@@ -51,8 +54,7 @@ pub fn replay() -> Result<Replayed> {
         *slot = access.object;
     }
     mlos_stream::chain(order, room.next, room.seen)?;
-    let declared: &'static [ObjectId] = room.declared;
-    let next: &'static [u32] = room.next;
+    let (declared, next): (&'static [ObjectId], &'static [u32]) = (room.declared, room.next);
     with(|held| held.stream.declare(&declared[..count], next)).ok_or(Error::NoProvider)??;
     // The sessions the trace names exist for the replay, as in `mlos-sim`,
     // and go when it ends, taking their KV blocks with them.
@@ -63,6 +65,7 @@ pub fn replay() -> Result<Replayed> {
         step(access.object, access.session, &mut out);
         with(|held| held.stream.advance(1));
     }
+    out.headline = with(|held| held.headline()).unwrap_or_default();
     with(|held| held.destroy_all_sessions());
     Ok(out)
 }

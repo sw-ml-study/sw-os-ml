@@ -146,6 +146,7 @@ name = "mlos-lab"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-metrics",
  "mlos-objman",
  "mlos-objtab",
  "mlos-policy",
@@ -274,6 +275,7 @@ version = "0.0.1"
 dependencies = [
  "mlos-abi",
  "mlos-arena",
+ "mlos-metrics",
  "mlos-objtab",
  "mlos-policy",
  "mlos-session",

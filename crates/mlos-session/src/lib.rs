@@ -75,6 +75,12 @@ impl<const N: usize> Sessions<N> {
         self.slots.get(index)?.as_ref()
     }
 
+    /// How many sessions are live.
+    #[must_use]
+    pub fn live(&self) -> u32 {
+        self.slots.iter().filter(|s| s.is_some()).count() as u32
+    }
+
     /// Adopts every id in `ids` that is not already known, under
     /// `contract`, and says how many were new. What a replay does with a
     /// trace's session column before it starts.

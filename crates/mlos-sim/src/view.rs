@@ -10,6 +10,18 @@ use mlos_policy::Residency;
 
 use crate::Resident;
 
+impl Resident<'_> {
+    /// Bytes of `class` resident right now.
+    #[must_use]
+    pub fn held_of(&self, class: mlos_abi::ObjectClass) -> u64 {
+        self.held
+            .iter()
+            .filter(|(id, _)| id.class() == Some(class))
+            .map(|(_, meta)| u64::from(meta.size))
+            .sum()
+    }
+}
+
 impl Residency for Resident<'_> {
     fn len(&self) -> usize {
         self.held.len()

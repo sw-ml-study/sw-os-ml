@@ -26,7 +26,8 @@ fn run(
     replay(&trace, model, budget, policy)
 }
 
-/// One row: reads under each schedule and policy, and the gain.
+/// One row: reads under each schedule and policy, the gain, and `Ps`
+/// under next-use.
 fn row(name: &str, model: &dyn Model, header: Header<'_>, streams: &[Lane], budget: u64) {
     let started = Instant::now();
     let process = merge(&mut ProcessMajor::default(), streams);
@@ -37,17 +38,24 @@ fn row(name: &str, model: &dyn Model, header: Header<'_>, streams: &[Lane], budg
         .filter(|a| a.object.class() == Some(ObjectClass::KvBlock))
         .count();
     let mut cells = Vec::new();
+    let mut ps = Vec::new();
     for policy in [&LRU as &dyn Policy, &NEXT_USE] {
-        let pm = run(model, header, &process, budget, policy).reads;
-        let qm = run(model, header, &parameter, budget, policy).reads;
-        let gain = 100 - (qm as i64 * 100 / pm.max(1) as i64);
-        cells.push(format!("{pm} | {qm} | {gain:+}%"));
+        let pm = run(model, header, &process, budget, policy);
+        let qm = run(model, header, &parameter, budget, policy);
+        let gain = 100 - (qm.reads as i64 * 100 / pm.reads.max(1) as i64);
+        cells.push(format!("{} | {} | {gain:+}%", pm.reads, qm.reads));
+        ps = vec![
+            pm.headline(budget).ps_per_mille,
+            qm.headline(budget).ps_per_mille,
+        ];
     }
     println!(
-        "| {name} | {} | {} | {} | {:.0} s |",
+        "| {name} | {} | {} | {} | {} / {} | {:.0} s |",
         kv * 100 / process.len().max(1),
         cells[0],
         cells[1],
+        ps[0],
+        ps[1],
         started.elapsed().as_secs_f64()
     );
 }

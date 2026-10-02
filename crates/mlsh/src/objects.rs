@@ -81,8 +81,8 @@ pub fn replay(out: &mut impl Write, args: &str) {
         Ok(done) => {
             let _ = writeln!(
                 out,
-                "  {name}: {} reads, {} hits, {} bytes, {} evicted, {} refused",
-                done.reads, done.hits, done.bytes, done.evicted, done.refused
+                "  {name}: {} reads, {} hits, {} bytes, {} evicted, {} refused, {}",
+                done.reads, done.hits, done.bytes, done.evicted, done.refused, done.headline
             );
         }
         Err(why) => drop(writeln!(out, "  could not replay: {why:?}")),
