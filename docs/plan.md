@@ -544,6 +544,12 @@ keep the kernel and the simulator agreeing to the integer.
 Steps: `contracts`, `admission-control`, `ladder`, `recompute-provider`,
 `cost-policy`, `router-prefetch`, `g6-report`.
 
+Started 2026-10-02 as saga `mlos-degradation`, from this outline; each
+step writes its own reasoning into its commit and `docs/status.md` as it
+is worked. Carried in from the G5 report: admission must know what a
+latency ceiling costs the other sessions, and rungs that shrink KV raise
+the share of accesses a scheduler can share.
+
 ### Saga `mlos-pcie` (M6)
 
 > Vision: reach a real GPU across a real PCIe bus, and give the ML-MMU
