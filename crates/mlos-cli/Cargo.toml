@@ -17,6 +17,8 @@ mlos-workload  = { path = "../mlos-workload",  version = "0.0.1" }
 [dev-dependencies]
 mlos-policy   = { path = "../mlos-policy",   version = "0.0.1" }
 mlos-sim      = { path = "../mlos-sim",      version = "0.0.1" }
+mlos-objtab   = { path = "../mlos-objtab",   version = "0.0.1" }
+mlos-sched    = { path = "../mlos-sched",    version = "0.0.1", features = ["alloc"] }
 mlos-trace    = { path = "../mlos-trace",    version = "0.0.1" }
 
 [[bin]]

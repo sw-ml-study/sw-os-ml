@@ -69,19 +69,21 @@ pub fn sweep(out: &mut impl Write, clock: (fn() -> u64, u32)) {
 /// The counts must match `mlos-sim`'s for the same trace and budget
 /// exactly: no tolerance, no rounding.
 pub fn replay(out: &mut impl Write, args: &str) {
-    let name = args.split_whitespace().next().unwrap_or("demand");
-    if !mlos_lab::choose(name) {
+    let mut words = args.split_whitespace();
+    let name = words.next().unwrap_or("demand");
+    let how = words.next().unwrap_or("process");
+    if !mlos_lab::choose(name) || !matches!(how, "process" | "parameter") {
         let _ = writeln!(
             out,
-            "  no such policy: {name} (demand, fifo, lru, next-use)"
+            "  usage: replay demand|fifo|lru|next-use [process|parameter]"
         );
         return;
     }
-    match mlos_lab::replay() {
+    match mlos_lab::replay(how == "parameter") {
         Ok(done) => {
             let _ = writeln!(
                 out,
-                "  {name}: {} reads, {} hits, {} bytes, {} evicted, {} refused, {}",
+                "  {name} {how}: {} reads, {} hits, {} bytes, {} evicted, {} refused, {}",
                 done.reads, done.hits, done.bytes, done.evicted, done.refused, done.headline
             );
         }

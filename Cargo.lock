@@ -26,7 +26,9 @@ version = "0.0.1"
 dependencies = [
  "mlos-image-map",
  "mlos-layout",
+ "mlos-objtab",
  "mlos-policy",
+ "mlos-sched",
  "mlos-sim",
  "mlos-synth",
  "mlos-trace",
@@ -150,6 +152,8 @@ dependencies = [
  "mlos-objman",
  "mlos-objtab",
  "mlos-policy",
+ "mlos-sched",
+ "mlos-session",
  "mlos-stream",
  "mlos-synth",
  "mlos-trace",

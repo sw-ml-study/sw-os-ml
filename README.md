@@ -35,8 +35,8 @@ Blog post: **[Made Visible: MLOS](https://blog.softwarewrighter.com/2026/09/13/m
 | **Mission** | Find out, by measurement, whether an OS that is told the future of ML state beats one that guesses. Stop if it does not. | [dream.md](docs/dream.md#mission) |
 | **Vision** | A distributed control plane for ML state across GPU memory, RAM, SSD and the network, deciding placement the host cannot see. | [dream.md](docs/dream.md#vision) |
 | **Requirements** | A `no_std` kernel, VM only, two hypervisors per architecture, `unsafe` confined, every policy replayable on a host before it enters the kernel. | [PRD.md](docs/PRD.md#6-requirements) |
-| **Objectives** | Eight gates. **Four met**: it boots, holds objects, faults with meaning, beats LRU with knowledge. | [status.md](docs/status.md) |
-| **Plan** | Milestones M0 to M10, one saga each, in parallel lanes. M3 done; `mlos-two-hosts` and M4 next. | [plan.md](docs/plan.md) |
+| **Objectives** | Eight gates. **Five met**: it boots, holds objects, faults with meaning, beats LRU with knowledge, serves N sessions with one read. | [status.md](docs/status.md) |
+| **Plan** | Milestones M0 to M10, one saga each, in parallel lanes. M0 to M4 done; M5 and `mlos-two-hosts` next. | [plan.md](docs/plan.md) |
 | **Built how** | Forty-odd small crates under a size gate; the simulator links the kernel's own policy and arena crates and the kernel must match it to the integer. | [anatomy.md](docs/anatomy.md#how-it-is-built) |
 | **Does** | Boots to a shell on two architectures, faults a model in from virtio-blk, is told its access order, evicts by policy, replays a workload and reports the cost. | [anatomy.md](docs/anatomy.md#what-it-does) |
 | **How** | A fault names the layer, not an address; a declared stream writes `next_use`; a policy names one victim at a time. | [anatomy.md](docs/anatomy.md#how-it-does-it) |
@@ -130,6 +130,7 @@ the simulator to the integer on both architectures
 | [docs/design.md](docs/design.md) | Crates, syscalls, object table, device contracts |
 | [docs/plan.md](docs/plan.md) | Milestones and the implementation sagas |
 | [docs/status.md](docs/status.md) | Ground truth |
+| [docs/g5-report.md](docs/g5-report.md) | Gate G5: four sessions, one read; the scheduler, the cache bound, the latency escape's price, the kernel on both architectures |
 | [docs/g4-report.md](docs/g4-report.md) | Gate G4: the tables, the band, PRD Q1 and Q2, how to reproduce it, what it does not show |
 | [docs/m3-verdict.md](docs/m3-verdict.md) | The step 006 verdict on the synthetic model, kept as a record |
 | [docs/status-x86-64.md](docs/status-x86-64.md) | What the x86-64 guest does |
@@ -144,16 +145,17 @@ Development is parallel: each saga runs on its own branch, `feat/<slug>`
 becoming `pr/<slug>` for review ([AGENTS.md](AGENTS.md)), and `main` is
 the integration point.
 
-- **Done.** M0 to M3 (four gates), and saga `mlos-x86-64`: the same
-  kernel on a second architecture, same replay counts.
-- **Next, in parallel.** Saga `mlos-two-hosts`: a Linux machine beside
-  the Mac, both guests on both, the whole gate on both. M4
-  `mlos-parameter-major` (gate G5): one provider read serves N sessions,
-  inheriting G4's two findings (state budgets as a fraction of the
-  working set; page the KV cache).
-- **Then.** M5 degradation (G6), M6 host resources over virtio (G7), M7
-  another machine as a provider (G8), heterogeneity, global scheduling,
-  and the ML-MMU last. [docs/plan.md](docs/plan.md).
+- **Done.** M0 to M4 (five gates), and saga `mlos-x86-64`: the same
+  kernel on a second architecture, same replay counts. M4 added sessions
+  as kernel objects, live `share_count`, a `no_std` scheduler the kernel
+  and the simulator share, the latency escape, and `Ps`, `Ks`, `Ss`.
+- **Next, in parallel.** M5 `mlos-degradation` (gate G6): contracts,
+  admission control, the degradation ladder. Saga `mlos-two-hosts`: a
+  Linux machine beside the Mac, both guests on both, the whole gate on
+  both.
+- **Then.** M6 host resources over virtio (G7), M7 another machine as a
+  provider (G8), heterogeneity, global scheduling, and the ML-MMU last.
+  [docs/plan.md](docs/plan.md).
 
 ## Development
 

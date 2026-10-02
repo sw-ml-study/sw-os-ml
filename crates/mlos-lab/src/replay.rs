@@ -7,11 +7,13 @@
 
 use mlos_abi::{Error, ObjectClass, ObjectId, Result};
 use mlos_metrics::Headline;
-use mlos_objman::Contract;
+use mlos_objman::{Contract, Session};
 use mlos_objtab::SessionId;
+use mlos_sched::{ParameterMajor, ProcessMajor, Schedule};
 use mlos_trace::parse;
 use mlos_virtio_blk::SECTOR;
 
+use crate::lanes::{Lane, Lanes};
 use crate::{state, with};
 
 /// How much trace text the guest can hold.
@@ -41,33 +43,53 @@ pub struct Replayed {
     pub headline: Headline,
 }
 
-/// Reads the trace off the disk, declares the whole of it as the stream,
-/// and replays it one acquire per step, advancing the cursor by one each
-/// time.
-pub fn replay() -> Result<Replayed> {
-    let room = state::replay_room();
-    let held = read(room.text)?;
-    let trace = parse(held, room.accesses).map_err(|_| Error::BadObject)?;
-    let count = trace.accesses.len();
-    let order = room.declared.get_mut(..count).ok_or(Error::NoBudget)?;
-    for (slot, access) in order.iter_mut().zip(trace.accesses) {
-        *slot = access.object;
-    }
-    mlos_stream::chain(order, room.next, room.seen)?;
+/// Reads the trace off the disk, orders it parameter-major or
+/// process-major over the sessions it names, declares that order as the
+/// stream, and replays it one acquire per step.
+pub fn replay(parameter: bool) -> Result<Replayed> {
+    let (mut process, mut lockstep) = (ProcessMajor::default(), ParameterMajor);
+    let schedule: &mut dyn Schedule = if parameter {
+        &mut lockstep
+    } else {
+        &mut process
+    };
+    let mut room = state::replay_room();
+    let count = prepare(&mut room, schedule)?;
     let (declared, next): (&'static [ObjectId], &'static [u32]) = (room.declared, room.next);
     with(|held| held.stream.declare(&declared[..count], next)).ok_or(Error::NoProvider)??;
-    // The sessions the trace names exist for the replay, as in `mlos-sim`,
-    // and go when it ends, taking their KV blocks with them.
-    let named = trace.accesses.iter().map(|access| access.session);
-    with(|held| held.sessions.adopt_each(named, Contract::NONE));
     let mut out = Replayed::default();
-    for access in trace.accesses {
-        step(access.object, access.session, &mut out);
+    for (object, by) in declared[..count].iter().zip(&room.sessions[..count]) {
+        step(*object, *by, &mut out);
         with(|held| held.stream.advance(1));
     }
     out.headline = with(|held| held.headline()).unwrap_or_default();
     with(|held| held.destroy_all_sessions());
     Ok(out)
+}
+
+/// Parses the disk trace, adopts its sessions, cuts it into lanes, and
+/// writes the order `schedule` chooses into the room, chained for
+/// next-use. Returns how many accesses there are.
+fn prepare(room: &mut state::Room, schedule: &mut dyn Schedule) -> Result<usize> {
+    let held = read(room.text)?;
+    let trace = parse(held, room.accesses).map_err(|_| Error::BadObject)?;
+    let named = trace.accesses.iter().map(|access| access.session);
+    with(|held| held.sessions.adopt_each(named, Contract::NONE));
+    // One lane per live session, in slot order: the order the trace first
+    // named them in.
+    let lanes = &mut *room.lanes;
+    let name = |(lane, s): (&mut Lane, &Session)| *lane = (s.id, 0, 0, s.contract.latency_ceiling);
+    let count =
+        with(|held| lanes.iter_mut().zip(held.sessions.each()).map(name).count()).unwrap_or(0);
+    let first = mlos_synth::model::tile(0, 0);
+    let buffers = (&mut *room.grouped, &mut *room.shape, lanes);
+    let mut lanes = Lanes::build(trace.accesses, first, buffers, count)?;
+    let ordered = lanes.order(schedule, (&mut *room.declared, &mut *room.sessions));
+    if ordered != trace.accesses.len() {
+        return Err(Error::NoBudget);
+    }
+    mlos_stream::chain(&room.declared[..ordered], &mut *room.next, &mut *room.seen)?;
+    Ok(ordered)
 }
 
 /// One access, and what it cost, measured by differencing the manager's

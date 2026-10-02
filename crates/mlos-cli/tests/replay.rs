@@ -28,7 +28,9 @@
 
 use std::process::Command;
 
+use mlos_objtab::SessionId;
 use mlos_policy::{Demand, FIFO, LRU, NEXT_USE, Policy};
+use mlos_sched::{Lane, ParameterMajor, merge};
 use mlos_sim::{Outcome, replay};
 use mlos_trace::Trace;
 use mlos_workload::Decode;
@@ -36,20 +38,12 @@ use mlos_workload::Decode;
 /// The binary cargo built for this test.
 const MLOS: &str = env!("CARGO_BIN_EXE_mlos");
 
-/// Arena bytes both sides are given, in kibibytes.
-///
-/// One number for every policy, which is the enforcement: a comparison
-/// where the policies had different budgets measures nothing. Smaller
-/// than the model on purpose -- a run where everything fits makes every
-/// policy identical.
+/// Arena bytes both sides are given, in kibibytes. One number for every
+/// policy and schedule; smaller than the model on purpose.
 const BUDGET_KIB: u64 = 32;
 
-/// How long to let the guest run.
-///
-/// Four replays of several thousand accesses each, under an emulator that
-/// translates every instruction. Generous, because a flaky timeout is
-/// worse than a slow test.
-const SECONDS: &str = "120";
+/// How long to let the guest run: eight replays under TCG, with room.
+const SECONDS: &str = "240";
 
 /// The policies, by the name the shell knows them by.
 const POLICIES: [(&str, &dyn Policy); 4] = [
@@ -64,56 +58,83 @@ const POLICIES: [(&str, &dyn Policy); 4] = [
 fn the_kernel_counts_what_the_simulator_counted() {
     let (sessions, rounds) = mlos_image_map::runtime::REPLAY;
     let decode = Decode::of(sessions, rounds);
-    let held = decode.trace();
-    let trace = Trace {
-        header: decode.header(),
-        accesses: &held,
-    };
-
     let console = guest();
     for (name, policy) in POLICIES {
-        let want = replay(&trace, &decode, BUDGET_KIB * 1024, policy);
-        let found = said(&console, name);
-        assert_eq!(
-            found.as_deref(),
-            Some(counts(name, &want).as_str()),
-            "{name}: the kernel and the simulator disagree.\n\n{console}"
-        );
+        for how in SCHEDULES {
+            let label = format!("{name} {how}");
+            let want = expected(&decode, policy, how);
+            assert_eq!(
+                said(&console, &label).as_deref(),
+                Some(counts(&label, &want).as_str()),
+                "{label}: the kernel and the simulator disagree.\n\n{console}"
+            );
+        }
     }
 }
 
-/// Boots, registers the model afresh before each policy, and replays.
-///
-/// Afresh because `model` rebuilds the manager: a replay that started
-/// with the previous policy's residents would be measuring the handover
-/// rather than the policy.
+/// Boots aarch64 under TCG and runs the script.
 fn guest() -> String {
-    let script = POLICIES
-        .map(|(name, _)| format!("model {BUDGET_KIB};replay {name}"))
-        .join(";");
     // `--arch aarch64` explicitly: without it `run` means the host's
     // architecture, which on a Linux PC is x86-64 (tests/boot_x86.rs).
     let out = Command::new(MLOS)
         .args(["--arch", "aarch64"])
         .args(["run", "tcg", "--capture", SECONDS, "--run"])
-        .arg(script)
+        .arg(script())
         .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
         .output()
         .expect("mlos runs");
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-/// What the shell printed for one policy, without its leading spaces.
-fn said(console: &str, name: &str) -> Option<String> {
+/// The schedules, by the name the shell knows them by.
+const SCHEDULES: [&str; 2] = ["process", "parameter"];
+
+/// What the simulator says `policy` under `how` should count: the
+/// process-major order is the trace itself; the parameter-major one is
+/// the same lanes merged by the same scheduler crate the kernel links.
+fn expected(decode: &Decode, policy: &dyn Policy, how: &str) -> Outcome {
+    let lanes: Vec<Lane> = (0..decode.sessions)
+        .map(|s| Lane {
+            session: SessionId(s + 1),
+            ceiling: 0,
+            tokens: decode.tokens(s),
+        })
+        .collect();
+    let held = match how {
+        "parameter" => merge(&mut ParameterMajor, &lanes),
+        _ => decode.trace(),
+    };
+    let trace = Trace {
+        header: decode.header(),
+        accesses: &held,
+    };
+    replay(&trace, decode, BUDGET_KIB * 1024, policy)
+}
+
+/// The shell script: every policy under every schedule, each on a fresh
+/// model, because a replay that started with the last one's residents
+/// would measure the handover rather than the policy.
+fn script() -> String {
+    POLICIES
+        .iter()
+        .flat_map(|(name, _)| {
+            SCHEDULES.map(|how| format!("model {BUDGET_KIB};replay {name} {how}"))
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// What the shell printed for one policy and schedule, trimmed.
+fn said(console: &str, label: &str) -> Option<String> {
     console
         .lines()
         .map(str::trim)
-        .find(|line| line.starts_with(&format!("{name}:")))
+        .find(|line| line.starts_with(&format!("{label}:")))
         .map(str::to_owned)
 }
 
 /// The same line, built from what the simulator counted.
-fn counts(name: &str, out: &Outcome) -> String {
+fn counts(label: &str, out: &Outcome) -> String {
     let Outcome {
         reads,
         hits,
@@ -123,7 +144,7 @@ fn counts(name: &str, out: &Outcome) -> String {
         ..
     } = out;
     format!(
-        "{name}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused, {}",
+        "{label}: {reads} reads, {hits} hits, {bytes} bytes, {evicted} evicted, {refused} refused, {}",
         out.headline(BUDGET_KIB * 1024)
     )
 }
