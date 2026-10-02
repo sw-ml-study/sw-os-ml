@@ -1,11 +1,12 @@
 number = 6
 slug = "g5-report"
-status = "in-progress"
+status = "completed"
 description = """
 The G5 report. Sessions by budgets by scheduler by policy: reads and
 bytes mo..."""
 role = "meta"
 context_files = []
 created_at = "2026-09-29T13:15:22"
+completed_at = "2026-10-02T13:04:49"
 task_type = "report"
-commits = []
+commits = ["977f8aa52a36f66f71ea785f4dd5a6cc6c67d475"]
