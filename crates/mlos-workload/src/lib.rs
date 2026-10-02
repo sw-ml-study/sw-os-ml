@@ -64,7 +64,11 @@ impl Decode {
     #[must_use]
     pub fn trace(&self) -> Vec<Access> {
         let streams: Vec<_> = (0..self.sessions)
-            .map(|s| (SessionId(s + 1), self.tokens(s)))
+            .map(|s| mlos_sched::Lane {
+                session: SessionId(s + 1),
+                ceiling: 0,
+                tokens: self.tokens(s),
+            })
             .collect();
         mlos_sched::merge(&mut ProcessMajor::default(), &streams)
     }

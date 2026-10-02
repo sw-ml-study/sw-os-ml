@@ -9,31 +9,38 @@ use mlos_objman::Contract;
 use mlos_objtab::SessionId;
 use mlos_session::MAX_SESSIONS;
 
-/// `session` lists; `session new [KIB]` creates one with an optional
-/// resident ceiling; `session end ID` destroys one.
+/// `session` lists; `session new [KIB] [WAIT]` creates one with an
+/// optional resident ceiling in KiB and latency ceiling in acquires;
+/// `session end ID` destroys one.
 pub fn session(out: &mut impl Write, args: &str) {
     let mut words = args.split_whitespace();
     let verb = words.next();
-    let number = words.next().and_then(|w| w.parse::<u64>().ok());
+    let mut numbers = words.filter_map(|w| w.parse::<u64>().ok());
+    let (first, second) = (numbers.next(), numbers.next());
     match verb {
         None => list(out),
-        Some("new") => {
-            let contract = Contract {
-                resident_ceiling: number.map_or(0, |kib| kib << 10),
-                ..Contract::NONE
-            };
-            let _ = match mlos_lab::with(|held| held.sessions.create(contract)) {
-                Some(Ok(id)) => writeln!(out, "  session {} created", id.0),
-                Some(Err(why)) => writeln!(out, "  refused: {why:?}"),
-                None => Ok(()),
-            };
-        }
-        Some("end") => end(out, number),
+        Some("new") => new(out, first, second),
+        Some("end") => end(out, first),
         Some(_) => drop(writeln!(
             out,
-            "  usage: session | session new [KIB] | session end ID"
+            "  usage: session | session new [KIB] [WAIT] | session end ID"
         )),
     }
+}
+
+/// Creates a session with an optional resident ceiling (KiB) and latency
+/// ceiling (acquires).
+fn new(out: &mut impl Write, kib: Option<u64>, wait: Option<u64>) {
+    let contract = Contract {
+        resident_ceiling: kib.map_or(0, |kib| kib << 10),
+        latency_ceiling: wait.map_or(0, |wait| u32::try_from(wait).unwrap_or(u32::MAX)),
+        ..Contract::NONE
+    };
+    let _ = match mlos_lab::with(|held| held.sessions.create(contract)) {
+        Some(Ok(id)) => writeln!(out, "  session {} created", id.0),
+        Some(Err(why)) => writeln!(out, "  refused: {why:?}"),
+        None => Ok(()),
+    };
 }
 
 /// Every live session: id, what it holds, and its ceiling.

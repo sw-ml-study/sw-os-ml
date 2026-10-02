@@ -48,9 +48,37 @@ layer and realign at the next weight; a session a layer ahead would wait
 there anyway. Shared count breaks the remaining ties, and the lowest
 session makes the order deterministic.
 
-The cost of lockstep is latency variance: a session that has finished
-its token waits for the slowest. Step 004's latency escape is where a
-contracted session buys its way out.
+The cost of lockstep is latency: a session that has finished its token
+waits for the slowest before it may start the next, and within a token
+it moves at the group's pace.
+
+## The latency escape (M4 step 004)
+
+`At::waited` is the acquires served to other sessions since this one's
+current token became due (its previous token ended, or the start), less
+its own accesses in the token. Not the gap between two of its accesses:
+under lockstep that gap is a handful of acquires while the token takes
+four times longer, so a gap would never fire. `At::ceiling` is the
+session's `Contract::latency_ceiling`, in the same unit, which is the
+kernel's acquire clock -- the unit `next_use` is already in.
+
+`ParameterMajor::pick` serves the lowest session whose wait has reached
+its ceiling before applying the lockstep rule. Once overdue it stays
+overdue (its wait does not shrink as it is served), so it runs the rest of
+its token alone and starts the next the moment its wait allows: it has
+left the batch and reads privately. A ceiling therefore bounds a token's
+period at the token's own length plus twice the ceiling -- the wait before
+it and the wait within it.
+
+Measured on the real shape, four sessions, 1536 MiB, next-use
+(`cargo test -p mlos-workload --test latency -- --ignored --nocapture`):
+lockstep costs session 1 about 11% in mean period (1,208 against 1,086
+acquires process-major). A ceiling of 512 brings it to 817 for 15% more
+reads overall; 256 to 561 for 5% more; 128 to 433 for eight times more,
+because the session now runs a full token ahead and every weight it
+reads alone is a weight the others miss. The break-even for this
+workload sits at a ceiling near a quarter of a token: below it the
+escape costs the whole group what parameter-major had won.
 
 ## `merge`, host side only
 

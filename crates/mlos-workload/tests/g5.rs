@@ -10,7 +10,7 @@ use std::time::Instant;
 use mlos_abi::ObjectClass;
 use mlos_objtab::SessionId;
 use mlos_policy::{LRU, NEXT_USE, Policy};
-use mlos_sched::{ParameterMajor, ProcessMajor, merge};
+use mlos_sched::{Lane, ParameterMajor, ProcessMajor, merge};
 use mlos_sim::{Model, Outcome, replay};
 use mlos_trace::{Access, Header, Trace};
 use mlos_workload::{Context, Decode, MINICPM, Real, Shape};
@@ -27,13 +27,7 @@ fn run(
 }
 
 /// One row: reads under each schedule and policy, and the gain.
-fn row(
-    name: &str,
-    model: &dyn Model,
-    header: Header<'_>,
-    streams: &[(SessionId, Vec<Vec<mlos_abi::ObjectId>>)],
-    budget: u64,
-) {
+fn row(name: &str, model: &dyn Model, header: Header<'_>, streams: &[Lane], budget: u64) {
     let started = Instant::now();
     let process = merge(&mut ProcessMajor::default(), streams);
     let parameter = merge(&mut ParameterMajor, streams);
@@ -73,7 +67,11 @@ fn synthetic() {
     for sessions in [1u16, 2, 4, 8] {
         let decode = Decode::of(sessions, 40);
         let streams: Vec<_> = (0..sessions)
-            .map(|s| (SessionId(s + 1), decode.tokens(s)))
+            .map(|s| Lane {
+                session: SessionId(s + 1),
+                ceiling: 0,
+                tokens: decode.tokens(s),
+            })
             .collect();
         for kib in [96u64, 128, 160, 192, 256] {
             row(
@@ -95,7 +93,11 @@ fn real_decode_only() {
     for sessions in [1u16, 2, 4, 8] {
         let real = Real::of(&shape, sessions, 40, Context::DECODE_ONLY);
         let streams: Vec<_> = (0..sessions)
-            .map(|s| (SessionId(s + 1), real.tokens(s)))
+            .map(|s| Lane {
+                session: SessionId(s + 1),
+                ceiling: 0,
+                tokens: real.tokens(s),
+            })
             .collect();
         for mib in [1024u64, 1536, 1664] {
             row(
@@ -121,7 +123,11 @@ fn real_with_context() {
     for sessions in [4u16, 8] {
         let real = Real::of(&shape, sessions, 40, served);
         let streams: Vec<_> = (0..sessions)
-            .map(|s| (SessionId(s + 1), real.tokens(s)))
+            .map(|s| Lane {
+                session: SessionId(s + 1),
+                ceiling: 0,
+                tokens: real.tokens(s),
+            })
             .collect();
         row(
             &format!("{sessions}, 1792 MiB"),

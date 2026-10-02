@@ -20,8 +20,8 @@ pub struct ProcessMajor {
 impl Schedule for ProcessMajor {
     fn pick(&mut self, waiting: &dyn Waiting) -> Option<usize> {
         let count = waiting.sessions();
-        if let Some((_, index)) = waiting.position(self.current)
-            && (index != 0 || !self.started)
+        if let Some(at) = waiting.at(self.current)
+            && (at.index != 0 || !self.started)
         {
             self.started = true;
             return Some(self.current);
@@ -30,7 +30,7 @@ impl Schedule for ProcessMajor {
         // the next session with anything left.
         let next = (1..=count)
             .map(|step| (self.current + step) % count.max(1))
-            .find(|&s| waiting.position(s).is_some())?;
+            .find(|&s| waiting.at(s).is_some())?;
         self.current = next;
         self.started = true;
         Some(next)

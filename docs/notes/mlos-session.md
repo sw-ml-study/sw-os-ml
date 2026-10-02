@@ -25,11 +25,11 @@ inference engine is not in M4 either: it needs a process to record from.
 
 ## The contract, and which field is enforced
 
-`Contract { quality_floor, latency_ceiling_ns, resident_ceiling }` is
+`Contract { quality_floor, latency_ceiling, resident_ceiling }` is
 the shape `docs/design.md` names, with zero meaning "none". Only
 `resident_ceiling` is enforced in this step: `Sessions::charge` refuses
 an acquire that would take the owner past it, before any victim is
-chosen, so a refused acquire evicts nothing. `latency_ceiling_ns` is
+chosen, so a refused acquire evicts nothing. `latency_ceiling` is
 read by the scheduler from step 004 (the latency escape); the quality
 floor waits for M5's degradation ladder.
 

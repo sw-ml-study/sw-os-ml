@@ -2,7 +2,7 @@
 
 use mlos_abi::{Fields, ObjectClass, ObjectId};
 use mlos_objtab::SessionId;
-use mlos_sched::{ParameterMajor, ProcessMajor, Schedule, merge};
+use mlos_sched::{Lane, ParameterMajor, ProcessMajor, Schedule, merge};
 
 fn w(n: u16) -> ObjectId {
     ObjectId::new(
@@ -28,11 +28,16 @@ fn k(session: u16, n: u16) -> ObjectId {
     )
 }
 
-fn order(
-    schedule: &mut dyn Schedule,
-    sessions: &[(SessionId, Vec<Vec<ObjectId>>)],
-) -> Vec<(u16, ObjectId)> {
-    merge(schedule, sessions)
+fn lane(session: u16, ceiling: u32, tokens: Vec<Vec<ObjectId>>) -> Lane {
+    Lane {
+        session: SessionId(session),
+        ceiling,
+        tokens,
+    }
+}
+
+fn order(schedule: &mut dyn Schedule, lanes: &[Lane]) -> Vec<(u16, ObjectId)> {
+    merge(schedule, lanes)
         .into_iter()
         .map(|a| (a.session.0, a.object))
         .collect()
@@ -40,8 +45,8 @@ fn order(
 
 #[test]
 fn process_major_serves_whole_tokens_round_robin_and_skips_the_finished() {
-    let a = (SessionId(1), vec![vec![w(1), w(2)], vec![w(1), w(2)]]);
-    let b = (SessionId(2), vec![vec![w(1), w(2), k(2, 0)]]);
+    let a = lane(1, 0, vec![vec![w(1), w(2)], vec![w(1), w(2)]]);
+    let b = lane(2, 0, vec![vec![w(1), w(2), k(2, 0)]]);
     let got = order(&mut ProcessMajor::default(), &[a, b]);
     let want = vec![
         (1, w(1)),
@@ -58,8 +63,8 @@ fn process_major_serves_whole_tokens_round_robin_and_skips_the_finished() {
 #[test]
 fn parameter_major_reads_each_weight_once_per_token_for_everyone() {
     // Two sessions on one token; B has a longer cache phase than A.
-    let a = (SessionId(1), vec![vec![w(1), w(2), k(1, 0), w(3)]]);
-    let b = (SessionId(2), vec![vec![w(1), w(2), k(2, 0), k(2, 1), w(3)]]);
+    let a = lane(1, 0, vec![vec![w(1), w(2), k(1, 0), w(3)]]);
+    let b = lane(2, 0, vec![vec![w(1), w(2), k(2, 0), k(2, 1), w(3)]]);
     let got = order(&mut ParameterMajor, &[a, b]);
     let want = vec![
         (1, w(1)),
@@ -78,8 +83,8 @@ fn parameter_major_reads_each_weight_once_per_token_for_everyone() {
 #[test]
 fn parameter_major_holds_everyone_at_the_token_boundary() {
     // A's tokens are short; it must not run a token ahead of B.
-    let a = (SessionId(1), vec![vec![w(1)], vec![w(1)]]);
-    let b = (SessionId(2), vec![vec![w(1), k(2, 0), k(2, 1)], vec![w(1)]]);
+    let a = lane(1, 0, vec![vec![w(1)], vec![w(1)]]);
+    let b = lane(2, 0, vec![vec![w(1), k(2, 0), k(2, 1)], vec![w(1)]]);
     let got = order(&mut ParameterMajor, &[a, b]);
     let want = vec![
         (1, w(1)),
@@ -93,12 +98,37 @@ fn parameter_major_holds_everyone_at_the_token_boundary() {
 }
 
 #[test]
+fn a_session_past_its_ceiling_leaves_the_lockstep() {
+    // A will wait at most two of B's acquires per token. A's first token
+    // ends at clock 1; B then takes two acquires, A is overdue and starts
+    // its next token alone, before B has finished the first.
+    let a = lane(1, 2, vec![vec![w(1)], vec![w(1)]]);
+    let b = lane(
+        2,
+        0,
+        vec![vec![w(1), k(2, 0), k(2, 1), k(2, 2)], vec![w(1)]],
+    );
+    let got = order(&mut ParameterMajor, &[a, b]);
+    let want = vec![
+        (1, w(1)),
+        (2, w(1)),
+        (2, k(2, 0)),
+        (1, w(1)),
+        (2, k(2, 1)),
+        (2, k(2, 2)),
+        (2, w(1)),
+    ];
+    assert_eq!(got, want);
+}
+
+#[test]
 fn both_schedules_serve_every_access_exactly_once() {
-    let a = (
-        SessionId(1),
+    let a = lane(
+        1,
+        0,
         vec![vec![w(1), w(2)], vec![w(1), k(1, 0)], vec![w(1)]],
     );
-    let b = (SessionId(2), vec![vec![w(1), k(2, 0), k(2, 1)]]);
+    let b = lane(2, 0, vec![vec![w(1), k(2, 0), k(2, 1)]]);
     let total = 5 + 3;
     let mut process = ProcessMajor::default();
     let mut parameter = ParameterMajor;

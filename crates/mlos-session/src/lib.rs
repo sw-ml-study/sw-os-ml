@@ -19,16 +19,20 @@ pub use mlos_objtab::SessionId;
 /// control's first, crude form.
 pub const MAX_SESSIONS: usize = 16;
 
-/// What a session was promised. Only `resident_ceiling` is enforced in
-/// M4; `latency_ceiling_ns` is read by the scheduler from step 004; the
-/// quality floor waits for M5's degradation ladder. Zero means "none".
+/// What a session was promised. `resident_ceiling` is enforced by the
+/// manager; `latency_ceiling` is read by the parameter-major scheduler,
+/// which serves a session past it out of turn; the quality floor waits
+/// for M5's degradation ladder. Zero means "none".
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Contract {
     /// The lowest precision the session will accept, as a `Precision`
     /// discriminant, or zero for any.
     pub quality_floor: u8,
-    /// How long one acquire may wait behind other sessions, or zero.
-    pub latency_ceiling_ns: u32,
+    /// The most acquires served to other sessions this one will wait
+    /// between two of its own before it is served out of turn, or zero.
+    /// Acquires, not nanoseconds: the kernel's clock is the acquire count
+    /// (`Manager::clock`), the same unit `next_use` is in.
+    pub latency_ceiling: u32,
     /// The most bytes this session may hold resident, or zero.
     pub resident_ceiling: u64,
 }
@@ -37,7 +41,7 @@ impl Contract {
     /// No promises: the contract every existing workload runs under.
     pub const NONE: Self = Self {
         quality_floor: 0,
-        latency_ceiling_ns: 0,
+        latency_ceiling: 0,
         resident_ceiling: 0,
     };
 }
