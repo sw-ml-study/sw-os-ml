@@ -62,7 +62,7 @@ const HELP: &str = concat!(
     "trace [on|off] residency events as they happened, one per line\r\n",
     "stream [N]    declare the model's access order, or advance it by N\r\n",
     "replay POLICY [process|parameter]  replay the workload under a policy and schedule\r\n",
-    "session [new [KIB] [WAIT] | end ID]  list, create (ceilings: KiB, acquires), or end\r\n",
+    "session [new [KIB] [WAIT] [FLOOR] | end ID]  promised vs delivered; create; end\r\n",
     "mem           physical memory map, and what is left\r\n",
     "mem peek ADDR read 8 bytes at ADDR; unmapped faults, on purpose\r\n",
     "dev           console, timer and interrupt controller\r\n",

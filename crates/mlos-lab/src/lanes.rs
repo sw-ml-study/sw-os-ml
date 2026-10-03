@@ -26,6 +26,8 @@ pub struct Lanes<'a> {
     cursors: [u32; MAX_SESSIONS],
     due: [u32; MAX_SESSIONS],
     clock: u32,
+    /// Each lane's worst token period so far, `Delivered::worst_period`.
+    pub worst: [u32; MAX_SESSIONS],
 }
 
 impl Waiting for Lanes<'_> {
@@ -77,12 +79,13 @@ impl<'a> Lanes<'a> {
             cursors: [0; MAX_SESSIONS],
             due: [0; MAX_SESSIONS],
             clock: 0,
+            worst: [0; MAX_SESSIONS],
         })
     }
 
     /// Runs `schedule` over the lanes, writing the merged order into
-    /// `objects` and `sessions`. Returns how many accesses were ordered,
-    /// which is every one.
+    /// `objects` and `sessions`, which hold at least as many accesses as
+    /// the lanes do. Returns how many were ordered, which is every one.
     pub fn order(
         &mut self,
         schedule: &mut dyn Schedule,
@@ -92,7 +95,6 @@ impl<'a> Lanes<'a> {
         let mut n = 0usize;
         while let Some(s) = schedule.pick(self)
             && let Some(object) = self.next_of(s)
-            && n < objects.len()
         {
             objects[n] = object;
             sessions[n] = self.lanes[s].0;
@@ -102,7 +104,10 @@ impl<'a> Lanes<'a> {
             let cursor = self.cursors[s] + 1;
             self.cursors[s] = cursor;
             let done = cursor >= len || self.shape[(start + cursor) as usize].1 == 0;
-            self.due[s] = if done { self.clock } else { self.due[s] };
+            if done {
+                self.worst[s] = self.worst[s].max(self.clock - self.due[s]);
+                self.due[s] = self.clock;
+            }
         }
         n
     }

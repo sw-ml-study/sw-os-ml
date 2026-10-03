@@ -57,3 +57,19 @@ session's KV cache comes back.
 `MAX_SESSIONS` is sixteen: more than any workload here declares, and a
 seventeenth is refused. That refusal is admission control's first, crude
 form; M5 replaces the count with a contract.
+
+## Promised against delivered (M5 step 001)
+
+`Contract::quality_floor` is a `Precision`: the coarsest a session's
+objects may be degraded to, with `Ternary`, the coarsest there is,
+meaning anything goes; `Contract::permits` is the test the ladder will
+ask. `Delivered` is what the session actually got, and every field only
+moves toward worse, so `ml_session_contract` can answer for the whole
+life of the session: the coarsest precision any of its objects was
+served at (recorded by `charge`, which now takes the precision), the
+most it held at once (`charge` again), and the longest a token took in
+acquires from the end of the previous token to its own (`took`, fed by
+both schedule drivers -- `merge_timed` on the host and `Lanes::order` in
+the kernel -- which compute it the same way). `session` in the shell
+prints both columns; `session new [KIB] [WAIT] [FLOOR]` sets all three
+promises.

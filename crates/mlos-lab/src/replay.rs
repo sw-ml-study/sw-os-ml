@@ -67,27 +67,31 @@ pub fn replay(parameter: bool) -> Result<Replayed> {
     Ok(out)
 }
 
+/// Names one lane per live session, in slot order: the trace's
+/// first-named order. Returns how many lanes there are.
+fn enrol(accesses: &[mlos_trace::Access], lanes: &mut [Lane]) -> usize {
+    let named = accesses.iter().map(|access| access.session);
+    with(|held| held.sessions.adopt_each(named, Contract::NONE));
+    let name = |(lane, s): (&mut Lane, &Session)| *lane = (s.id, 0, 0, s.contract.latency_ceiling);
+    with(|held| lanes.iter_mut().zip(held.sessions.each()).map(name).count()).unwrap_or(0)
+}
+
 /// Parses the disk trace, adopts its sessions, cuts it into lanes, and
 /// writes the order `schedule` chooses into the room, chained for
 /// next-use. Returns how many accesses there are.
 fn prepare(room: &mut state::Room, schedule: &mut dyn Schedule) -> Result<usize> {
     let held = read(room.text)?;
     let trace = parse(held, room.accesses).map_err(|_| Error::BadObject)?;
-    let named = trace.accesses.iter().map(|access| access.session);
-    with(|held| held.sessions.adopt_each(named, Contract::NONE));
-    // One lane per live session, in slot order: the order the trace first
-    // named them in.
-    let lanes = &mut *room.lanes;
-    let name = |(lane, s): (&mut Lane, &Session)| *lane = (s.id, 0, 0, s.contract.latency_ceiling);
-    let count =
-        with(|held| lanes.iter_mut().zip(held.sessions.each()).map(name).count()).unwrap_or(0);
+    let count = enrol(trace.accesses, &mut *room.lanes);
     let first = mlos_synth::model::tile(0, 0);
-    let buffers = (&mut *room.grouped, &mut *room.shape, lanes);
+    let buffers = (&mut *room.grouped, &mut *room.shape, &mut *room.lanes);
     let mut lanes = Lanes::build(trace.accesses, first, buffers, count)?;
     let ordered = lanes.order(schedule, (&mut *room.declared, &mut *room.sessions));
     if ordered != trace.accesses.len() {
         return Err(Error::NoBudget);
     }
+    let took = lanes.lanes.iter().zip(lanes.worst);
+    with(|held| took.for_each(|(lane, worst)| held.sessions.took(lane.0, worst)));
     mlos_stream::chain(&room.declared[..ordered], &mut *room.next, &mut *room.seen)?;
     Ok(ordered)
 }
