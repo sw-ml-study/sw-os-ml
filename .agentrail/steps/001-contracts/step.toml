@@ -1,11 +1,12 @@
 number = 1
 slug = "contracts"
-status = "in-progress"
+status = "completed"
 description = """
 Contracts, made whole. `Contract { quality_floor, latency_ceiling,
 resident_c..."""
 role = "production"
 context_files = []
 created_at = "2026-10-03T08:36:55"
+completed_at = "2026-10-03T13:36:39"
 task_type = "rust"
-commits = []
+commits = ["ee2a5285a19d32c69575fa96307f6dc099339d35"]
