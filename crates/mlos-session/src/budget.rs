@@ -6,7 +6,7 @@
 //! counted against anyone. Design: docs/notes/mlos-session.md.
 
 use mlos_abi::{Error, Result};
-use mlos_objtab::SessionId;
+use mlos_objtab::{Precision, SessionId};
 
 use crate::{Session, Sessions};
 
@@ -22,10 +22,12 @@ impl<const N: usize> Sessions<N> {
         self.find(id).and_then(|at| self.slots[at].as_mut())
     }
 
-    /// Counts `size` bytes about to become resident for `owner`.
-    /// `Refused` if that would pass the owner's ceiling; then nothing is
-    /// counted. Unknown owners are allowed and uncounted.
-    pub fn charge(&mut self, owner: SessionId, size: u32) -> Result<()> {
+    /// Counts `size` bytes at `precision` about to become resident for
+    /// `owner`, and records what that delivers: the peak, and the coarsest
+    /// precision served. `Refused` if the bytes would pass the owner's
+    /// ceiling; then nothing is counted. Unknown owners are allowed and
+    /// uncounted.
+    pub fn charge(&mut self, owner: SessionId, size: u32, precision: Precision) -> Result<()> {
         let Some(session) = self.get_mut(owner) else {
             return Ok(());
         };
@@ -35,6 +37,11 @@ impl<const N: usize> Sessions<N> {
             return Err(Error::Refused);
         }
         session.resident = after;
+        let got = &mut session.delivered;
+        got.peak_resident = got.peak_resident.max(after);
+        if precision as u8 > got.coarsest as u8 {
+            got.coarsest = precision;
+        }
         Ok(())
     }
 

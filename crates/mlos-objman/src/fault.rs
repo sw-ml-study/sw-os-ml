@@ -91,7 +91,7 @@ impl<'a, const N: usize> Manager<'a, N> {
     ) -> Result<Handle> {
         let meta = *self.table.get(id).ok_or(Error::BadObject)?;
         let (owner, size) = (meta.owner, meta.size);
-        self.sessions.charge(owner, size)?;
+        self.sessions.charge(owner, size, meta.precision)?;
         self.make_room(&meta);
         let placed = self.place(id, located, provider, lease, wanted);
         // A fault is counted when its bytes arrive: a refused miss fetched

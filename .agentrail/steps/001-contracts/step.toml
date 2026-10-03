@@ -1,6 +1,6 @@
 number = 1
 slug = "contracts"
-status = "pending"
+status = "in-progress"
 description = """
 Contracts, made whole. `Contract { quality_floor, latency_ceiling,
 resident_c..."""

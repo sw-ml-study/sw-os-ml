@@ -1,52 +1,28 @@
-//! Sessions as kernel objects: a record, a contract, a budget, and what
-//! each one owns.
+//! Sessions as kernel objects: a record, a contract, a budget, what each
+//! one owns, and what each one was actually given.
 //!
 //! Invariant: a session's `resident` bytes never exceed its contract's
-//! `resident_ceiling` when one is set, and a destroyed session leaves no
-//! object of its own in the table. Design and history:
-//! docs/notes/mlos-session.md.
+//! `resident_ceiling` when one is set, a destroyed session leaves no
+//! object of its own in the table, and `delivered` only ever gets worse.
+//! Design and history: docs/notes/mlos-session.md.
 
 #![no_std]
 #![forbid(unsafe_code)]
 
 mod budget;
+mod contract;
 mod table;
 
-pub use mlos_objtab::SessionId;
+pub use contract::{Contract, Delivered};
+pub use mlos_objtab::{Precision, SessionId};
 
 /// How many sessions a manager can hold at once. Sixteen is more than any
 /// workload here declares; a seventeenth is refused, which is admission
 /// control's first, crude form.
 pub const MAX_SESSIONS: usize = 16;
 
-/// What a session was promised. `resident_ceiling` is enforced by the
-/// manager; `latency_ceiling` is read by the parameter-major scheduler,
-/// which serves a session past it out of turn; the quality floor waits
-/// for M5's degradation ladder. Zero means "none".
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct Contract {
-    /// The lowest precision the session will accept, as a `Precision`
-    /// discriminant, or zero for any.
-    pub quality_floor: u8,
-    /// The most acquires served to other sessions this one will wait
-    /// between two of its own before it is served out of turn, or zero.
-    /// Acquires, not nanoseconds: the kernel's clock is the acquire count
-    /// (`Manager::clock`), the same unit `next_use` is in.
-    pub latency_ceiling: u32,
-    /// The most bytes this session may hold resident, or zero.
-    pub resident_ceiling: u64,
-}
-
-impl Contract {
-    /// No promises: the contract every existing workload runs under.
-    pub const NONE: Self = Self {
-        quality_floor: 0,
-        latency_ceiling: 0,
-        resident_ceiling: 0,
-    };
-}
-
-/// One session: who it is, what it was promised, what it holds.
+/// One session: who it is, what it was promised, what it holds, what it
+/// got.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Session {
     /// Its id, which is what `ObjectMeta::owner` and a session-scoped
@@ -56,6 +32,8 @@ pub struct Session {
     pub contract: Contract,
     /// Bytes it owns that are resident right now.
     pub resident: u64,
+    /// What it has been given so far.
+    pub delivered: Delivered,
 }
 
 /// The sessions a manager knows, in fixed slots.

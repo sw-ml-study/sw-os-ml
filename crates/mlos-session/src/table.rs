@@ -7,7 +7,7 @@
 use mlos_abi::{Error, Result};
 use mlos_objtab::SessionId;
 
-use crate::{Contract, Session, Sessions};
+use crate::{Contract, Delivered, Session, Sessions};
 
 impl<const N: usize> Sessions<N> {
     /// `ml_session_create`: a new session under `contract`, with the
@@ -38,6 +38,7 @@ impl<const N: usize> Sessions<N> {
             id,
             contract,
             resident: 0,
+            delivered: Delivered::default(),
         });
         Ok(())
     }

@@ -3,7 +3,7 @@
 Whose turn it is: a scheduler sees every session's declared stream and
 names the session to serve next. Policy layer. Linked from
 `crates/mlos-sched/src/lib.rs`, `process.rs`, `parameter.rs`,
-`merge.rs`.
+`merge.rs`, `lanes.rs`.
 
 ## Why its own crate
 
@@ -87,6 +87,24 @@ for the simulator to replay, behind the `alloc` feature because it needs
 a growable buffer. It is the only place a `Vec` appears; the kernel
 links the crate without it. `mlos-workload`'s `trace()` is now
 `merge(ProcessMajor, tokens)`, one generator instead of two.
+
+## `merge_timed` and the `lanes` module (M5 step 001)
+
+A contract promises a latency ceiling, so the record of what was
+delivered has to hold the worst period a session actually saw. Both
+drivers measure it the same way: a token's period is the number of
+accesses served, to anyone, between the end of the previous token and
+the end of this one. `merge_timed` returns that per lane beside the
+trace; `merge` is `merge_timed` with the periods dropped, so the
+workload generator did not change.
+
+The driver's bookkeeping -- cursors, clock, when each token became due
+-- moved from `merge.rs` into `lanes.rs` as `Lanes`, with `advance` the
+only thing that moves a cursor and the only place a period is read.
+That is a fifth module and a five-function module, both over the
+`sw-checklist` gate; folding `Lanes` back into `merge.rs` gives a
+five-function module there instead, which is the oscillation the gate
+notes say to stop at. The exception is carried in the step 001 commit.
 
 ## What the KV cache puts on the gain
 

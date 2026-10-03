@@ -2,7 +2,7 @@
 
 use mlos_abi::{Fields, ObjectClass, ObjectId};
 use mlos_objtab::SessionId;
-use mlos_sched::{Lane, ParameterMajor, ProcessMajor, Schedule, merge};
+use mlos_sched::{Lane, ParameterMajor, ProcessMajor, Schedule, merge, merge_timed};
 
 fn w(n: u16) -> ObjectId {
     ObjectId::new(
@@ -140,4 +140,15 @@ fn both_schedules_serve_every_access_exactly_once() {
         assert_eq!(got.len(), total, "{name}");
         assert_eq!(got.iter().filter(|(s, _)| *s == 1).count(), 5, "{name}");
     }
+}
+
+#[test]
+fn the_worst_period_is_measured_end_to_end_per_token() {
+    // B's second token waits for A's whole first token before it ends.
+    let a = lane(1, 0, vec![vec![w(1), w(2), w(3)]]);
+    let b = lane(2, 0, vec![vec![w(1)], vec![w(2)]]);
+    let (_, worst) = merge_timed(&mut ProcessMajor::default(), &[a, b]);
+    // A: one token, ends at clock 3. B: token 1 ends at clock 4; token 2
+    // ends at clock 5, one acquire after the first ended.
+    assert_eq!(worst, vec![3, 4]);
 }

@@ -6,8 +6,7 @@
 use core::fmt::Write;
 
 use mlos_objman::Contract;
-use mlos_objtab::SessionId;
-use mlos_session::MAX_SESSIONS;
+use mlos_objtab::{Precision, SessionId};
 
 /// `session` lists; `session new [KIB] [WAIT]` creates one with an
 /// optional resident ceiling in KiB and latency ceiling in acquires;
@@ -15,26 +14,38 @@ use mlos_session::MAX_SESSIONS;
 pub fn session(out: &mut impl Write, args: &str) {
     let mut words = args.split_whitespace();
     let verb = words.next();
-    let mut numbers = words.filter_map(|w| w.parse::<u64>().ok());
-    let (first, second) = (numbers.next(), numbers.next());
+    let mut rest: [Option<&str>; 3] = [None; 3];
+    rest.iter_mut()
+        .zip(words)
+        .for_each(|(slot, word)| *slot = Some(word));
+    let number = |at: usize| rest[at].and_then(|w| w.parse::<u64>().ok());
     match verb {
         None => list(out),
-        Some("new") => new(out, first, second),
-        Some("end") => end(out, first),
+        Some("new") => new(out, (number(0), number(1), rest[2])),
+        Some("end") => end(out, number(0)),
         Some(_) => drop(writeln!(
             out,
-            "  usage: session | session new [KIB] [WAIT] | session end ID"
+            "  usage: session | session new [KIB] [WAIT] [FLOOR] | session end ID"
         )),
     }
 }
 
-/// Creates a session with an optional resident ceiling (KiB) and latency
-/// ceiling (acquires).
-fn new(out: &mut impl Write, kib: Option<u64>, wait: Option<u64>) {
+/// Creates a session: `new [KIB] [WAIT] [FLOOR]`, a resident ceiling in
+/// KiB, a latency ceiling in acquires, and the coarsest precision it will
+/// accept (fp16, bf16, q8, q4, q3, ternary).
+fn new(out: &mut impl Write, (kib, wait, floor): (Option<u64>, Option<u64>, Option<&str>)) {
+    let floor = match floor {
+        Some("fp16") => Precision::Fp16,
+        Some("bf16") => Precision::Bf16,
+        Some("q8") => Precision::Q8,
+        Some("q4") => Precision::Q4,
+        Some("q3") => Precision::Q3,
+        _ => Precision::Ternary,
+    };
     let contract = Contract {
         resident_ceiling: kib.map_or(0, |kib| kib << 10),
-        latency_ceiling: wait.map_or(0, |wait| u32::try_from(wait).unwrap_or(u32::MAX)),
-        ..Contract::NONE
+        latency_ceiling: wait.map_or(0, |w| u32::try_from(w).unwrap_or(u32::MAX)),
+        quality_floor: floor,
     };
     let _ = match mlos_lab::with(|held| held.sessions.create(contract)) {
         Some(Ok(id)) => writeln!(out, "  session {} created", id.0),
@@ -43,23 +54,24 @@ fn new(out: &mut impl Write, kib: Option<u64>, wait: Option<u64>) {
     };
 }
 
-/// Every live session: id, what it holds, and its ceiling.
+/// Every live session: what it was promised, and what it got.
 fn list(out: &mut impl Write) {
     let shown = mlos_lab::with(|held| {
         let mut shown = 0;
-        for slot in 0..MAX_SESSIONS {
-            let Some(s) = held.sessions.at(slot) else {
-                continue;
-            };
-            let _ = write!(
+        for s in held.sessions.each() {
+            let (c, d) = (s.contract, s.delivered);
+            let _ = writeln!(
                 out,
-                "  session {:<3} resident {:>7} B  ceiling ",
-                s.id.0, s.resident
+                "  session {:<3} promised floor {:?}, wait {}, resident {} KiB; delivered {:?}, worst period {}, peak {} B, holds {} B",
+                s.id.0,
+                c.quality_floor,
+                c.latency_ceiling,
+                c.resident_ceiling >> 10,
+                d.coarsest,
+                d.worst_period,
+                d.peak_resident,
+                s.resident
             );
-            let _ = match s.contract.resident_ceiling {
-                0 => writeln!(out, "none"),
-                bytes => writeln!(out, "{} KiB", bytes >> 10),
-            };
             shown += 1;
         }
         shown

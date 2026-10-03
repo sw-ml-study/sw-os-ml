@@ -10,6 +10,8 @@
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "alloc")]
+mod lanes;
+#[cfg(feature = "alloc")]
 mod merge;
 mod parameter;
 mod process;
@@ -17,7 +19,7 @@ mod process;
 use mlos_abi::ObjectId;
 
 #[cfg(feature = "alloc")]
-pub use merge::{Lane, merge};
+pub use merge::{Lane, merge, merge_timed};
 pub use parameter::ParameterMajor;
 pub use process::ProcessMajor;
 
