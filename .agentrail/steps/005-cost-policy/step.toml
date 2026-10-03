@@ -1,0 +1,11 @@
+number = 5
+slug = "cost-policy"
+status = "pending"
+description = """
+The cost-aware policy, `docs/architecture.md` s.5: four eviction verbs,
+not o..."""
+role = "production"
+context_files = []
+created_at = "2026-10-03T08:36:55"
+task_type = "rust"
+commits = []

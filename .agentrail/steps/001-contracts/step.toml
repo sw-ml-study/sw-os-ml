@@ -1,0 +1,11 @@
+number = 1
+slug = "contracts"
+status = "pending"
+description = """
+Contracts, made whole. `Contract { quality_floor, latency_ceiling,
+resident_c..."""
+role = "production"
+context_files = []
+created_at = "2026-10-03T08:36:55"
+task_type = "rust"
+commits = []

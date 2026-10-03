@@ -1,0 +1,11 @@
+number = 3
+slug = "ladder"
+status = "pending"
+description = """
+The ladder, `docs/architecture.md` s.5: L0 full precision and context, L1
+col..."""
+role = "production"
+context_files = []
+created_at = "2026-10-03T08:36:55"
+task_type = "rust"
+commits = []

@@ -1,0 +1,11 @@
+number = 2
+slug = "admission-control"
+status = "pending"
+description = """
+Admission control: `ml_session_create` refusing is a normal outcome
+(`docs/de..."""
+role = "production"
+context_files = []
+created_at = "2026-10-03T08:36:55"
+task_type = "rust"
+commits = []
