@@ -1,0 +1,14 @@
+[package]
+name        = "mlos-k-ffi"
+version     = "0.0.1"
+description = "The C ABI bridge and portable k core used by MLOS."
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[build-dependencies]
+
+[lints]
+workspace = true

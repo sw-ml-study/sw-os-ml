@@ -1,0 +1,9 @@
+number = 8
+slug = "k-integration"
+status = "pending"
+description = "Port kbm into MLOS as the first vertical slice: compile the portable K core f..."
+role = "production"
+context_files = []
+created_at = "2026-10-03T16:03:28"
+task_type = "rust"
+commits = []

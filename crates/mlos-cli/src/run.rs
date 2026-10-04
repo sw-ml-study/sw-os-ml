@@ -15,9 +15,9 @@ pub const HOSTS: [&str; 3] = ["hvf", "tcg", "vz"];
 /// Boots the kernel with the console attached to this terminal. `mlsh`
 /// is on the other end, so stdin must be a real terminal, not a pipe.
 /// `vz` produces no output yet: MLOS has no virtio-console driver.
-pub fn run(host: &str, debug: bool, virtio: bool) -> io::Result<()> {
+pub fn run(host: &str, debug: bool, virtio: bool, boot: &str) -> io::Result<()> {
     let image = image::build()?;
-    let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio, "");
+    let (program, mut args) = command(host, &image.to_string_lossy(), None, virtio, boot);
     if debug {
         // Halted, with the stub open. `target remote :1234` in gdb, then
         // load the ELF for symbols -- the image has none.
@@ -99,6 +99,6 @@ pub fn boot(args: &[String]) -> io::Result<()> {
             print!("{}", capture(host, seconds, virtio, &bootargs)?);
             Ok(())
         }
-        None => run(host, debug, virtio),
+        None => run(host, debug, virtio, &bootargs),
     }
 }

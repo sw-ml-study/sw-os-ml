@@ -110,6 +110,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlos-k-ffi"
+version = "0.0.1"
+
+[[package]]
 name = "mlos-kernel"
 version = "0.0.1"
 dependencies = [
@@ -118,10 +122,12 @@ dependencies = [
  "mlos-gic-aarch64",
  "mlos-hal",
  "mlos-hal-aarch64",
+ "mlos-k-ffi",
  "mlos-kernel-x86-64",
  "mlos-lab",
  "mlos-machine",
  "mlos-mmu-aarch64",
+ "mlos-queue",
  "mlos-trap-aarch64",
  "mlos-virtio",
  "mlsh",

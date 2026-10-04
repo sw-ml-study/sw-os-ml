@@ -15,6 +15,7 @@ pub fn dispatch(line: &str, out: &mut impl Write, facts: &Facts<'_>) {
         _ if !ready => _ = writeln!(out, "  no model registered (try `model`)"),
         "" => {}
         "help" | "?" => _ = out.write_str(HELP),
+        "k" => run_k(out, facts),
         "mem" => mem(out, facts, args),
         "dev" => dev(out, facts),
         "sweep" => crate::objects::sweep(out, facts.clock),
@@ -49,6 +50,7 @@ const NEEDS_MODEL: [&str; 13] = [
 
 /// What `help` prints.
 const HELP: &str = concat!(
+    "k             enter the K REPL\r\n",
     "model [KiB]   register the model; optionally set the arena budget\r\n",
     "sweep         acquire every tile in order, faulting them in\r\n",
     "get L T       acquire one tile, and say if it had to fault\r\n",
@@ -69,6 +71,16 @@ const HELP: &str = concat!(
     "ticks         timer ticks since boot\r\n",
     "help          this\r\n",
 );
+
+/// Enters K when the platform linked its optional interpreter.
+fn run_k(out: &mut impl Write, facts: &Facts<'_>) {
+    if let Some(run) = facts.k {
+        let _ = out.write_str("  entering k\r\n");
+        run();
+    } else {
+        let _ = out.write_str("  k is not linked on this platform\r\n");
+    }
+}
 
 /// The physical memory map, including the reserved entries MLOS may not
 /// hand out. `mem peek ADDR` reads eight bytes at ADDR instead; an

@@ -53,6 +53,8 @@ pub struct Facts<'a> {
     pub ticks: &'a AtomicU32,
     /// What differs by platform beyond addresses and numbers.
     pub platform: Platform,
+    /// Enters the linked K interpreter, if this kernel provides it.
+    pub k: Option<fn()>,
 }
 
 /// What differs by platform beyond addresses and numbers: how `dev`

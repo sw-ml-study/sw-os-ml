@@ -115,5 +115,6 @@ fn facts<'a>(machine: &'a Machine, kind: &'static str) -> Facts<'a> {
         bootargs: machine.bootargs.unwrap_or_default(),
         ticks: &handlers::TICKS,
         platform: mlsh::Platform::GENERIC,
+        k: Some(crate::run_k),
     }
 }

@@ -22,6 +22,7 @@ members = [
     "crates/mlos-virtio-console",
     "crates/mlos-cli",
     "crates/mlsh",
+    "crates/mlos-k-ffi",
     "crates/mlos-device",
     "crates/mlos-fdt",
     "crates/mlos-hal",
@@ -81,6 +82,7 @@ default-members = [
     "crates/mlos-queue",
     "crates/mlos-pvh",
     "crates/mlsh",
+    "crates/mlos-k-ffi",
 ]
 
 [workspace.package]

@@ -13,6 +13,8 @@ mod banner;
 mod boot;
 #[cfg(target_arch = "aarch64")]
 mod handlers;
+#[cfg(target_arch = "aarch64")]
+mod kbridge;
 
 use core::panic::PanicInfo;
 
@@ -30,6 +32,17 @@ pub unsafe extern "C" fn mlos_main(dtb: *const u8) -> ! {
     // SAFETY: forwarded to `bring_up`, whose contract this is.
     let _ = unsafe { boot::bring_up(dtb) };
     halt()
+}
+
+/// Runs the linked K interpreter with MLOS's console callbacks.
+#[cfg(target_arch = "aarch64")]
+pub fn run_k() {
+    // SAFETY: callbacks use the boot-published console and interrupt queue;
+    // they remain valid for the lifetime of this single-core kernel.
+    unsafe { mlos_k_ffi::install(kbridge::write, kbridge::read) };
+    mlos_k_ffi::enable_fp();
+    mlos_k_ffi::run();
+    mlos_k_ffi::disable_fp();
 }
 
 // x86-64: the entry is `mlos-hal-x86-64`'s `_start` and `mlos_main` is in
