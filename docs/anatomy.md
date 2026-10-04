@@ -35,7 +35,7 @@ The layers, bottom up:
 | --- | --- | --- |
 | Hardware | `mlos-hal`, `mlos-hal-aarch64`, `mlos-hal-x86-64`, `mlos-mmu-*`, `mlos-trap-*`, `mlos-gic-aarch64`, `mlos-apic-x86-64` | Entry, identity map, exceptions, interrupts, a clock |
 | Devices | `mlos-virtio`, `mlos-virtio-blk`, `mlos-virtio-console`, `mlos-pl011`, `mlos-uart16550`, `mlos-fdt`, `mlos-pvh` | Discovery from the device tree or the PVH table; the block device the model lives on; consoles |
-| Objects | `mlos-abi`, `mlos-objtab`, `mlos-provider`, `mlos-arena`, `mlos-stream`, `mlos-session`, `mlos-objman` | Identity and metadata, the table, providers and tiers, the arena, the declared stream, sessions, the fault path |
+| Objects | `mlos-abi`, `mlos-objtab`, `mlos-provider`, `mlos-arena`, `mlos-stream`, `mlos-session`, `mlos-admit`, `mlos-objman` | Identity and metadata, the table, providers and tiers, the arena, the declared stream, sessions, admission, the fault path |
 | Policy | `mlos-policy`, `mlos-sched` | Demand, FIFO, LRU, known-next-use; process-major and parameter-major scheduling: pure, `no_std`, shared with the simulator |
 | Observation | `mlos-metrics`, `mlos-events`, `mlos-layout`, `mlos-snapshot`, `mlos-spaces` | Counters, the residency event ring, the layout documents a visualizer draws |
 | Shell | `mlsh`, `mlos-line`, `mlos-queue` | The in-guest inspector: `model`, `get`, `sweep`, `replay`, `arena`, `objs` |

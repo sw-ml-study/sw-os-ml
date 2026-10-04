@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 2,
+    "step": "admission-control"
+  },
+  "action": "New crate mlos-admit with host tests; edits to mlos-session contract.rs, mlos-objman lib/session.rs, mlos-lab lib.rs, mlsh session/commands.rs; boot test mlos-cli/tests/admission.rs; full gate incl. kclippy/kbuild both targets, sw-checklist, boot tests --ignored on both architectures.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-10-03T22:02:44"
+}

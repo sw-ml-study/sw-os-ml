@@ -73,3 +73,14 @@ both schedule drivers -- `merge_timed` on the host and `Lanes::order` in
 the kernel -- which compute it the same way). `session` in the shell
 prints both columns; `session new [KIB] [WAIT] [FLOOR]` sets all three
 promises.
+
+## Context, and what admission charges for (M5 step 002)
+
+`Contract::context` is the tokens of KV a session says it will hold.
+It is the one field admission charges in bytes: a ceiling is a promise
+not to exceed, a context is what will actually be resident, and only the
+second can be summed across sessions against a budget. Zero means
+undeclared and uncharged, which is what every replayed trace runs under.
+The admission arithmetic lives in `mlos-admit`, a sibling crate, because
+this one was at four modules; `Manager::create_session` asks it before
+`Sessions::create`.

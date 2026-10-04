@@ -193,6 +193,15 @@ session, `get` on its behalf is not yet possible (`get` acts as session
 1), but `replay` adopts and destroys the trace's sessions and `session`
 between two replays shows an empty table.
 
+M5 steps 001 and 002: `session` prints promised against delivered per
+session and ends with how many sessions like these the budget admits;
+`session new [KIB] [WAIT] [FLOOR] [CTX]` asks admission for one, with a
+resident ceiling in KiB, a latency ceiling in acquires, the coarsest
+precision it will accept and the tokens of context it will hold, and a
+refusal is printed with its reason (`docs/notes/mlos-admit.md`). The
+per-session row is its own function so the listing stays under the line
+gate; that puts `session.rs` at five functions, which is carried.
+
 ## `release`
 
 M4 step 002. `get L T` takes a Pin that `share_count` now counts;
