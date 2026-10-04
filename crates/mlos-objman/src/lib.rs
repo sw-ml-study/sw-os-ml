@@ -14,6 +14,7 @@ mod lease;
 mod session;
 
 use mlos_abi::{Error, ObjectId, Result};
+use mlos_admit::Capacity;
 use mlos_events::{Event, Ring};
 use mlos_metrics::Counters;
 use mlos_objtab::{ObjectMeta, ProviderId, SessionId, Table};
@@ -24,6 +25,7 @@ use mlos_stream::Stream;
 
 pub use fault::ModelFault;
 pub use lease::{Handle, Lease};
+pub use mlos_admit::Refusal;
 pub use mlos_arena::{Arena, Occupancy};
 pub use mlos_session::{Contract, Session};
 
@@ -59,6 +61,9 @@ pub struct Manager<'a, const N: usize> {
     /// The sessions this manager serves. An object owned by a session the
     /// manager does not know is served but not counted against anyone.
     pub sessions: Sessions<MAX_SESSIONS>,
+    /// What the budget has to give, for admission. `NONE` admits anything
+    /// a slot is free for.
+    pub capacity: Capacity,
 }
 
 impl<'a, const N: usize> Manager<'a, N> {
@@ -76,6 +81,7 @@ impl<'a, const N: usize> Manager<'a, N> {
             events: Ring::EMPTY,
             counters: Counters::EMPTY,
             sessions: Sessions::EMPTY,
+            capacity: Capacity::NONE,
         }
     }
 

@@ -195,6 +195,12 @@ owned, forgets those objects, then forgets the session, and stops
 without destroying if an eviction is refused. Design in
 `docs/notes/mlos-session.md`.
 
+M5 step 002: the manager holds a `Capacity` (`mlos-admit`), `NONE` until
+the lab or a simulator sets one, and `create_session` is the manager-side
+half of `ml_session_create`: admission first, then the slot. `headline`
+reports `Ss` as the sessions the capacity admits rather than the live
+count; the two are equal while nothing declares a context.
+
 ## Lessons
 
 **Residency is `resident_at`, not the tier.** The tier says where an

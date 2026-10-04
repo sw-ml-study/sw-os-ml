@@ -23,6 +23,9 @@ pub struct Contract {
     pub latency_ceiling: u32,
     /// The most bytes this session may hold resident, or zero.
     pub resident_ceiling: u64,
+    /// Tokens of context it will hold as KV, which is what admission
+    /// charges it for in bytes. Zero: undeclared, and nothing is charged.
+    pub context: u32,
 }
 
 impl Contract {
@@ -31,6 +34,7 @@ impl Contract {
         quality_floor: Precision::Ternary,
         latency_ceiling: 0,
         resident_ceiling: 0,
+        context: 0,
     };
 
     /// Whether the contract allows an object at `precision`: no coarser

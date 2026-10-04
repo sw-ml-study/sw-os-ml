@@ -13,6 +13,7 @@ mod state;
 mod sweep;
 
 use mlos_abi::Result;
+use mlos_admit::Capacity;
 use mlos_objman::{Arena, Manager};
 use mlos_synth::{disk, model, tiers};
 
@@ -29,6 +30,17 @@ pub(crate) const CAPACITY: usize = 512;
 /// Bytes the static arena holds; the ceiling on any budget. A quarter of
 /// the model's weights, so a sweep runs out.
 pub const ARENA_BYTES: usize = 32 * 1024;
+
+/// What the synthetic model asks of a budget, less the budget itself:
+/// one layer's tiles and activation reserved as the per-token working
+/// set, a KV block per layer per token of context, and a token of every
+/// tile once. `register` fills in the bytes.
+pub const SYNTHETIC: Capacity = Capacity {
+    bytes: 0,
+    reserved: TILES as u64 * TILE_BYTES as u64 + ACTIVATION_BYTES as u64,
+    kv_per_token: mlos_synth::kv::BYTES as u64 * LAYERS as u64,
+    token: LAYERS as u32 * TILES as u32,
+};
 
 /// Which policy the kernel evicts with, by name; `false` if the name is
 /// unknown or there is no manager. `demand` is no policy at all.
@@ -54,6 +66,10 @@ pub fn register(budget: usize) -> Result<(u32, u64)> {
     *manager = Some(Manager::new(Arena::new(&mut bytes[..limit])));
 
     let held = manager.as_mut().ok_or(mlos_abi::Error::NoProvider)?;
+    held.capacity = Capacity {
+        bytes: limit as u64,
+        ..SYNTHETIC
+    };
     held.attach(&tiers::BACKING)?;
     held.attach(&tiers::RECOMPUTE)?;
     // A disk if the machine has one; the model is registered against
