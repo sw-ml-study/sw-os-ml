@@ -144,6 +144,16 @@ of what there is to see. It borrows the replay's declaration buffers
 because they are the storage this kernel has for a declared sequence and
 a stream borrows rather than owns.
 
+## The synthetic model's capacity (M5 step 002)
+
+`SYNTHETIC` is what the synthetic model asks of a budget, less the budget
+itself: one layer's tiles and activation reserved as the per-token
+working set, a KV block per layer per token of context, and a token of
+every tile once. `register` fills in the bytes from the arena limit and
+hands the `Capacity` to the manager. It is a `const`, not a function, so
+the boot test can build the identical capacity on the host without this
+crate growing a fifth function in `lib.rs`.
+
 ## Lessons
 
 **Declare the workload, not its period.** Declaring the trace rather than

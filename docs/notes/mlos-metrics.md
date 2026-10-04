@@ -66,10 +66,12 @@ things by them:
   thousand is one use per read; four thousand is four sessions sharing
   each read, which is what parameter-major scheduling is for. Bytes stand
   in for parameter values; the ratio is the same.
-- `Ss`, sessions per GiB of resident budget, in thousandths. Before
-  admission control exists (M5) it is measured at a fixed budget: the
-  sessions live over the arena's capacity, not the most the budget could
-  admit. Said here so nobody reads it as a capacity figure yet.
+- `Ss`, sessions per GiB of resident budget, in thousandths. Through M4
+  it was measured at a fixed budget: the sessions live over the arena's
+  capacity. Since M5 step 002 the kernel's `Manager::headline` passes
+  `Capacity::admits` instead -- how many sessions like the live ones the
+  budget admits (`docs/notes/mlos-admit.md`) -- which is the live count
+  when nothing declared a context, so every replay line is unchanged.
 - `Ks`, KV bytes resident per live session, which comes free from the
   per-class `held` counter.
 
