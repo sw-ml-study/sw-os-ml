@@ -560,6 +560,67 @@ Steps: `acpi`, `pci-ecam`, `bar-mapping`, `vfio-host-setup`,
 (`x86-64-hal` moved to saga `mlos-x86-64` on 2026-09-26; by the time M6
 starts, the x86-64 guest already boots.)
 
+### Sagas `mlos-guest`, `mlos-apl`, `mlos-xetal` (guest languages, no gate)
+
+> Vision: a language REPL running *inside* the MLOS guest, on both
+> architectures, with nothing under it but the kernel's console and a
+> heap -- the first userspace-shaped thing MLOS hosts, years before a
+> userspace.
+
+Branch `feat/k-integration` did this once, by hand, for the portable K
+core from `kbm-fork`: C compiled for `aarch64-none-elf`, a 256 MiB C heap,
+reads and writes routed through the PL011 queue, FP/SIMD enabled around
+the interpreter, an `mlsh` verb `k`. The same treatment is wanted for two
+Rust interpreters, both componentised, both already built for a no-OS
+target (wasm32), both using no third-party crates in their component
+manifests:
+
+| Repo | Size | Where the OS is used | Floats | Hash maps |
+| --- | --- | --- | --- | --- |
+| `../../sw-vibe-coding/sw-apl` -- APL\360 / 5100 APL, clean-room | 13 components, ~26 k lines | `session` (workspaces on disk), `web`, `term`, `cli`; three files in `eval`, one each in `prims` and `value` | `prims` throughout (27 files): APL is float arithmetic | `eval` (2), `prims` (1) |
+| `../../softwarewrighter/X_eTaL` -- typed array language, ASCII rendered typographically | 21 components, ~27 k lines | `cli`, `web`, `tui`, `macro`, `step`, `base`, `line`; three files in `eval` | `draw` (8 files), a handful elsewhere | `types` (9), `macro` (7) |
+
+What a port needs, in order, and why it is three sagas rather than one:
+
+**`mlos-guest` (prelude, shared).** The kernel has no Rust allocator: no
+`#[global_allocator]`, and `alloc` appears only behind host features.
+Step 1 is `mlos-heap`, a bump-then-free-list allocator over a static
+region, `unsafe` confined there with the usual `// SAFETY:` lines, sized
+by a boot argument. Step 2 is `mlos-guest`: one `Guest` trait (`read_line`
+over the console queue, `write`, `interrupted`) that `kbridge` becomes,
+so `k` is the first client and its C heap can later be the Rust one.
+Step 3 is a boot test on both architectures that enters and leaves a
+guest; the x86-64 kernel's `Facts` gets the same hook, which is what the
+K branch missed (`kbuild-x86` fails there today).
+
+**`mlos-apl`.** Fork `sw-apl`; carve `value`, `lex`, `parse`, `eval`,
+`prims`, `display`, `glyphs`, `a70`, `b75` into a `no_std + alloc` core
+behind a feature (the three `std::io` files in `eval` become the `Guest`
+trait; `HashMap` becomes `hashbrown` or a `BTreeMap`; `f64` compiles to
+soft-float on both bare targets, which is fine for a REPL and is why the
+K branch toggles FP/SIMD). `session`, `term`, `cli`, `web` stay in the
+fork and stay `std`. Then `mlsh` verb `apl [a70|b75]`, a boot test that
+types `1 2 3 + 4 5 6` and reads `5 7 9`, and a tape. Workspaces are
+parked: there is no filesystem, by design, and `)SAVE` would need the
+object table as its store, which is a design question for after M5.
+
+**`mlos-xetal`.** The same shape over `core`, `types`, `syntax`, `eval`,
+`hof`, `axes`, `expand`, `radix`, `search`, `render`; `draw`, `tui`,
+`web`, `cli`, `step` and `macro` stay `std`. Verb `xtl`, a boot test on
+one decorated expression, a tape. X_eTaL is the longer-term interest --
+`docs/PRD.md` and section 6 park `sw-mlpl` as the eventual shell, and a
+typed array language that renders ASCII is the nearer relative -- so it
+goes second, after `mlos-apl` has found the allocator's and console's
+edges on a smaller surface.
+
+None of this is on the path to G6. It is parallel-agent work, like the
+x86-64 port was, and it is listed here so the agent doing it and the
+agent doing M5 do not collide: the guest sagas own `crates/mlos-heap`,
+`crates/mlos-guest`, the two language crates, and one verb each in
+`mlsh`; they do not touch the object manager. Both ports are forks first
+(`kbm-fork` set the precedent), with the `no_std` seam offered upstream
+once it is stable rather than before.
+
 ## 4. Cross-repo dependencies
 
 Each of these is written up as an ask -- what, where, why, and what MLOS
@@ -575,6 +636,9 @@ does if the answer is no -- in [external-asks.md](external-asks.md).
 | `emufpga` | ML-MMU gateware, Gen 1+ | after M6 |
 | `demo-memory` | Eviction and retrieval policy candidates | M3, M5 |
 | `sw-mlpl` | Array language as eventual userspace | after M6 |
+| `kbm-fork` | The portable K core, vendored as `ksrc/` on `feat/k-integration` | saga `mlos-guest` |
+| `sw-apl` | A fork with a `no_std + alloc` core behind a feature | saga `mlos-apl` |
+| `X_eTaL` | A fork with a `no_std + alloc` core behind a feature | saga `mlos-xetal` |
 | `sw-mlpl` | The columnar layout contract + the viz library | M2 layout steps |
 | `demo-extensions` | native3d: boxes, picking, labels, camera | M2 layout steps |
 | `sw-tos` | First producer of the same contract; vocabulary precedent | M2 layout steps |
