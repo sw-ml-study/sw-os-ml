@@ -63,6 +63,11 @@ pub struct Delivered {
     pub worst_period: u32,
     /// The most bytes it held resident at once.
     pub peak_resident: u64,
+    /// The deepest ladder rung it was put on.
+    pub deepest: crate::Rung,
+    /// Bytes the ladder read to degrade its objects: requantized,
+    /// summarised. What `Rc` counts.
+    pub recomputed: u64,
 }
 
 impl Default for Delivered {
@@ -71,6 +76,8 @@ impl Default for Delivered {
             coarsest: Precision::Fp16,
             worst_period: 0,
             peak_resident: 0,
+            deepest: crate::Rung::L0,
+            recomputed: 0,
         }
     }
 }

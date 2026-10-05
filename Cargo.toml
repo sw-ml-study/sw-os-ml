@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/mlos-abi",
     "crates/mlos-admit",
+    "crates/mlos-ladder",
     "crates/mlos-arena",
     "crates/mlos-console",
     "crates/mlos-elf",
@@ -57,6 +58,7 @@ members = [
 default-members = [
     "crates/mlos-abi",
     "crates/mlos-admit",
+    "crates/mlos-ladder",
     "crates/mlos-arena",
     "crates/mlos-elf",
     "crates/mlos-image-map",

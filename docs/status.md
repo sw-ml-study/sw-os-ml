@@ -3,7 +3,7 @@
 **Ground truth.** If it is not in this file, it does not work.
 Updated in the same commit as the work it describes.
 
-Last updated: 2026-10-03, during saga `mlos-degradation` (M5), after step 002.
+Last updated: 2026-10-05, during saga `mlos-degradation` (M5), after step 003.
 
 ---
 
@@ -41,7 +41,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | G3 -- it faults | **done** | M2 |
 | G4 -- known-next-use beats LRU | **done** -- [g4-report.md](g4-report.md). 42--77% fewer reads in the band on a real model's shape, 37--71% on the synthetic one; kernel = simulator to the integer on both architectures. Traces derived, not recorded, and the report says so | M3 |
 | G5 -- one read serves N sessions | **done** -- [g5-report.md](g5-report.md). Parameter-major scheduling: weight reads once per token for all sessions; next-use reads 44,309 -> 2,787 with four sessions on a real 1B model; the same `mlos-sched` crate in the kernel on both architectures matches the simulator to the integer | M4 |
-| G6 -- degrades instead of dying | not started | M5 |
+| G6 -- degrades instead of dying | in progress -- the ladder walks under a shrinking budget in the kernel on both architectures (step 003); the report is step 007 | M5 |
 | G7 -- controls a real host resource | not started | M6 |
 | G8 -- another machine is a provider | not started | M7 |
 
@@ -54,7 +54,7 @@ From [PRD.md](PRD.md#51-the-proof-of-concept-gate-the-thing-we-are-building-towa
 | M2 it holds objects | **complete** -- saga `mlos-objects`, 11 steps. Gates G2 and G3 met |
 | M3 it knows better | **complete** -- saga `mlos-nextuse`, 11 steps. Gate G4 met: [g4-report.md](g4-report.md). Known-next-use separates in the band where the budget is near the per-token working set (42--77% on a real 1B model, 37--71% synthetic) and nowhere else; the band's location is a property of the model and the serving regime, which is the milestone's second finding |
 | M4 it shares | **complete** -- saga `mlos-parameter-major`, 6 steps. Gate G5 met: [g5-report.md](g5-report.md). Sessions as kernel objects, `share_count` live, a `no_std` scheduler shared by kernel and simulator, the latency escape, `Ps`/`Ks`/`Ss`, and the kernel scheduling the replay on both architectures |
-| M5 it degrades | **in progress** -- saga `mlos-degradation`, steps 001 (contracts) and 002 (admission control) done of seven |
+| M5 it degrades | **in progress** -- saga `mlos-degradation`, steps 001 (contracts), 002 (admission control) and 003 (the ladder) done of seven |
 | M6 it crosses PCIe | not started |
 
 Read that honestly: M1 is the part any small operating system has to do,
@@ -88,8 +88,9 @@ x86-64 anywhere in this repo.
 | Policy in kernel | `Manager::policy`: demand (refuse), FIFO, LRU or known-next-use -- the same `mlos-policy` crate `mlos-sim` links, chosen with `replay POLICY`. Verified against the simulator on the same trace and budget: identical integers for all four |
 | Replay | The M3 workload rides on the model disk after the weights (`mlos_synth::disk::TRACE_AT`: an eight-byte length, then trace text). The guest parses it into statics, declares it as a stream, replays it, and prints what the manager actually did. `mlos run tcg --capture 120 --run 'model 32;replay lru'` drives it headless |
 | Sessions | `mlos-session`: a session is a record with an id, a contract and a resident-byte account, held by the manager (sixteen at most; a seventeenth is refused). `resident_ceiling` is the one contract field enforced: an acquire that would pass it is refused before any victim is chosen. Ending a session evicts what it owned and forgets it. `session`, `session new [KIB]`, `session end ID` in the shell; both replays adopt the trace's sessions first and destroy them last. Sessions without processes: nothing but the shell and the replay drives them yet |
-| Contracts | `Contract { quality_floor: Precision, latency_ceiling, resident_ceiling }`, and per session a `Delivered { coarsest, worst_period, peak_resident }` that only gets worse: the coarsest precision served and the peak are recorded as bytes are charged, the worst token period by both schedule drivers identically. `session` lists promised against delivered; `session new [KIB] [WAIT] [FLOOR]` sets the three promises. Nothing degrades yet, so `coarsest` is the registered precision until step 003 |
+| Contracts | `Contract { quality_floor: Precision, latency_ceiling, resident_ceiling }`, and per session a `Delivered { coarsest, worst_period, peak_resident }` that only gets worse: the coarsest precision served and the peak are recorded as bytes are charged, the worst token period by both schedule drivers identically. `session` lists promised against delivered; `session new [KIB] [WAIT] [FLOOR]` sets the three promises. Since step 003 `coarsest` moves when the ladder requantizes a block, and `Delivered` also records the deepest rung and the bytes read to degrade |
 | Admission | `mlos-admit`: `ml_session_create` refusing is a normal outcome with a reason. A `Capacity { bytes, reserved, kv_per_token, token }` admits a contract when the KV its declared `context` will hold fits what the budget has not promised to the live sessions (after the weights' per-token working set is reserved), when its own resident ceiling can hold that context, and when its latency ceiling is at least a quarter token (the G5 break-even) and every contracted session's ceiling still covers the others running ahead of it. `Ss` is now the sessions the budget admits at the live mix, the live count when nothing declared a context. `session new [KIB] [WAIT] [FLOOR] [CTX]` prints `refused: <why>`; the kernel's answers equal the host's on both architectures (`tests/admission.rs`) |
+| Ladder | `mlos-ladder`: the eight rungs of architecture s.5 as one function, `Shape::fate`, saying what every KV block is on every rung -- cold KV to Q8 (L1) and Q4 (L2), the oldest cold span summarised into one Q4 block (L3), half the remaining cold span dropped as candidates (L4), the context truncated to its hot window (L5) -- with `need` and `cost` (bytes read, `Rc`) summed from it. `squeeze` sets a budget and walks: every session deepened one rung at a time together, never past its quality floor (Q8 stops at L1, Fp16 never moves, context rungs need "anything goes"); when none can move, L6 (admission has no room) and L7 (terminate the highest id). Resident blocks shrink in place -- the arena takes the tail back -- and dropped ones leave the table. Summarising and RAG are declared and accounted, not performed. A session with a context now arrives with it cached (`arrive`). `session squeeze KIB` in the shell; `session` shows each session's rung and bytes read. The kernel's lines equal the host's on aarch64 and x86-64 (`tests/ladder.rs`) |
 | Leases | `share_count` is the number of leases holding an object: Pin, Borrow and Streaming count, Speculative does not. `acquire` raises it, `release` (`ml_release`) lowers it, `evict` zeroes it. Known-next-use divides recovery cost by it, so an object two sessions hold outlives one held by one (tested). Replays and sweeps `consume`: acquire and release in one, so every M3 count is unchanged. `release L T` in the shell |
 | Scheduler | `mlos-sched`, `no_std`: `ProcessMajor` serves one session's whole token then the next (the G4 order, held to its integers by a test); `ParameterMajor` keeps every session on the lowest token and the furthest behind within it, so weights are read once per token and each session's KV phase runs privately. `merge` (host, behind `alloc`) drives either over per-session lanes into a trace; `Decode::tokens` and `Real::tokens` are those lanes and `trace()` is now the process-major merge. A session whose wait (other sessions' acquires since its token became due) reaches its `latency_ceiling` is served out of turn and reads alone: the escape hatch. **In the kernel too**: `replay POLICY [process\|parameter]` rebuilds per-session lanes from the disk trace in static buffers, runs the same scheduler over them and replays the order it chose; eight count lines match the simulator's on aarch64 and x86-64 |
 | Metrics | `mlos-metrics` counts faults, fetched bytes, hit bytes and resident bytes per class, and computes the PRD s.5.2 headline numbers in one place: `Ps` (weight bytes applied per thousand read), `Ks` (KV bytes per live session), `Ss` (sessions per GiB of budget, in thousandths; measured at a fixed budget until M5's admission control). The kernel's replay line and the simulator's carry all three, computed by the same function, and the boot test compares them as strings. `metrics` in the shell prints `Rm`, `Ps`, `Ks`, `Ss` |
@@ -107,8 +108,10 @@ x86-64 anywhere in this repo.
 ## What does not exist yet
 
 No userspace, no scheduler of threads (one kernel thread; the scheduler
-that exists decides whose acquire is served, not who runs), no degradation
-ladder, no GPU and no ML-MMU. Leases are counted but not enforced:
+that exists decides whose acquire is served, not who runs), no GPU and no
+ML-MMU. The degradation ladder exists but performs no arithmetic: a rung
+changes sizes and precisions in the table and says what the transform
+would have read. Leases are counted but not enforced:
 `share_count` is the live holds on an object and next-use weighs it, but
 nothing yet refuses to evict a pinned object or revokes a borrow between
 operations. Sessions exist as kernel records but nothing creates one
@@ -602,6 +605,39 @@ takes four times longer; the first version of the escape measured the gap
 and never fired.
 
 
+
+## The ladder, measured
+
+M5 step 003. What each rung buys in resident bytes and costs in `Rc` and
+`Ks`, on the real shape, in the band: MiniCPM5-1B at F16, four sessions
+with 2,048-token prompts (16-token blocks, the newest 128 tokens hot),
+forty rounds, 1,792 MiB, next-use, parameter-major. `cargo test --release
+-p mlos-workload --test ladder -- --ignored --nocapture`, three seconds.
+
+| rung | prompt KV per session | reads | bytes read | refused | Rc per token | Ks at end |
+| --- | --- | --- | --- | --- | --- | --- |
+| L0 | 48.0 MiB | 13,438 | 1,885 MiB | 100 | 0 B | 48.7 MiB |
+| L1 | 25.5 MiB | 12,699 | 2,166 MiB | 0 | 1,887,436 B | 26.2 MiB |
+| L2 | 14.2 MiB | 12,699 | 2,121 MiB | 0 | 2,831,155 B | 15.0 MiB |
+| L3 | 8.7 MiB | 7,035 | 2,099 MiB | 0 | 3,067,084 B | 9.5 MiB |
+| L4 | 5.9 MiB | 4,155 | 2,088 MiB | 0 | 3,067,084 B | 6.7 MiB |
+| L5 | 3.0 MiB | 1,179 | 2,076 MiB | 0 | 3,067,084 B | 3.8 MiB |
+
+L0 is G5's row to the read. It reads the fewest bytes only because it
+refuses 100 accesses the budget cannot place; L1 is the first rung that
+serves everything, and bytes rise 281 MiB because those accesses are now
+served. Quantizing (L1, L2) buys bytes and not reads -- the same objects,
+smaller; summarising, cutting candidates and truncating (L3--L5) cut the
+accesses themselves. `Rc` is paid once per transform, here amortised over
+100 tokens; L4 and L5 read nothing, since dropping is free. As the room
+for KV shrinks the walk stops at L0 down to 192 MiB, L1 at 128, L2 at 96
+and 64, L3 at 48, L4 at 32 and 24, L5 at 16, and terminates below that.
+
+In the kernel, on the synthetic model: a Q8 session and an anything-goes
+one, squeezed to 30, 25 and 22 KiB, reach L1, then L4 with the Q8
+session held at its floor, then L7 with the newer one terminated; every
+rung, every byte read and every byte held equals the host's on both
+architectures.
 
 ## The headline numbers
 

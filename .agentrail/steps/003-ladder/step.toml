@@ -1,6 +1,6 @@
 number = 3
 slug = "ladder"
-status = "pending"
+status = "in-progress"
 description = """
 The ladder, `docs/architecture.md` s.5: L0 full precision and context, L1
 col..."""
