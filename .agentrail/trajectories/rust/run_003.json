@@ -1,0 +1,11 @@
+{
+  "task_type": "rust",
+  "state": {
+    "number": 3,
+    "step": "ladder"
+  },
+  "action": "New crate mlos-ladder (fate.rs, walk.rs, squeeze.rs, lib.rs) with 7 host tests; Rung in mlos-objtab; Session/Delivered fields; mlsh session squeeze + arrive; mlos-lab LADDER shape; boot test mlos-cli/tests/ladder.rs; measurement mlos-workload/tests/ladder.rs; notes mlos-ladder/objtab/session, status.md; gate: fmt, test, clippy host+arm+x86, kbuild both, sw-checklist, cargo test -p mlos-cli -- --ignored.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-10-05T09:41:01"
+}
