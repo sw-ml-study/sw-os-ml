@@ -35,7 +35,9 @@ dependencies = [
  "mlos-admit",
  "mlos-image-map",
  "mlos-lab",
+ "mlos-ladder",
  "mlos-layout",
+ "mlos-objman",
  "mlos-objtab",
  "mlos-policy",
  "mlos-sched",
@@ -160,6 +162,7 @@ version = "0.0.1"
 dependencies = [
  "mlos-abi",
  "mlos-admit",
+ "mlos-ladder",
  "mlos-metrics",
  "mlos-objman",
  "mlos-objtab",
@@ -171,6 +174,18 @@ dependencies = [
  "mlos-trace",
  "mlos-virtio",
  "mlos-virtio-blk",
+]
+
+[[package]]
+name = "mlos-ladder"
+version = "0.0.1"
+dependencies = [
+ "mlos-abi",
+ "mlos-admit",
+ "mlos-objman",
+ "mlos-objtab",
+ "mlos-session",
+ "mlos-synth",
 ]
 
 [[package]]
@@ -395,6 +410,7 @@ name = "mlos-workload"
 version = "0.0.1"
 dependencies = [
  "mlos-abi",
+ "mlos-ladder",
  "mlos-objtab",
  "mlos-policy",
  "mlos-sched",
@@ -411,6 +427,7 @@ dependencies = [
  "mlos-events",
  "mlos-hal",
  "mlos-lab",
+ "mlos-ladder",
  "mlos-line",
  "mlos-machine",
  "mlos-metrics",

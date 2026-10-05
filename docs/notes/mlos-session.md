@@ -84,3 +84,13 @@ undeclared and uncharged, which is what every replayed trace runs under.
 The admission arithmetic lives in `mlos-admit`, a sibling crate, because
 this one was at four modules; `Manager::create_session` asks it before
 `Sessions::create`.
+
+## Rungs, and what degrading cost (M5 step 003)
+
+`Session::rung` is the ladder rung the session is on now, and only
+`mlos-ladder` moves it. `Delivered` gained two fields that, like the
+others, only get worse: `deepest`, the deepest rung it was ever put on,
+and `recomputed`, the bytes the ladder read to degrade its objects --
+its share of `Rc`. `coarsest` now moves too, when a block is requantized
+in place rather than only when bytes are charged. What each rung does is
+in `docs/notes/mlos-ladder.md`.

@@ -42,6 +42,13 @@ pub const SYNTHETIC: Capacity = Capacity {
     token: LAYERS as u32 * TILES as u32,
 };
 
+/// How the synthetic model's cache is cut for the ladder: a block per
+/// position, as `mlos-synth` defines it, and the newest one hot.
+pub const LADDER: mlos_ladder::Shape = mlos_ladder::Shape {
+    per_block: 1,
+    hot: 1,
+};
+
 /// Which policy the kernel evicts with, by name; `false` if the name is
 /// unknown or there is no manager. `demand` is no policy at all.
 pub fn choose(name: &str) -> bool {

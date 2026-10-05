@@ -14,7 +14,7 @@ mod contract;
 mod table;
 
 pub use contract::{Contract, Delivered};
-pub use mlos_objtab::{Precision, SessionId};
+pub use mlos_objtab::{Precision, Rung, SessionId};
 
 /// How many sessions a manager can hold at once. Sixteen is more than any
 /// workload here declares; a seventeenth is refused, which is admission
@@ -34,6 +34,8 @@ pub struct Session {
     pub resident: u64,
     /// What it has been given so far.
     pub delivered: Delivered,
+    /// The ladder rung it is on now. Only the ladder moves it.
+    pub rung: Rung,
 }
 
 /// The sessions a manager knows, in fixed slots.

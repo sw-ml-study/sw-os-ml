@@ -11,7 +11,9 @@ mod meta;
 mod probe;
 mod table;
 
-pub use meta::{CostNs, Mutability, NextUse, ObjectMeta, Precision, ProviderId, SessionId, Tier};
+pub use meta::{
+    CostNs, Mutability, NextUse, ObjectMeta, Precision, ProviderId, Rung, SessionId, Tier,
+};
 pub use table::Table;
 
 impl<const N: usize> Default for Table<N> {

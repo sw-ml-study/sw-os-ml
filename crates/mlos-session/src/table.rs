@@ -39,6 +39,7 @@ impl<const N: usize> Sessions<N> {
             contract,
             resident: 0,
             delivered: Delivered::default(),
+            rung: crate::Rung::L0,
         });
         Ok(())
     }

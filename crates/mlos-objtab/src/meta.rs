@@ -123,3 +123,66 @@ pub struct ObjectMeta {
     /// Whose it is.
     pub owner: SessionId,
 }
+
+/// One rung of the degradation ladder, `docs/architecture.md` s.5.
+/// What each does to a session's objects is `mlos-ladder`'s
+/// (docs/notes/mlos-ladder.md); a session records the one it is on. L0 to L5 are things done to
+/// one session's cache; L6 and L7 are done to the population, and no
+/// session is ever recorded on them.
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+pub enum Rung {
+    /// Full precision KV, full context.
+    #[default]
+    L0 = 0,
+    /// Cold KV at Q8.
+    L1 = 1,
+    /// Cold KV at Q4.
+    L2 = 2,
+    /// The oldest cold span summarised into one block.
+    L3 = 3,
+    /// Half the remaining cold span, the retrieved candidates, dropped.
+    L4 = 4,
+    /// The context truncated to its hot window.
+    L5 = 5,
+    /// New sessions refused: every session is as deep as it may go.
+    L6 = 6,
+    /// The lowest-priority session terminated.
+    L7 = 7,
+}
+
+impl Rung {
+    /// The rung below this one, or `None` from L7.
+    #[must_use]
+    pub const fn deeper(self) -> Option<Self> {
+        Some(match self {
+            Self::L0 => Self::L1,
+            Self::L1 => Self::L2,
+            Self::L2 => Self::L3,
+            Self::L3 => Self::L4,
+            Self::L4 => Self::L5,
+            Self::L5 => Self::L6,
+            Self::L6 => Self::L7,
+            Self::L7 => return None,
+        })
+    }
+
+    /// The quality this rung serves, as the floor a contract names: Q8
+    /// and Q4 for the quantizing rungs, and `Ternary` -- anything goes --
+    /// for every rung that forgets context rather than precision.
+    #[must_use]
+    pub const fn quality(self) -> Precision {
+        match self {
+            Self::L0 => Precision::Fp16,
+            Self::L1 => Precision::Q8,
+            Self::L2 => Precision::Q4,
+            _ => Precision::Ternary,
+        }
+    }
+}
+
+impl core::fmt::Display for Rung {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "L{}", *self as u8)
+    }
+}

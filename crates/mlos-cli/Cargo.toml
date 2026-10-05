@@ -17,6 +17,8 @@ mlos-workload  = { path = "../mlos-workload",  version = "0.0.1" }
 [dev-dependencies]
 mlos-admit    = { path = "../mlos-admit",    version = "0.0.1" }
 mlos-lab      = { path = "../mlos-lab",      version = "0.0.1" }
+mlos-ladder   = { path = "../mlos-ladder",   version = "0.0.1" }
+mlos-objman   = { path = "../mlos-objman",   version = "0.0.1" }
 mlos-session  = { path = "../mlos-session",  version = "0.0.1" }
 mlos-policy   = { path = "../mlos-policy",   version = "0.0.1" }
 mlos-sim      = { path = "../mlos-sim",      version = "0.0.1" }

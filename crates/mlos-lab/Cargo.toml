@@ -10,6 +10,7 @@ authors.workspace      = true
 
 [dependencies]
 mlos-abi        = { path = "../mlos-abi",        version = "0.0.1" }
+mlos-ladder  = { path = "../mlos-ladder",  version = "0.0.1" }
 mlos-admit      = { path = "../mlos-admit",      version = "0.0.1" }
 mlos-objman     = { path = "../mlos-objman",     version = "0.0.1" }
 mlos-objtab     = { path = "../mlos-objtab",     version = "0.0.1" }

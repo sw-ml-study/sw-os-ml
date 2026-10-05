@@ -102,6 +102,12 @@ Demoting cold KV from FP16 to Q4 is rung 2 of the degradation ladder, and
 it is the reason an ML workload can be made cheaper under pressure where
 an ordinary process cannot.
 
+`Rung` lives here beside it for the same reason: a rung is a degree of
+degradation the way a precision is, `Rung::quality` maps each one onto
+the precision scale a contract's floor is written in, and a session
+record (`mlos-session`) must be able to hold one without depending on
+`mlos-ladder`, which is where what a rung *does* is decided.
+
 ## `Tier::Stream`
 
 The tier a page-based system cannot express. A streamed object is not "in
